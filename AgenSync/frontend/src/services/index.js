@@ -1,0 +1,11 @@
+export * as authService from "./authService.js";
+export * as clientService from "./clientService.js";
+export * as professionalService from "./professionalService.js";
+export * as serviceCatalogService from "./serviceCatalogService.js";
+export * as appointmentService from "./appointmentService.js";
+export * as dashboardService from "./dashboardService.js";
+export * as financeService from "./financeService.js";
+export * as documentService from "./documentService.js";
+export * as productService from "./productService.js";
+export * as expenseService from "./expenseService.js";
+export * as monthlyPlanService from "./monthlyPlanService.js";

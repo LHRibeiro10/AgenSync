@@ -1,0 +1,128 @@
+import { ApiError } from "./ApiError.js";
+import { buildQueryString } from "./buildQueryString.js";
+
+function resolveUrl(baseURL, path, params) {
+  const safeBase = String(baseURL || "").replace(/\/$/, "");
+  const safePath = String(path || "").startsWith("/") ? path : `/${String(path || "")}`;
+  return `${safeBase}${safePath}${buildQueryString(params)}`;
+}
+
+function defaultMessageByStatus(status) {
+  if (status === 401) return "Sua sessao expirou. Faca login novamente.";
+  if (status === 403) return "Voce nao tem permissao para esta acao.";
+  if (status === 404) return "Recurso nao encontrado.";
+  if (status >= 500) return "Servico temporariamente indisponivel.";
+  return "Nao foi possivel concluir a operacao.";
+}
+
+export function createHttpClient({
+  baseURL,
+  defaultHeaders = { "Content-Type": "application/json" },
+  getAuthToken,
+  onUnauthorized
+} = {}) {
+  const requestInterceptors = [];
+  const responseInterceptors = [];
+
+  async function request(path, options = {}) {
+    const {
+      method = "GET",
+      params,
+      headers = {},
+      body,
+      rawBody = false,
+      omitAuth = false,
+      ...rest
+    } = options;
+    const requestHeaders = { ...defaultHeaders, ...headers };
+    const token = omitAuth ? "" : getAuthToken?.();
+    if (token) requestHeaders.Authorization = `Bearer ${token}`;
+
+    const config = {
+      method,
+      headers: requestHeaders,
+      ...rest
+    };
+
+    if (body !== undefined) {
+      if (rawBody) {
+        config.body = body;
+      } else {
+        config.body = JSON.stringify(body);
+      }
+    }
+
+    const context = { path, config };
+    for (const interceptor of requestInterceptors) {
+      await interceptor(context);
+    }
+
+    const url = resolveUrl(baseURL, context.path, params);
+    let response;
+
+    try {
+      response = await fetch(url, context.config);
+    } catch (error) {
+      throw new ApiError({
+        message: "Falha de conexao com o backend. Verifique sua internet ou API.",
+        code: "NETWORK_ERROR",
+        cause: error
+      });
+    }
+
+    const text = await response.text();
+    let payload = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = text;
+      }
+    }
+
+    if (!response.ok) {
+      const apiError = new ApiError({
+        status: response.status,
+        code: payload?.code || "",
+        details: payload,
+        message: payload?.message || defaultMessageByStatus(response.status)
+      });
+
+      if (response.status === 401) {
+        onUnauthorized?.(apiError);
+      }
+
+      throw apiError;
+    }
+
+    let result = payload;
+    for (const interceptor of responseInterceptors) {
+      result = await interceptor(result, response);
+    }
+
+    return result;
+  }
+
+  return {
+    request,
+    get: (path, options) => request(path, { ...options, method: "GET" }),
+    post: (path, options) => request(path, { ...options, method: "POST" }),
+    put: (path, options) => request(path, { ...options, method: "PUT" }),
+    patch: (path, options) => request(path, { ...options, method: "PATCH" }),
+    delete: (path, options) => request(path, { ...options, method: "DELETE" }),
+    useRequestInterceptor: (interceptor) => {
+      requestInterceptors.push(interceptor);
+      return () => {
+        const index = requestInterceptors.indexOf(interceptor);
+        if (index >= 0) requestInterceptors.splice(index, 1);
+      };
+    },
+    useResponseInterceptor: (interceptor) => {
+      responseInterceptors.push(interceptor);
+      return () => {
+        const index = responseInterceptors.indexOf(interceptor);
+        if (index >= 0) responseInterceptors.splice(index, 1);
+      };
+    }
+  };
+}

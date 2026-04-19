@@ -1,0 +1,545 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #111827;
+  background: #f1f5f9;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-weight: 500;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+pre {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  max-width: 100%;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+input,
+select,
+textarea {
+  min-height: 46px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.22);
+  outline-offset: 2px;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.page-transition {
+  animation: page-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  will-change: opacity, transform;
+}
+
+.tab-panel-enter {
+  animation: tab-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.tab-panel-exit {
+  animation: tab-exit 120ms ease both;
+  will-change: opacity, transform;
+}
+
+.toast-enter {
+  animation: toast-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.skeleton-panel {
+  overflow: hidden;
+}
+
+.skeleton-line {
+  position: relative;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.skeleton-line::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  animation: skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tab-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tab-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+.agensync-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.agensync-drawer-panel {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.agensync-filter-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 80;
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.agensync-filter-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  box-sizing: border-box;
+}
+
+.agensync-filter-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  width: 100vw;
+  width: 100dvw;
+  max-width: 100%;
+  max-width: 100vw;
+  max-width: 100dvw;
+  max-height: 100vh;
+  max-height: 100svh;
+  max-height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  background: #fff;
+  box-shadow: 0 -24px 60px rgba(15, 23, 42, 0.24);
+  box-sizing: border-box;
+}
+
+.agensync-filter-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.agensync-filter-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.875rem 1rem;
+  scrollbar-width: thin;
+  box-sizing: border-box;
+}
+
+.agensync-filter-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  flex-shrink: 0;
+  gap: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0.75rem 1rem calc(env(safe-area-inset-bottom) + 0.75rem);
+  box-sizing: border-box;
+}
+
+.agensync-filter-sheet input,
+.agensync-filter-sheet select,
+.agensync-filter-sheet textarea,
+.agensync-filter-sheet button {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.working-hours-page {
+  max-height: none;
+}
+
+.working-hours-days-scroll {
+  scrollbar-width: thin;
+}
+
+@media (max-width: 640px) {
+  .working-hours-page {
+    height: calc(100dvh - env(safe-area-inset-top) - 7.5rem);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 7.5rem);
+  }
+
+  .working-hours-days-frame {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .working-hours-days-scroll {
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 0.125rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .agensync-filter-header {
+    padding: 0.875rem 1rem;
+  }
+
+  .agensync-filter-body {
+    padding-block: 0.75rem;
+  }
+}
+
+.compact-scroll-list {
+  max-height: min(58dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.compact-scroll-list-sm {
+  max-height: min(46dvh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 640px) {
+  .page-transition,
+  .page-transition > *,
+  .page-transition section,
+  .page-transition article,
+  .page-transition form,
+  .page-transition header,
+  .page-transition div {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .compact-scroll-list {
+    max-height: min(52dvh, 460px);
+  }
+
+  .compact-scroll-list-sm {
+    max-height: min(42dvh, 380px);
+  }
+}
+
+.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 88px);
+}
+
+@media (min-width: 1024px) {
+  .safe-bottom {
+    padding-bottom: 2rem;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .print-report,
+  .print-report * {
+    visibility: visible;
+  }
+
+  .print-report {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  .signed-document-print.print-report {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 190mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 10.5pt !important;
+    line-height: 1.4 !important;
+  }
+
+  .signed-document-print,
+  .signed-document-print * {
+    min-height: auto !important;
+    max-height: none !important;
+  }
+
+  .signed-document-header {
+    padding-bottom: 4mm !important;
+    border-bottom-width: 1.5pt !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .signed-document-brand {
+    font-size: 17pt !important;
+    line-height: 1.1 !important;
+  }
+
+  .signed-document-title {
+    margin-top: 2mm !important;
+    font-size: 15pt !important;
+    line-height: 1.18 !important;
+    color: #111827 !important;
+  }
+
+  .signed-document-meta {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 2.5mm !important;
+    margin-top: 5mm !important;
+  }
+
+  .signed-document-meta-card {
+    padding: 2.5mm !important;
+    border-radius: 2mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .signed-document-meta-card p {
+    margin: 0 !important;
+    font-size: 9pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .signed-document-meta-card p + p {
+    margin-top: 1mm !important;
+    font-size: 10pt !important;
+  }
+
+  .signed-document-content {
+    margin-top: 5mm !important;
+    padding: 4mm !important;
+    font-size: 10.5pt !important;
+    line-height: 1.42 !important;
+    border-radius: 2mm !important;
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .signed-document-signature {
+    margin-top: 5mm !important;
+    padding: 3mm !important;
+    border-radius: 2mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .signed-document-signature-image {
+    height: 26mm !important;
+    max-height: 26mm !important;
+    margin-top: 2mm !important;
+    object-fit: contain !important;
+  }
+
+  .signed-document-footer {
+    margin-top: 4mm !important;
+    font-size: 8.5pt !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

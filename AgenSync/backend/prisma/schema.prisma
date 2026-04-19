@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+  NO_SHOW
+}
+
+enum ExpenseRecurrence {
+  ONCE
+  MONTHLY
+}
+
+enum MonthlyPlanStatus {
+  ACTIVE
+  CANCELED
+}
+
+enum MonthlyPaymentStatus {
+  PENDING
+  PAID
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  businessName  String
+  businessLogo  String?
+  businessType  String
+  clients       Client[]
+  professionals Professional[]
+  services      Service[]
+  appointments  Appointment[]
+  expenses      Expense[]
+  products      Product[]
+  productSales  ProductSale[]
+  monthlyPlans  MonthlyPlan[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Client {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String
+  notes        String?
+  appointments Appointment[]
+  productSales ProductSale[]
+  monthlyPlans MonthlyPlan[]
+  careRecord   ClientCareRecord?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([userId, name])
+}
+
+model Expense {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description String
+  category    String
+  amount      Decimal           @db.Decimal(10, 2)
+  date        DateTime
+  recurrence  ExpenseRecurrence @default(ONCE)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId, date])
+  @@index([userId, category, date])
+}
+
+model Product {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  category    String
+  costPrice   Decimal       @db.Decimal(10, 2)
+  salePrice   Decimal       @db.Decimal(10, 2)
+  stockQty    Int           @default(0)
+  minStock    Int           @default(0)
+  description String?
+  isActive    Boolean       @default(true)
+  sales       ProductSale[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([userId, category])
+}
+
+model ProductSale {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  productName String
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  unitCost    Decimal  @db.Decimal(10, 2)
+  quantity    Int
+  total       Decimal  @db.Decimal(10, 2)
+  date        DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([userId, productId, date])
+  @@index([userId, clientId, date])
+}
+
+model MonthlyPlan {
+  id         String               @id @default(cuid())
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId   String
+  client     Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  planName   String
+  amount     Decimal              @db.Decimal(10, 2)
+  dueDay     Int
+  startDate  DateTime
+  status     MonthlyPlanStatus    @default(ACTIVE)
+  canceledAt DateTime?
+  notes      String?
+  payments   MonthlyPlanPayment[]
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, clientId])
+  @@index([userId, startDate])
+}
+
+model MonthlyPlanPayment {
+  id            String               @id @default(cuid())
+  monthlyPlanId String
+  monthlyPlan   MonthlyPlan          @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  month         String
+  status        MonthlyPaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  amount        Decimal              @db.Decimal(10, 2)
+  manual        Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([monthlyPlanId, month])
+  @@index([month, status])
+}
+
+model ClientCareRecord {
+  id         String   @id @default(cuid())
+  clientId   String   @unique
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  anamnesis  Json?
+  documents  Json     @default("[]")
+  budgets    Json     @default("[]")
+  forms      Json     @default("[]")
+  photos     Json     @default("[]")
+  evolutions Json     @default("[]")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Service {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  priceDefault    Decimal       @db.Decimal(10, 2)
+  durationMinutes Int
+  isActive        Boolean       @default(true)
+  appointments    Appointment[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([userId, isActive])
+}
+
+model Professional {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  role         String?
+  phone        String?
+  isActive     Boolean       @default(true)
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([userId, name])
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId      String
+  service        Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  professionalId String?
+  professional   Professional?     @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  startsAt       DateTime
+  endsAt         DateTime
+  price          Decimal           @db.Decimal(10, 2)
+  notes          String?
+  status         AppointmentStatus @default(SCHEDULED)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([userId, startsAt])
+  @@index([userId, status, startsAt])
+  @@index([userId, clientId])
+  @@index([userId, professionalId, startsAt])
+}
