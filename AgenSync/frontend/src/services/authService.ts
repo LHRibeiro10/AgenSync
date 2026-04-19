@@ -1,6 +1,6 @@
 import { env } from "../config/env.js";
 import { clearAccessToken, setAccessToken } from "../lib/auth/tokenStorage.js";
-import { supabase } from "../lib/supabase.ts";
+import { supabase, supabaseConfigError } from "../lib/supabase.ts";
 
 function publicSupabaseUser(user: any) {
   if (!user) return null;
@@ -33,6 +33,18 @@ function authError(message: string, code?: string) {
   return next;
 }
 
+function requireSupabase() {
+  if (!supabase) {
+    throw authError(supabaseConfigError, "SUPABASE_NOT_CONFIGURED");
+  }
+
+  return supabase;
+}
+
+export function getAuthConfigurationError() {
+  return supabaseConfigError;
+}
+
 function friendlyError(error: any, fallback: string) {
   if (!error) return authError(fallback);
   const message = String(error.message || "");
@@ -60,6 +72,11 @@ function getLoginRedirectUrl() {
 }
 
 export async function getSession() {
+  if (!supabase) {
+    clearAccessToken();
+    return { user: null, session: null, token: "" };
+  }
+
   const { data, error } = await supabase.auth.getSession();
   if (error) throw friendlyError(error, "Não foi possível restaurar a sessão.");
 
@@ -76,6 +93,8 @@ export async function restoreSession() {
 }
 
 export function onAuthStateChange(callback: (event: string, session: any) => void) {
+  if (!supabase) return () => {};
+
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
     if (session?.access_token) {
       setAccessToken(session.access_token);
@@ -89,11 +108,12 @@ export function onAuthStateChange(callback: (event: string, session: any) => voi
 }
 
 export async function signIn(emailOrPayload: any, maybePassword?: string) {
+  const client = requireSupabase();
   const payload = typeof emailOrPayload === "object"
     ? emailOrPayload
     : { email: emailOrPayload, password: maybePassword };
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await client.auth.signInWithPassword({
     email: String(payload.email || "").trim(),
     password: payload.password || ""
   });
@@ -107,11 +127,12 @@ export async function login(payload: any) {
 }
 
 export async function signUp(emailOrPayload: any, maybePassword?: string) {
+  const client = requireSupabase();
   const payload = typeof emailOrPayload === "object"
     ? emailOrPayload
     : { email: emailOrPayload, password: maybePassword };
 
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await client.auth.signUp({
     email: String(payload.email || "").trim(),
     password: payload.password || "",
     options: {
@@ -142,6 +163,11 @@ export async function register(payload: any) {
 }
 
 export async function signOut() {
+  if (!supabase) {
+    clearAccessToken();
+    return;
+  }
+
   const { error } = await supabase.auth.signOut();
   clearAccessToken();
   if (error) throw friendlyError(error, "Não foi possível sair.");
@@ -152,8 +178,9 @@ export async function logout() {
 }
 
 export async function resetPassword(emailOrPayload: any) {
+  const client = requireSupabase();
   const email = typeof emailOrPayload === "object" ? emailOrPayload.email : emailOrPayload;
-  const { error } = await supabase.auth.resetPasswordForEmail(String(email || "").trim(), {
+  const { error } = await client.auth.resetPasswordForEmail(String(email || "").trim(), {
     redirectTo: env.supabaseResetPasswordRedirectUrl
   });
 
@@ -169,8 +196,9 @@ export async function forgotPassword(payload: any) {
 }
 
 export async function resendConfirmation(emailOrPayload: any) {
+  const client = requireSupabase();
   const email = typeof emailOrPayload === "object" ? emailOrPayload.email : emailOrPayload;
-  const { error } = await supabase.auth.resend({
+  const { error } = await client.auth.resend({
     type: "signup",
     email: String(email || "").trim(),
     options: {
@@ -186,11 +214,12 @@ export async function resendConfirmation(emailOrPayload: any) {
 }
 
 export async function applyPasswordResetSessionFromUrl(urlValue = window.location.href) {
+  const client = requireSupabase();
   const url = new URL(urlValue, window.location.origin);
   const code = url.searchParams.get("code");
 
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await client.auth.exchangeCodeForSession(code);
     if (error) throw friendlyError(error, "Não foi possível validar o link de redefinição.");
     return { ready: true };
   }
@@ -203,7 +232,7 @@ export async function applyPasswordResetSessionFromUrl(urlValue = window.locatio
     return { ready: false, message: "Link de redefinição sem token válido." };
   }
 
-  const { error } = await supabase.auth.setSession({
+  const { error } = await client.auth.setSession({
     access_token: accessToken,
     refresh_token: refreshToken
   });
@@ -218,11 +247,12 @@ export function getPasswordResetTokenFromUrl(urlValue = window.location.href) {
 }
 
 export async function updatePassword(newPasswordOrPayload: any) {
+  const client = requireSupabase();
   const password = typeof newPasswordOrPayload === "object"
     ? newPasswordOrPayload.password
     : newPasswordOrPayload;
 
-  const { data, error } = await supabase.auth.updateUser({ password });
+  const { data, error } = await client.auth.updateUser({ password });
   if (error) throw friendlyError(error, "Não foi possível atualizar a senha.");
 
   return {
@@ -232,7 +262,8 @@ export async function updatePassword(newPasswordOrPayload: any) {
 }
 
 export async function updateUserSettings(payload: any) {
-  const { data, error } = await supabase.auth.updateUser({
+  const client = requireSupabase();
+  const { data, error } = await client.auth.updateUser({
     data: {
       name: payload.name,
       businessName: payload.businessName,

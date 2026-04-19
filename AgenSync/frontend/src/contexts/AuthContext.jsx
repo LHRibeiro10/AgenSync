@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
+  const [authConfigurationError] = useState(authService.getAuthConfigurationError?.() || "");
 
   const refreshSession = useCallback(async () => {
     setLoading(true);
@@ -105,6 +106,7 @@ export function AuthProvider({ children }) {
       user,
       session,
       loading,
+      authConfigurationError,
       isAuthenticated: Boolean(session || user),
       refreshSession,
       login,
@@ -122,6 +124,7 @@ export function AuthProvider({ children }) {
       user,
       session,
       loading,
+      authConfigurationError,
       refreshSession,
       login,
       register,

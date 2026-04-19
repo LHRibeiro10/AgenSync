@@ -71,7 +71,7 @@ function AuthMessage({ type, children }) {
 }
 
 export default function Login() {
-  const { login, register, forgotPassword, resendConfirmation } = useAuth();
+  const { login, register, forgotPassword, resendConfirmation, authConfigurationError } = useAuth();
   const [view, setView] = useState("login");
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
@@ -302,7 +302,9 @@ export default function Login() {
                   </p>
                 ) : null}
 
-                <AuthMessage type={feedback.type}>{feedback.message}</AuthMessage>
+                <AuthMessage type={feedback.type}>
+                  {feedback.message || (isLogin ? authConfigurationError : "")}
+                </AuthMessage>
 
                 {canResendConfirmation ? (
                   <button
