@@ -96,7 +96,7 @@ router.post(
     const expense = await prisma.expense.create({
       data: {
         userId: req.user.id,
-        description: requiredString(req.body.description, "descriÃ§Ã£o", 2),
+        description: requiredString(req.body.description, "descrição", 2),
         category: requiredString(req.body.category, "categoria"),
         amount: parsePositiveMoney(req.body.amount, "valor"),
         date: parseDateOnly(requiredString(req.body.date, "data")),
@@ -113,12 +113,12 @@ router.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const exists = await prisma.expense.findFirst({ where: { id: req.params.id, userId: req.user.id } });
-    if (!exists) throw new ApiError(404, "Despesa nÃ£o encontrada.");
+    if (!exists) throw new ApiError(404, "Despesa não encontrada.");
 
     const expense = await prisma.expense.update({
       where: { id: req.params.id },
       data: {
-        description: requiredString(req.body.description, "descriÃ§Ã£o", 2),
+        description: requiredString(req.body.description, "descrição", 2),
         category: requiredString(req.body.category, "categoria"),
         amount: parsePositiveMoney(req.body.amount, "valor"),
         date: parseDateOnly(requiredString(req.body.date, "data")),
@@ -135,7 +135,7 @@ router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     const exists = await prisma.expense.findFirst({ where: { id: req.params.id, userId: req.user.id } });
-    if (!exists) throw new ApiError(404, "Despesa nÃ£o encontrada.");
+    if (!exists) throw new ApiError(404, "Despesa não encontrada.");
     await prisma.expense.delete({ where: { id: req.params.id } });
     res.status(204).send();
   })

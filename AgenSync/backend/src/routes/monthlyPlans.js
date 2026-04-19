@@ -84,7 +84,7 @@ async function findPlan(userId, id) {
     where: { id, userId },
     include: { client: true, payments: true }
   });
-  if (!plan) throw new ApiError(404, "Mensalidade nÃ£o encontrada.");
+  if (!plan) throw new ApiError(404, "Mensalidade não encontrada.");
   return plan;
 }
 
@@ -138,10 +138,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const clientId = requiredString(req.body.clientId, "cliente");
     const client = await prisma.client.findFirst({ where: { id: clientId, userId: req.user.id } });
-    if (!client) throw new ApiError(400, "Cliente invÃ¡lido para esta mensalidade.");
+    if (!client) throw new ApiError(400, "Cliente inválido para esta mensalidade.");
 
     const amount = parsePositiveMoney(req.body.amount, "valor mensal");
-    const startDate = parseDateOnly(requiredString(req.body.startDate, "data de inÃ­cio"));
+    const startDate = parseDateOnly(requiredString(req.body.startDate, "data de início"));
     const plan = await prisma.monthlyPlan.create({
       data: {
         userId: req.user.id,
@@ -179,7 +179,7 @@ router.put(
         planName: requiredString(req.body.planName, "nome do plano", 2),
         amount,
         dueDay: Math.min(parsePositiveInteger(req.body.dueDay, "dia de vencimento"), 31),
-        startDate: parseDateOnly(requiredString(req.body.startDate, "data de inÃ­cio")),
+        startDate: parseDateOnly(requiredString(req.body.startDate, "data de início")),
         status: req.body.status === "canceled" ? "CANCELED" : "ACTIVE",
         notes: optionalString(req.body.notes)
       },

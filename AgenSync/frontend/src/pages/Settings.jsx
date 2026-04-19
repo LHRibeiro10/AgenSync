@@ -29,7 +29,7 @@ function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("NÃ£o foi possÃ­vel ler a imagem."));
+    reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
     reader.readAsDataURL(file);
   });
 }
@@ -38,7 +38,7 @@ function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("NÃ£o foi possÃ­vel carregar a logo."));
+    image.onerror = () => reject(new Error("Não foi possível carregar a logo."));
     image.src = src;
   });
 }
@@ -49,7 +49,7 @@ async function imageFileToLogo(file) {
   }
 
   if (file.size > maxLogoFileSize) {
-    throw new Error("A logo precisa ter atÃ© 4 MB.");
+    throw new Error("A logo precisa ter até 4 MB.");
   }
 
   const rawDataUrl = await readFileAsDataUrl(file);
@@ -62,7 +62,7 @@ async function imageFileToLogo(file) {
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("NÃ£o foi possÃ­vel preparar a logo.");
+  if (!context) throw new Error("Não foi possível preparar a logo.");
 
   context.clearRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
@@ -82,7 +82,7 @@ function LogoPreview({ logo, name, className = "" }) {
   return logo ? (
     <img
       src={logo}
-      alt={`Logo ${name || "do negÃ³cio"}`}
+      alt={`Logo ${name || "do negócio"}`}
       className={`h-full w-full rounded-lg object-contain ${className}`}
     />
   ) : (
@@ -113,7 +113,7 @@ function InfoField({ label, value, icon }) {
       <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">{label}</p>
       <div className="mt-2 flex min-h-12 items-center gap-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3">
         <Icon name={icon} className="h-5 w-5 shrink-0 text-brand" />
-        <p className="min-w-0 truncate text-sm font-black text-ink">{value || "NÃ£o informado"}</p>
+        <p className="min-w-0 truncate text-sm font-black text-ink">{value || "Não informado"}</p>
       </div>
     </div>
   );
@@ -229,7 +229,7 @@ export default function Settings() {
 
       setSyncSuggestedServices(false);
       setSavedFeedback(true);
-      showToast("ConfiguraÃ§Ãµes salvas com sucesso");
+      showToast("Configurações salvas com sucesso");
       window.setTimeout(() => setSavedFeedback(false), 2600);
     } catch (err) {
       setError(err.message);
@@ -244,16 +244,16 @@ export default function Settings() {
       <header className="rounded-lg border border-[#DDE6F0] bg-white p-4 shadow-soft sm:p-6">
         <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand">Central do negÃ³cio</p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">ConfiguraÃ§Ãµes</h1>
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand">Central do negócio</p>
+            <h1 className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">Configurações</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
-              Organize a identidade do seu negÃ³cio, ajuste o tipo de operaÃ§Ã£o e mantenha os dados da conta em um sÃ³ lugar.
+              Organize a identidade do seu negócio, ajuste o tipo de operação e mantenha os dados da conta em um só lugar.
             </p>
           </div>
 
           <Button type="submit" loading={saving} size="lg" className="hidden rounded-lg px-6 lg:inline-flex">
             <Icon name="check" className="h-5 w-5" />
-            Salvar alteraÃ§Ãµes
+            Salvar alterações
           </Button>
         </div>
       </header>
@@ -263,7 +263,7 @@ export default function Settings() {
       {savedFeedback ? (
         <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-black text-success">
           <Icon name="check" className="h-5 w-5" />
-          ConfiguraÃ§Ãµes salvas com sucesso.
+          Configurações salvas com sucesso.
         </div>
       ) : null}
 
@@ -271,9 +271,9 @@ export default function Settings() {
         <div className="space-y-5">
           <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
             <SectionHeader
-              eyebrow="Perfil do negÃ³cio"
+              eyebrow="Perfil do negócio"
               title="Como o AgenSync apresenta sua marca"
-              description="Este nome aparece nas Ã¡reas internas do sistema e ajuda a deixar a experiÃªncia mais profissional para o atendimento."
+              description="Este nome aparece nas áreas internas do sistema e ajuda a deixar a experiência mais profissional para o atendimento."
               icon="building"
             />
 
@@ -282,8 +282,8 @@ export default function Settings() {
                 <span className="flex h-20 w-20 items-center justify-center rounded-lg bg-white p-2 text-brand shadow-sm">
                   <LogoPreview logo={businessLogo} name={businessName} />
                 </span>
-                <p className="mt-4 text-sm font-black text-ink">Logo do negÃ³cio</p>
-                <p className="mt-1 text-xs leading-5 text-muted">Use PNG, JPG ou WEBP. A imagem serÃ¡ compactada automaticamente.</p>
+                <p className="mt-4 text-sm font-black text-ink">Logo do negócio</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Use PNG, JPG ou WEBP. A imagem será compactada automaticamente.</p>
                 <div className="mt-4 grid w-full gap-2">
                   <label
                     htmlFor="businessLogo"
@@ -313,7 +313,7 @@ export default function Settings() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-black text-ink" htmlFor="businessName">
-                    Nome do negÃ³cio
+                    Nome do negócio
                   </label>
                   <div className={`mt-2 ${fieldShellClass}`}>
                     <Icon name="building" className="h-5 w-5 shrink-0 text-brand" />
@@ -330,14 +330,14 @@ export default function Settings() {
                 </div>
 
                 <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-muted">PrÃ©via no sistema</p>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-muted">Prévia no sistema</p>
                   <div className="mt-3 flex items-center gap-3 rounded-lg bg-white p-3 shadow-sm">
                     <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand p-1.5 text-white">
                       <LogoPreview logo={businessLogo} name={businessName} className={businessLogo ? "bg-white" : "h-5 w-5"} />
                     </span>
                     <div className="min-w-0">
                       <p className="truncate text-base font-black text-ink">
-                        {businessName.trim() || "Nome do negÃ³cio"}
+                        {businessName.trim() || "Nome do negócio"}
                       </p>
                       <p className="text-xs font-bold text-muted">Aparece como identidade principal do AgenSync.</p>
                     </div>
@@ -349,9 +349,9 @@ export default function Settings() {
 
           <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
             <SectionHeader
-              eyebrow="Tipo de negÃ³cio"
-              title="SugestÃµes certas para comeÃ§ar mais rÃ¡pido"
-              description="Isso define sugestÃµes de serviÃ§os e organizaÃ§Ã£o inicial do sistema."
+              eyebrow="Tipo de negócio"
+              title="Sugestões certas para começar mais rápido"
+              description="Isso define sugestões de serviços e organização inicial do sistema."
               icon={currentType?.icon || "settings"}
             />
 
@@ -398,7 +398,7 @@ export default function Settings() {
 
               <div className="grid gap-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 lg:grid-cols-[1fr_auto] lg:items-center">
                 <div>
-                  <p className="text-sm font-black text-ink">ServiÃ§os sugeridos para {businessType}</p>
+                  <p className="text-sm font-black text-ink">Serviços sugeridos para {businessType}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {suggestedServices.length ? (
                       suggestedServices.map((service) => (
@@ -406,12 +406,12 @@ export default function Settings() {
                           key={service.id}
                           className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-xs font-black text-brand"
                         >
-                          {service.name} Â· {money(service.priceDefault)}
+                          {service.name} · {money(service.priceDefault)}
                         </span>
                       ))
                     ) : (
                       <span className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-black text-muted">
-                        Escolha um tipo padrÃ£o para ver sugestÃµes automÃ¡ticas.
+                        Escolha um tipo padrão para ver sugestões automáticas.
                       </span>
                     )}
                   </div>
@@ -433,16 +433,16 @@ export default function Settings() {
                   />
                   <span className="min-w-0">
                     <span className="block text-sm font-black text-ink">
-                      Deseja atualizar seus serviÃ§os automaticamente com base nesse tipo?
+                      Deseja atualizar seus serviços automaticamente com base nesse tipo?
                     </span>
                     <span className="mt-1 block text-xs leading-5 text-muted">
-                      O AgenSync adiciona apenas sugestÃµes que ainda nÃ£o existem. Nenhum serviÃ§o atual serÃ¡ apagado.
+                      O AgenSync adiciona apenas sugestões que ainda não existem. Nenhum serviço atual será apagado.
                     </span>
                   </span>
                 </label>
               ) : (
                 <div className="rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 text-sm font-bold leading-6 text-muted">
-                  Alterar o tipo nÃ£o limita recursos e nÃ£o remove clientes, agenda, financeiro ou serviÃ§os jÃ¡ cadastrados.
+                  Alterar o tipo não limita recursos e não remove clientes, agenda, financeiro ou serviços já cadastrados.
                 </div>
               )}
             </div>
@@ -454,14 +454,14 @@ export default function Settings() {
             <SectionHeader
               eyebrow="Conta"
               title="Dados de acesso"
-              description="InformaÃ§Ãµes usadas para identificar sua conta no AgenSync."
+              description="Informações usadas para identificar sua conta no AgenSync."
               icon="user"
             />
 
             <div className="space-y-4 p-4 sm:p-5">
               <InfoField label="Nome" value={user?.name} icon="user" />
               <InfoField label="Email" value={user?.email} icon="mail" />
-              <InfoField label="NegÃ³cio" value={businessName || user?.businessName} icon="building" />
+              <InfoField label="Negócio" value={businessName || user?.businessName} icon="building" />
             </div>
           </section>
 
@@ -469,25 +469,25 @@ export default function Settings() {
             <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Resumo</p>
             <h2 className="mt-2 text-xl font-black text-ink">Pronto para salvar</h2>
             <p className="mt-2 text-sm leading-6 text-muted">
-              Revise os dados e salve para aplicar a identidade do negÃ³cio e o tipo escolhido.
+              Revise os dados e salve para aplicar a identidade do negócio e o tipo escolhido.
             </p>
 
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between gap-3 rounded-lg bg-[#F8FAFC] px-3 py-3">
-                <span className="text-sm font-bold text-muted">AlteraÃ§Ãµes</span>
+                <span className="text-sm font-bold text-muted">Alterações</span>
                 <span className={`text-sm font-black ${hasChanges ? "text-brand" : "text-muted"}`}>
-                  {hasChanges ? "Pendentes" : "Sem mudanÃ§as"}
+                  {hasChanges ? "Pendentes" : "Sem mudanças"}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3 rounded-lg bg-[#F8FAFC] px-3 py-3">
-                <span className="text-sm font-bold text-muted">ServiÃ§os sugeridos</span>
+                <span className="text-sm font-bold text-muted">Serviços sugeridos</span>
                 <span className="text-sm font-black text-ink">{syncSuggestedServices ? "Adicionar" : "Manter"}</span>
               </div>
             </div>
 
             <Button type="submit" loading={saving} size="lg" className="mt-5 w-full rounded-lg">
               <Icon name="check" className="h-5 w-5" />
-              Salvar configuraÃ§Ãµes
+              Salvar configurações
             </Button>
           </section>
         </aside>

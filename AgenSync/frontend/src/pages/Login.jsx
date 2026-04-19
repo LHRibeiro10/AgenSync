@@ -71,17 +71,18 @@ function AuthMessage({ type, children }) {
 }
 
 export default function Login() {
-  const { login, register, forgotPassword } = useAuth();
+  const { login, register, forgotPassword, resendConfirmation } = useAuth();
   const [view, setView] = useState("login");
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
+  const [resendingConfirmation, setResendingConfirmation] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
-  const [recoveryLink, setRecoveryLink] = useState("");
 
   const currentView = views[view];
   const isLogin = view === "login";
   const isRegister = view === "register";
   const isRecovery = view === "recovery";
+  const canResendConfirmation = isLogin && feedback.code === "EMAIL_NOT_CONFIRMED" && form.email.trim();
 
   const actionLabel = useMemo(() => {
     if (isLogin) return "Entrar";
@@ -96,8 +97,8 @@ export default function Login() {
   function switchView(nextView) {
     setView(nextView);
     setFeedback({ type: "", message: "" });
-    setRecoveryLink("");
     setLoading(false);
+    setResendingConfirmation(false);
   }
 
   async function handleLogin() {
@@ -109,7 +110,7 @@ export default function Login() {
       throw new Error("As senhas precisam ser iguais.");
     }
 
-    await register({
+    const data = await register({
       name: form.name.trim(),
       email: form.email.trim(),
       password: form.password,
@@ -117,15 +118,45 @@ export default function Login() {
       businessType: "Manicure",
       initialServices: cleanInitialServices()
     });
+
+    if (data?.emailConfirmationRequired) {
+      setFeedback({
+        type: "success",
+        message: data.message || "Conta criada. Verifique seu email para confirmar o acesso."
+      });
+      return;
+    }
+
+    setFeedback({ type: "success", message: "Conta criada com sucesso." });
   }
 
   async function handlePasswordRecovery() {
     const data = await forgotPassword({ email: form.email.trim() });
-    setRecoveryLink(data?.resetUrl || "");
     setFeedback({
       type: "success",
-      message: data?.message || "Se o email existir, enviaremos um link de redefinição."
+      message: data?.message || "Enviamos um link para redefinir sua senha."
     });
+  }
+
+  async function handleResendConfirmation() {
+    setResendingConfirmation(true);
+    setFeedback({ type: "", message: "" });
+
+    try {
+      const data = await resendConfirmation({ email: form.email.trim() });
+      setFeedback({
+        type: "success",
+        message: data?.message || "Reenviamos o email de confirmação."
+      });
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err.message || "Não foi possível reenviar o email de confirmação.",
+        code: err.code || ""
+      });
+    } finally {
+      setResendingConfirmation(false);
+    }
   }
 
   async function handleSubmit(event) {
@@ -138,7 +169,11 @@ export default function Login() {
       if (isRegister) await handleRegister();
       if (isRecovery) await handlePasswordRecovery();
     } catch (err) {
-      setFeedback({ type: "error", message: err.message });
+      setFeedback({
+        type: "error",
+        message: err.message || "Não foi possível concluir a operação.",
+        code: err.code || ""
+      });
     } finally {
       setLoading(false);
     }
@@ -269,13 +304,15 @@ export default function Login() {
 
                 <AuthMessage type={feedback.type}>{feedback.message}</AuthMessage>
 
-                {isRecovery && recoveryLink ? (
-                  <p className="rounded-2xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm font-bold leading-6 text-amber-800">
-                    Modo local: abra o link de teste para redefinir a senha.
-                    <a className="ml-1 underline" href={recoveryLink}>
-                      Redefinir agora
-                    </a>
-                  </p>
+                {canResendConfirmation ? (
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={resendingConfirmation}
+                    className="w-full rounded-2xl border border-blue-200/80 bg-blue-50/80 px-4 py-3 text-sm font-black text-blue-800 transition hover:border-blue-300 hover:bg-blue-100/80 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resendingConfirmation ? "Reenviando..." : "Reenviar email de confirmação"}
+                  </button>
                 ) : null}
 
                 {isLogin ? (
@@ -323,7 +360,7 @@ export default function Login() {
 
               {isLogin ? (
                 <p className="mt-5 rounded-2xl border border-white/70 bg-white/45 px-4 py-3 text-center text-xs font-bold text-slate-500">
-                  Teste rápido: teste@agensync.com · 123456
+                  Acesso protegido por Supabase Auth.
                 </p>
               ) : null}
             </form>

@@ -11,14 +11,14 @@ const navigation = [
   { to: "/agenda", label: "Agenda", icon: "agenda" },
   { to: "/clientes", label: "Clientes", icon: "clients" },
   { to: "/profissionais", label: "Profissionais", icon: "professionals" },
-  { to: "/servicos", label: "ServiÃ§os", icon: "services" },
+  { to: "/servicos", label: "Serviços", icon: "services" },
   { to: "/produtos", label: "Produtos", icon: "products" },
   { to: "/vendas", label: "Vendas", icon: "sales" },
   { to: "/mensalidades", label: "Mensalidades", icon: "finance" },
-  { to: "/historico", label: "HistÃ³rico", icon: "history" },
+  { to: "/historico", label: "Histórico", icon: "history" },
   { to: "/financeiro", label: "Financeiro", icon: "finance" },
   { to: "/despesas", label: "Despesas", icon: "expenses" },
-  { to: "/configuracoes", label: "ConfiguraÃ§Ãµes", icon: "settings" }
+  { to: "/configuracoes", label: "Configurações", icon: "settings" }
 ];
 
 const mobileNavigation = [
@@ -26,13 +26,13 @@ const mobileNavigation = [
   { to: "/agenda", label: "Agenda", icon: "agenda" },
   { to: "/clientes", label: "Clientes", icon: "clients" },
   { to: "/profissionais", label: "Profissionais", icon: "professionals" },
-  { to: "/servicos", label: "ServiÃ§os", icon: "services" },
+  { to: "/servicos", label: "Serviços", icon: "services" },
   { to: "/produtos", label: "Produtos", icon: "products" },
   { to: "/vendas", label: "Vendas", icon: "sales" },
   { to: "/mensalidades", label: "Mensalidades", icon: "finance" },
   { to: "/despesas", label: "Despesas", icon: "expenses" },
   { to: "/financeiro", label: "Financeiro", icon: "finance" },
-  { to: "/configuracoes", label: "ConfiguraÃ§Ãµes", icon: "settings" }
+  { to: "/configuracoes", label: "Configurações", icon: "settings" }
 ];
 
 function desktopLinkClass({ isActive }) {
@@ -61,7 +61,7 @@ function AccountMark({ user, size = "sm" }) {
       className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden bg-white/10 text-sm font-extrabold text-white ring-1 ring-white/10`}
     >
       {user?.businessLogo ? (
-        <img src={user.businessLogo} alt={`Logo ${user.businessName || "do negÃ³cio"}`} className="h-full w-full bg-white object-contain p-1" />
+        <img src={user.businessLogo} alt={`Logo ${user.businessName || "do negócio"}`} className="h-full w-full bg-white object-contain p-1" />
       ) : (
         user?.name?.slice(0, 1) || "A"
       )}
@@ -79,7 +79,7 @@ function SidebarBrand() {
 
 function titleFromPath(pathname) {
   if (pathname.startsWith("/agendamentos")) return "Agendar";
-  if (pathname.startsWith("/relatorios")) return "RelatÃ³rios";
+  if (pathname.startsWith("/relatorios")) return "Relatórios";
 
   const found = navigation.find((item) =>
     item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)

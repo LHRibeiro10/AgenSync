@@ -6,6 +6,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [session, setSession] = useState(null);
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -14,6 +15,7 @@ export function AuthProvider({ children }) {
     try {
       const restored = await authService.restoreSession();
       setUser(restored.user || null);
+      setSession(restored.session || null);
       setToken(restored.token || "");
     } finally {
       setLoading(false);
@@ -25,17 +27,37 @@ export function AuthProvider({ children }) {
   }, [refreshSession]);
 
   useEffect(() => {
+    const unsubscribeAuth = authService.onAuthStateChange?.((event, nextSession) => {
+      setSession(nextSession || null);
+      setToken(nextSession?.access_token || "");
+      setUser(nextSession?.user ? {
+        id: nextSession.user.id,
+        name: nextSession.user.user_metadata?.name || nextSession.user.email || "Usuario",
+        email: nextSession.user.email || "",
+        businessName: nextSession.user.user_metadata?.businessName || "",
+        businessLogo: nextSession.user.user_metadata?.businessLogo || "",
+        businessType: nextSession.user.user_metadata?.businessType || "",
+        createdAt: nextSession.user.created_at || new Date().toISOString()
+      } : null);
+      setLoading(false);
+    });
+
     setUnauthorizedHandler(() => {
       setToken("");
       setUser(null);
+      setSession(null);
     });
 
-    return () => setUnauthorizedHandler(null);
+    return () => {
+      unsubscribeAuth?.();
+      setUnauthorizedHandler(null);
+    };
   }, []);
 
   const login = useCallback(async (payload) => {
     const result = await authService.login(payload);
     setUser(result.user || null);
+    setSession(result.session || null);
     setToken(result.token || "");
     return result;
   }, []);
@@ -43,6 +65,7 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (payload) => {
     const result = await authService.register(payload);
     setUser(result.user || null);
+    setSession(result.session || null);
     setToken(result.token || "");
     return result;
   }, []);
@@ -55,6 +78,8 @@ export function AuthProvider({ children }) {
 
   const forgotPassword = useCallback((payload) => authService.forgotPassword(payload), []);
 
+  const resendConfirmation = useCallback((payload) => authService.resendConfirmation(payload), []);
+
   const applyPasswordResetSessionFromUrl = useCallback(
     (urlValue) => authService.applyPasswordResetSessionFromUrl(urlValue),
     []
@@ -65,26 +90,29 @@ export function AuthProvider({ children }) {
     []
   );
 
-  const resetPassword = useCallback((payload) => authService.resetPassword(payload), []);
+  const resetPassword = useCallback((payload) => authService.updatePassword(payload), []);
 
   const logout = useCallback(async () => {
     await authService.logout();
     setToken("");
     setUser(null);
+    setSession(null);
   }, []);
 
   const value = useMemo(
     () => ({
       token,
       user,
+      session,
       loading,
-      isAuthenticated: Boolean(user),
+      isAuthenticated: Boolean(session || user),
       refreshSession,
       login,
       register,
       logout,
       updateUserSettings,
       forgotPassword,
+      resendConfirmation,
       applyPasswordResetSessionFromUrl,
       getPasswordResetTokenFromUrl,
       resetPassword
@@ -92,6 +120,7 @@ export function AuthProvider({ children }) {
     [
       token,
       user,
+      session,
       loading,
       refreshSession,
       login,
@@ -99,6 +128,7 @@ export function AuthProvider({ children }) {
       logout,
       updateUserSettings,
       forgotPassword,
+      resendConfirmation,
       applyPasswordResetSessionFromUrl,
       getPasswordResetTokenFromUrl,
       resetPassword

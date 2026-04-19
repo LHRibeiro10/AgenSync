@@ -31,7 +31,7 @@ export function parsePositiveInteger(value, fieldName) {
 export function parseNonNegativeInteger(value, fieldName) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 0) {
-    throw new ApiError(400, `${fieldName} deve ser um nÃºmero inteiro maior ou igual a zero.`);
+    throw new ApiError(400, `${fieldName} deve ser um número inteiro maior ou igual a zero.`);
   }
   return number;
 }

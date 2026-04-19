@@ -134,13 +134,13 @@ router.post(
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      return res.json({ message: "Se o email existir, enviaremos um link de redefiniÃ§Ã£o.", resetUrl: "" });
+      return res.json({ message: "Se o email existir, enviaremos um link de redefinição.", resetUrl: "" });
     }
 
     const token = signPasswordResetToken(user.id);
     const origin = req.get("origin") || process.env.FRONTEND_URL || "http://localhost:5173";
     res.json({
-      message: "Link de redefiniÃ§Ã£o gerado.",
+      message: "Link de redefinição gerado.",
       resetUrl: `${origin}/reset-password?token=${encodeURIComponent(token)}`
     });
   })
@@ -149,18 +149,18 @@ router.post(
 router.post(
   "/reset-password",
   asyncHandler(async (req, res) => {
-    const token = requiredString(req.body.token, "token de redefiniÃ§Ã£o");
+    const token = requiredString(req.body.token, "token de redefinição");
     const password = requiredString(req.body.password, "senha", 6);
     let payload;
 
     try {
       payload = jwt.verify(token, jwtSecret());
     } catch {
-      throw new ApiError(400, "Link de redefiniÃ§Ã£o invÃ¡lido ou expirado.");
+      throw new ApiError(400, "Link de redefinição inválido ou expirado.");
     }
 
     if (payload.purpose !== "password-reset" || !payload.userId) {
-      throw new ApiError(400, "Link de redefiniÃ§Ã£o invÃ¡lido.");
+      throw new ApiError(400, "Link de redefinição inválido.");
     }
 
     const passwordHash = await bcrypt.hash(password, 10);

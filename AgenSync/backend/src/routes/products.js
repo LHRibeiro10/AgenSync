@@ -15,7 +15,7 @@ const router = Router();
 
 async function findProductOrFail(userId, id) {
   const product = await prisma.product.findFirst({ where: { id, userId } });
-  if (!product) throw new ApiError(404, "Produto nÃ£o encontrado.");
+  if (!product) throw new ApiError(404, "Produto não encontrado.");
   return product;
 }
 
@@ -63,10 +63,10 @@ router.post(
         userId: req.user.id,
         name: requiredString(req.body.name, "nome", 2),
         category: requiredString(req.body.category, "categoria"),
-        costPrice: parsePositiveMoney(req.body.costPrice, "preÃ§o de custo"),
-        salePrice: parsePositiveMoney(req.body.salePrice, "preÃ§o de venda"),
+        costPrice: parsePositiveMoney(req.body.costPrice, "preço de custo"),
+        salePrice: parsePositiveMoney(req.body.salePrice, "preço de venda"),
         stockQty: parseNonNegativeInteger(req.body.stockQty, "estoque"),
-        minStock: parseNonNegativeInteger(req.body.minStock, "estoque mÃ­nimo"),
+        minStock: parseNonNegativeInteger(req.body.minStock, "estoque mínimo"),
         description: optionalString(req.body.description),
         isActive: req.body.isActive !== false
       }
@@ -85,10 +85,10 @@ router.put(
       data: {
         name: requiredString(req.body.name, "nome", 2),
         category: requiredString(req.body.category, "categoria"),
-        costPrice: parsePositiveMoney(req.body.costPrice, "preÃ§o de custo"),
-        salePrice: parsePositiveMoney(req.body.salePrice, "preÃ§o de venda"),
+        costPrice: parsePositiveMoney(req.body.costPrice, "preço de custo"),
+        salePrice: parsePositiveMoney(req.body.salePrice, "preço de venda"),
         stockQty: parseNonNegativeInteger(req.body.stockQty, "estoque"),
-        minStock: parseNonNegativeInteger(req.body.minStock, "estoque mÃ­nimo"),
+        minStock: parseNonNegativeInteger(req.body.minStock, "estoque mínimo"),
         description: optionalString(req.body.description),
         isActive: req.body.isActive !== false
       }
@@ -157,13 +157,13 @@ router.post(
 
     const sale = await prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({ where: { id: productId, userId: req.user.id } });
-      if (!product) throw new ApiError(404, "Produto nÃ£o encontrado.");
-      if (!product.isActive) throw new ApiError(400, "Produto inativo nÃ£o pode ser vendido.");
-      if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponÃ­vel.");
+      if (!product) throw new ApiError(404, "Produto não encontrado.");
+      if (!product.isActive) throw new ApiError(400, "Produto inativo não pode ser vendido.");
+      if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
 
       if (clientId) {
         const client = await tx.client.findFirst({ where: { id: clientId, userId: req.user.id } });
-        if (!client) throw new ApiError(400, "Cliente invÃ¡lido para esta venda.");
+        if (!client) throw new ApiError(400, "Cliente inválido para esta venda.");
       }
 
       await tx.product.update({

@@ -106,9 +106,9 @@ function seedDb() {
   const userId = "user_demo";
 
   const clients = [
-    { id: "client_maria", userId, name: "Maria Oliveira", phone: "(11) 98888-1001", notes: "Prefere atendimento no perÃ­odo da manhÃ£.", createdAt, updatedAt: createdAt },
-    { id: "client_joao", userId, name: "JoÃ£o Pereira", phone: "(11) 97777-2040", notes: "Cliente recorrente quinzenal.", createdAt, updatedAt: createdAt },
-    { id: "client_camila", userId, name: "Camila Santos", phone: "(11) 96666-3388", notes: "Tem alergia a cola com lÃ¡tex.", createdAt, updatedAt: createdAt },
+    { id: "client_maria", userId, name: "Maria Oliveira", phone: "(11) 98888-1001", notes: "Prefere atendimento no período da manhã.", createdAt, updatedAt: createdAt },
+    { id: "client_joao", userId, name: "João Pereira", phone: "(11) 97777-2040", notes: "Cliente recorrente quinzenal.", createdAt, updatedAt: createdAt },
+    { id: "client_camila", userId, name: "Camila Santos", phone: "(11) 96666-3388", notes: "Tem alergia a cola com látex.", createdAt, updatedAt: createdAt },
     { id: "client_ana", userId, name: "Ana Costa", phone: "(11) 95555-7722", notes: "", createdAt, updatedAt: createdAt },
     { id: "client_luiza", userId, name: "Luiza Martins", phone: "(11) 94444-9012", notes: "Gosta de confirmar pelo WhatsApp.", createdAt, updatedAt: createdAt }
   ];
@@ -117,7 +117,7 @@ function seedDb() {
     { id: "service_manicure", userId, name: "Manicure completa", priceDefault: 55, durationMinutes: 60, isActive: true, createdAt, updatedAt: createdAt },
     { id: "service_barba", userId, name: "Barba alinhada", priceDefault: 45, durationMinutes: 40, isActive: true, createdAt, updatedAt: createdAt },
     { id: "service_sobrancelha", userId, name: "Design de sobrancelha", priceDefault: 70, durationMinutes: 50, isActive: true, createdAt, updatedAt: createdAt },
-    { id: "service_lash", userId, name: "ManutenÃ§Ã£o de cÃ­lios", priceDefault: 120, durationMinutes: 90, isActive: true, createdAt, updatedAt: createdAt },
+    { id: "service_lash", userId, name: "Manutenção de cílios", priceDefault: 120, durationMinutes: 90, isActive: true, createdAt, updatedAt: createdAt },
     { id: "service_antigo", userId, name: "Pacote antigo", priceDefault: 90, durationMinutes: 75, isActive: false, createdAt, updatedAt: createdAt }
   ];
 
@@ -155,7 +155,7 @@ function seedDb() {
         password: "123456",
         businessName: "Studio AgenSync",
         businessLogo: "",
-        businessType: "Beleza e estÃ©tica",
+        businessType: "Beleza e estética",
         createdAt,
         updatedAt: createdAt
       }
@@ -167,7 +167,7 @@ function seedDb() {
       makeAppointment({ id: "appt_today_1", clientId: "client_maria", serviceId: "service_manicure", date: todayDate, startTime: "09:00", status: "concluido", notes: "Pagamento recebido em dinheiro." }),
       makeAppointment({ id: "appt_today_2", clientId: "client_joao", serviceId: "service_barba", date: todayDate, startTime: "10:30", status: "agendado" }),
       makeAppointment({ id: "appt_today_3", clientId: "client_camila", serviceId: "service_sobrancelha", professionalId: "professional_marina", date: todayDate, startTime: "14:00", status: "agendado", price: 75 }),
-      makeAppointment({ id: "appt_today_4", clientId: "client_ana", serviceId: "service_lash", professionalId: "professional_marina", date: todayDate, startTime: "16:00", status: "cancelado", notes: "Cancelou por conflito de horÃ¡rio." }),
+      makeAppointment({ id: "appt_today_4", clientId: "client_ana", serviceId: "service_lash", professionalId: "professional_marina", date: todayDate, startTime: "16:00", status: "cancelado", notes: "Cancelou por conflito de horário." }),
       makeAppointment({ id: "appt_yesterday_1", clientId: "client_luiza", serviceId: "service_lash", professionalId: "professional_marina", date: yesterday, startTime: "13:00", status: "concluido" }),
       makeAppointment({ id: "appt_three_days_1", clientId: "client_camila", serviceId: "service_sobrancelha", professionalId: "professional_marina", date: threeDaysAgo, startTime: "11:00", status: "nao_compareceu" }),
       makeAppointment({ id: "appt_eight_days_1", clientId: "client_maria", serviceId: "service_manicure", date: eightDaysAgo, startTime: "15:00", status: "concluido", price: 60 }),
@@ -266,14 +266,14 @@ function ensureDbShape(db) {
 function currentUserId() {
   const token = getToken();
   if (!token?.startsWith("local:")) {
-    throw new Error("SessÃ£o expirada ou nÃ£o autenticada.");
+    throw new Error("Sessão expirada ou não autenticada.");
   }
   return token.split(":")[1];
 }
 
 function getCurrentUser(db) {
   const user = db.users.find((item) => item.id === currentUserId());
-  if (!user) throw new Error("UsuÃ¡rio nÃ£o encontrado.");
+  if (!user) throw new Error("Usuário não encontrado.");
   return user;
 }
 
@@ -293,32 +293,32 @@ function enrichAppointment(db, appointment) {
 
 function findClientOrFail(db, userId, clientId) {
   const client = db.clients.find((item) => item.id === clientId && item.userId === userId);
-  if (!client) throw new Error("Cliente invÃ¡lido para este usuÃ¡rio.");
+  if (!client) throw new Error("Cliente inválido para este usuário.");
   return client;
 }
 
 function findServiceOrFail(db, userId, serviceId) {
   const service = db.services.find((item) => item.id === serviceId && item.userId === userId);
-  if (!service) throw new Error("ServiÃ§o invÃ¡lido para este usuÃ¡rio.");
+  if (!service) throw new Error("Serviço inválido para este usuário.");
   return service;
 }
 
 function findProfessionalOrFail(db, userId, professionalId) {
-  if (!professionalId) throw new Error("profissional Ã© obrigatÃ³rio.");
+  if (!professionalId) throw new Error("profissional é obrigatório.");
   const professional = db.professionals.find((item) => item.id === professionalId && item.userId === userId);
-  if (!professional) throw new Error("Profissional invÃ¡lido para este usuÃ¡rio.");
+  if (!professional) throw new Error("Profissional inválido para este usuário.");
   return professional;
 }
 
 function validateRequired(value, field) {
-  if (!String(value || "").trim()) throw new Error(`${field} Ã© obrigatÃ³rio.`);
+  if (!String(value || "").trim()) throw new Error(`${field} é obrigatório.`);
 }
 
 function normalizeBusinessLogo(value) {
   const logo = String(value || "").trim();
   if (!logo) return "";
   if (!/^data:image\/(png|jpeg|webp);base64,/.test(logo)) {
-    throw new Error("Logo invÃ¡lida.");
+    throw new Error("Logo inválida.");
   }
   if (logo.length > 900000) {
     throw new Error("Logo muito grande.");
@@ -330,7 +330,7 @@ function normalizeAppointmentPayload(payload, current = null) {
   const data = { ...payload };
   if (!data.status) data.status = current?.status || "agendado";
   if (!["agendado", "concluido", "cancelado", "nao_compareceu"].includes(data.status)) {
-    throw new Error("status invÃ¡lido.");
+    throw new Error("status inválido.");
   }
   return data;
 }
@@ -350,7 +350,7 @@ function assertNoConflict(db, userId, appointment, ignoreId = null) {
 
   if (conflict) {
     const client = db.clients.find((item) => item.id === conflict.clientId);
-    throw new Error(`Conflito de horÃ¡rio com ${client?.name || "outro cliente"} Ã s ${conflict.startTime}.`);
+    throw new Error(`Conflito de horário com ${client?.name || "outro cliente"} às ${conflict.startTime}.`);
   }
 }
 
@@ -409,12 +409,12 @@ const localApi = {
     validateRequired(payload.name, "nome");
     validateRequired(payload.email, "email");
     validateRequired(payload.password, "senha");
-    validateRequired(payload.businessName, "nome do negÃ³cio");
-    validateRequired(payload.businessType, "tipo de negÃ³cio");
+    validateRequired(payload.businessName, "nome do negócio");
+    validateRequired(payload.businessType, "tipo de negócio");
 
     const email = String(payload.email).trim().toLowerCase();
     if (db.users.some((user) => user.email === email)) {
-      throw new Error("JÃ¡ existe uma conta com esse email.");
+      throw new Error("Já existe uma conta com esse email.");
     }
 
     const now = new Date().toISOString();
@@ -461,7 +461,7 @@ const localApi = {
     const user = db.users.find((item) => item.email === email && item.password === payload.password);
 
     if (!user) {
-      throw new Error("Email ou senha invÃ¡lidos.");
+      throw new Error("Email ou senha inválidos.");
     }
 
     return { token: `local:${user.id}`, user: publicUser(user) };
@@ -475,7 +475,7 @@ const localApi = {
     const user = db.users.find((item) => item.email === email);
     if (!user) {
       return {
-        message: "Se o email existir, enviaremos um link de redefiniÃ§Ã£o.",
+        message: "Se o email existir, enviaremos um link de redefinição.",
         resetUrl: ""
       };
     }
@@ -493,7 +493,7 @@ const localApi = {
     writeResetRequests(requests);
 
     return {
-      message: "Link de redefiniÃ§Ã£o gerado no modo local para testes.",
+      message: "Link de redefinição gerado no modo local para testes.",
       resetUrl: `${window.location.origin}/reset-password?token=${token}`
     };
   },
@@ -501,7 +501,7 @@ const localApi = {
   async resetPassword(payload) {
     const token = String(payload?.token || "").trim();
     const password = String(payload?.password || "");
-    validateRequired(token, "token de redefiniÃ§Ã£o");
+    validateRequired(token, "token de redefinição");
     validateRequired(password, "senha");
     if (password.length < 6) {
       throw new Error("A nova senha precisa ter pelo menos 6 caracteres.");
@@ -510,16 +510,16 @@ const localApi = {
     const requests = readResetRequests();
     const request = requests.find((item) => item.token === token);
     if (!request) {
-      throw new Error("Link de redefiniÃ§Ã£o invÃ¡lido ou expirado.");
+      throw new Error("Link de redefinição inválido ou expirado.");
     }
     if (new Date(request.expiresAt).getTime() < Date.now()) {
-      throw new Error("Link de redefiniÃ§Ã£o expirado.");
+      throw new Error("Link de redefinição expirado.");
     }
 
     const db = readDb();
     const user = db.users.find((item) => item.id === request.userId);
     if (!user) {
-      throw new Error("Conta nÃ£o encontrada para redefiniÃ§Ã£o.");
+      throw new Error("Conta não encontrada para redefinição.");
     }
 
     user.password = password;
@@ -538,9 +538,9 @@ const localApi = {
   async updateUserSettings(payload) {
     const db = readDb();
     const user = getCurrentUser(db);
-    validateRequired(payload.businessType, "tipo de negÃ³cio");
+    validateRequired(payload.businessType, "tipo de negócio");
     if (payload.businessName !== undefined) {
-      validateRequired(payload.businessName, "nome do negÃ³cio");
+      validateRequired(payload.businessName, "nome do negócio");
       user.businessName = payload.businessName.trim();
     }
     if (payload.businessLogo !== undefined) {
@@ -603,7 +603,7 @@ const localApi = {
     const userId = currentUserId();
     findClientOrFail(db, userId, clientId);
     if (db.appointments.some((appointment) => appointment.userId === userId && appointment.clientId === clientId)) {
-      throw new Error("NÃ£o Ã© possÃ­vel excluir cliente com agendamentos vinculados.");
+      throw new Error("Não é possível excluir cliente com agendamentos vinculados.");
     }
     db.clients = db.clients.filter((client) => client.id !== clientId);
     writeDb(db);
@@ -660,7 +660,7 @@ const localApi = {
     const userId = currentUserId();
     findProfessionalOrFail(db, userId, professionalId);
     if (db.appointments.some((appointment) => appointment.userId === userId && appointment.professionalId === professionalId)) {
-      throw new Error("NÃ£o Ã© possÃ­vel excluir profissional com agendamentos. Desative-o para ocultar na criaÃ§Ã£o.");
+      throw new Error("Não é possível excluir profissional com agendamentos. Desative-o para ocultar na criação.");
     }
     db.professionals = db.professionals.filter((professional) => professional.id !== professionalId);
     writeDb(db);
@@ -684,8 +684,8 @@ const localApi = {
     validateRequired(payload.name, "nome");
     const priceDefault = Number(payload.priceDefault);
     const durationMinutes = Number(payload.durationMinutes);
-    if (!Number.isFinite(priceDefault) || priceDefault < 0) throw new Error("preÃ§o padrÃ£o deve ser maior ou igual a zero.");
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) throw new Error("duraÃ§Ã£o deve ser maior que zero.");
+    if (!Number.isFinite(priceDefault) || priceDefault < 0) throw new Error("preço padrão deve ser maior ou igual a zero.");
+    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) throw new Error("duração deve ser maior que zero.");
     const now = new Date().toISOString();
     const service = {
       id: id("service"),
@@ -709,8 +709,8 @@ const localApi = {
     validateRequired(payload.name, "nome");
     const priceDefault = Number(payload.priceDefault);
     const durationMinutes = Number(payload.durationMinutes);
-    if (!Number.isFinite(priceDefault) || priceDefault < 0) throw new Error("preÃ§o padrÃ£o deve ser maior ou igual a zero.");
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) throw new Error("duraÃ§Ã£o deve ser maior que zero.");
+    if (!Number.isFinite(priceDefault) || priceDefault < 0) throw new Error("preço padrão deve ser maior ou igual a zero.");
+    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) throw new Error("duração deve ser maior que zero.");
     service.name = payload.name.trim();
     service.priceDefault = priceDefault;
     service.durationMinutes = durationMinutes;
@@ -725,7 +725,7 @@ const localApi = {
     const userId = currentUserId();
     findServiceOrFail(db, userId, serviceId);
     if (db.appointments.some((appointment) => appointment.userId === userId && appointment.serviceId === serviceId)) {
-      throw new Error("NÃ£o Ã© possÃ­vel excluir serviÃ§o com agendamentos. Desative-o para ocultar na criaÃ§Ã£o.");
+      throw new Error("Não é possível excluir serviço com agendamentos. Desative-o para ocultar na criação.");
     }
     db.services = db.services.filter((service) => service.id !== serviceId);
     writeDb(db);
@@ -743,14 +743,14 @@ const localApi = {
     const data = normalizeAppointmentPayload(payload);
     validateRequired(data.clientId, "cliente");
     validateRequired(data.professionalId, "profissional");
-    validateRequired(data.serviceId, "serviÃ§o");
+    validateRequired(data.serviceId, "serviço");
     validateRequired(data.date, "data");
     validateRequired(data.startTime, "hora inicial");
     findClientOrFail(db, userId, data.clientId);
     const professional = findProfessionalOrFail(db, userId, data.professionalId);
     const service = findServiceOrFail(db, userId, data.serviceId);
-    if (!professional.isActive) throw new Error("Profissionais inativos nÃ£o podem ser usados em novos agendamentos.");
-    if (!service.isActive) throw new Error("ServiÃ§os inativos nÃ£o podem ser usados em novos agendamentos.");
+    if (!professional.isActive) throw new Error("Profissionais inativos não podem ser usados em novos agendamentos.");
+    if (!service.isActive) throw new Error("Serviços inativos não podem ser usados em novos agendamentos.");
 
     const now = new Date().toISOString();
     const appointment = {
@@ -780,7 +780,7 @@ const localApi = {
     const db = readDb();
     const userId = currentUserId();
     const appointment = db.appointments.find((item) => item.id === appointmentId && item.userId === userId);
-    if (!appointment) throw new Error("Agendamento nÃ£o encontrado.");
+    if (!appointment) throw new Error("Agendamento não encontrado.");
 
     const data = normalizeAppointmentPayload(payload, appointment);
     const clientId = data.clientId ?? appointment.clientId;
@@ -792,11 +792,11 @@ const localApi = {
     const professional = findProfessionalOrFail(db, userId, professionalId);
     const service = findServiceOrFail(db, userId, serviceId);
     if (serviceId !== appointment.serviceId && !service.isActive) {
-      throw new Error("ServiÃ§os inativos nÃ£o podem ser usados em novos agendamentos.");
+      throw new Error("Serviços inativos não podem ser usados em novos agendamentos.");
     }
 
     if (professionalId !== appointment.professionalId && !professional.isActive) {
-      throw new Error("Profissionais inativos nÃ£o podem ser usados em novos agendamentos.");
+      throw new Error("Profissionais inativos não podem ser usados em novos agendamentos.");
     }
 
     const timeChanged = data.date !== undefined || data.startTime !== undefined || data.serviceId !== undefined;
@@ -830,7 +830,7 @@ const localApi = {
     const db = readDb();
     const userId = currentUserId();
     const exists = db.appointments.some((appointment) => appointment.id === appointmentId && appointment.userId === userId);
-    if (!exists) throw new Error("Agendamento nÃ£o encontrado.");
+    if (!exists) throw new Error("Agendamento não encontrado.");
     db.appointments = db.appointments.filter((appointment) => appointment.id !== appointmentId);
     writeDb(db);
     return null;

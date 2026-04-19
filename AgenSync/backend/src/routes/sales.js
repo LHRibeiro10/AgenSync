@@ -55,13 +55,13 @@ router.post(
 
     const sale = await prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({ where: { id: productId, userId: req.user.id } });
-      if (!product) throw new ApiError(404, "Produto nÃ£o encontrado.");
-      if (!product.isActive) throw new ApiError(400, "Produto inativo nÃ£o pode ser vendido.");
-      if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponÃ­vel.");
+      if (!product) throw new ApiError(404, "Produto não encontrado.");
+      if (!product.isActive) throw new ApiError(400, "Produto inativo não pode ser vendido.");
+      if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
 
       if (clientId) {
         const client = await tx.client.findFirst({ where: { id: clientId, userId: req.user.id } });
-        if (!client) throw new ApiError(400, "Cliente invÃ¡lido para esta venda.");
+        if (!client) throw new ApiError(400, "Cliente inválido para esta venda.");
       }
 
       await tx.product.update({

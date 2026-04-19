@@ -101,6 +101,7 @@ export default function ResetPassword() {
       });
       setPassword("");
       setConfirmPassword("");
+      window.setTimeout(() => navigate("/login"), 1200);
     } catch (error) {
       setFeedback({ type: "error", message: error.message || "Nao foi possivel redefinir a senha." });
     } finally {
