@@ -149,6 +149,8 @@ export default function Products() {
       })
       .catch((err) => {
         if (!active) return;
+        setProducts([]);
+        setAllProducts([]);
         setError(err.message);
         showToast(err.message, "error");
       })

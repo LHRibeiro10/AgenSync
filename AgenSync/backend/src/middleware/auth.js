@@ -2,9 +2,23 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "./error.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
+import { normalizeEnvValue } from "../utils/env.js";
 
-const jwtSecret = () => process.env.JWT_SECRET || "agensync-dev-secret";
-const supabaseJwtSecret = () => process.env.SUPABASE_JWT_SECRET || "";
+function jwtSecret() {
+  const secret = normalizeEnvValue(process.env.JWT_SECRET);
+  if (!secret) {
+    throw new ApiError(500, "JWT_SECRET nao configurado no backend.");
+  }
+  return secret;
+}
+
+function supabaseJwtSecret() {
+  const secret = normalizeEnvValue(process.env.SUPABASE_JWT_SECRET);
+  if (!secret) {
+    throw new ApiError(401, "SUPABASE_JWT_SECRET nao configurado no backend.");
+  }
+  return secret;
+}
 
 const userSelect = {
   id: true,
@@ -18,21 +32,21 @@ const userSelect = {
 
 async function authenticateWithLegacyJwt(token) {
   const payload = jwt.verify(token, jwtSecret());
-  if (!payload?.userId) throw new ApiError(401, "Sessão inválida.");
+  if (!payload?.userId) throw new ApiError(401, "Sessao invalida.");
 
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: userSelect
   });
 
-  if (!user) throw new ApiError(401, "Usuário não encontrado.");
+  if (!user) throw new ApiError(401, "Usuario nao encontrado.");
   return user;
 }
 
 async function ensureSupabaseUser(payload) {
   const supabaseId = payload?.sub;
   const email = payload?.email;
-  if (!supabaseId || !email) throw new ApiError(401, "Token Supabase inválido.");
+  if (!supabaseId || !email) throw new ApiError(401, "Token Supabase invalido.");
 
   const metadata = payload.user_metadata || {};
   const name = metadata.name || email;
@@ -92,10 +106,7 @@ async function ensureSupabaseUser(payload) {
 }
 
 async function authenticateWithSupabaseJwt(token) {
-  const secret = supabaseJwtSecret();
-  if (!secret) throw new ApiError(401, "SUPABASE_JWT_SECRET não configurado no backend.");
-
-  const payload = jwt.verify(token, secret);
+  const payload = jwt.verify(token, supabaseJwtSecret());
   return ensureSupabaseUser(payload);
 }
 
@@ -104,7 +115,7 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
   const [scheme, token] = header.split(" ");
 
   if (scheme !== "Bearer" || !token) {
-    throw new ApiError(401, "Sessão expirada ou não autenticada.");
+    throw new ApiError(401, "Sessao expirada ou nao autenticada.");
   }
 
   try {

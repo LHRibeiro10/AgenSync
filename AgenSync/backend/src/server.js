@@ -2,10 +2,10 @@ import "dotenv/config";
 import { app } from "./app.js";
 import { prisma } from "./prisma.js";
 
-const port = Number(process.env.PORT || 3333);
+const PORT = process.env.PORT || 8080;
 
-const server = app.listen(port, () => {
-  console.log(`AgenSync API rodando em http://localhost:${port}`);
+const server = app.listen(PORT, () => {
+  console.log(`AgenSync API rodando na porta ${PORT}`);
 });
 
 async function shutdown() {

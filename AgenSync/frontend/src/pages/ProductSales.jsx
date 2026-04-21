@@ -50,7 +50,10 @@ export default function ProductSales() {
     api
       .listClients()
       .then((data) => setClients(data.clients))
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        setClients([]);
+        setError(err.message);
+      });
   }, []);
 
   const selectedProduct = products.find((product) => product.id === form.productId);
@@ -82,6 +85,9 @@ export default function ProductSales() {
       })
       .catch((err) => {
         if (!active) return;
+        setProducts([]);
+        setSales([]);
+        setLowStockProducts([]);
         setError(err.message);
       })
       .finally(() => {

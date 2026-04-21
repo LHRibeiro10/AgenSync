@@ -297,6 +297,12 @@ export default function Dashboard() {
       setPreviousSubscriptions(comparisonSubscriptions);
       setTomorrowAppointments(tomorrowData.appointments);
     } catch (err) {
+      setData(null);
+      setPreviousAppointments([]);
+      setPreviousSales([]);
+      setPreviousExpenses([]);
+      setPreviousSubscriptions([]);
+      setTomorrowAppointments([]);
       setError(err.message);
     } finally {
       setLoading(false);

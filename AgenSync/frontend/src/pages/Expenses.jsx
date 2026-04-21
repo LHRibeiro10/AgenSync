@@ -63,6 +63,7 @@ export default function Expenses() {
       })
       .catch((err) => {
         if (!active) return;
+        setExpenses([]);
         setError(err.message);
         showToast(err.message, "error");
       })

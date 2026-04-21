@@ -13,15 +13,15 @@ function readEnum(name, allowed, fallback) {
 }
 
 export const env = Object.freeze({
-  authProvider: readEnum("VITE_AUTH_PROVIDER", authProviders, "api"),
-  apiUrl: readString("VITE_API_URL", "http://localhost:3333/api"),
+  authProvider: readEnum("VITE_AUTH_PROVIDER", authProviders, "supabase"),
+  apiUrl: readString("VITE_API_URL"),
   supabaseUrl: readString("VITE_SUPABASE_URL"),
   supabaseAnonKey: readString("VITE_SUPABASE_ANON_KEY"),
   supabaseResetPasswordRedirectUrl: readString(
     "VITE_SUPABASE_RESET_PASSWORD_REDIRECT_URL",
     `${typeof window !== "undefined" ? window.location.origin : ""}/reset-password`
   ),
-  tokenStorageKey: readString("VITE_AUTH_TOKEN_STORAGE_KEY", "agensync_token")
+  tokenStorageKey: readString("VITE_AUTH_TOKEN_STORAGE_KEY", "@agensync-token")
 });
 
 export function hasSupabaseConfig() {
