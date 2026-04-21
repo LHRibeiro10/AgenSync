@@ -10,16 +10,25 @@ const LEGACY_MOCK_KEYS = [
   "agensync_local_products_v1",
   "agensync_local_product_sales_v1",
   "agensync_local_expenses_v1",
-  "agensync_local_subscriptions_v1"
+  "agensync_local_subscriptions_v1",
+  "agensync_token",
+  "agensync_cleanup_legacy_mock_data_v1"
 ];
 const CARE_STORAGE_KEY = "agensync_client_care_v1";
-const LEGACY_CLEANUP_FLAG_KEY = "agensync_cleanup_legacy_mock_data_v1";
+const LEGACY_STORAGE_PREFIX = "agensync_local_";
 
 function cleanupLegacyMockStorage() {
   if (typeof window === "undefined") return;
-  if (window.localStorage.getItem(LEGACY_CLEANUP_FLAG_KEY) === "true") return;
 
-  LEGACY_MOCK_KEYS.forEach((key) => window.localStorage.removeItem(key));
+  const keysToRemove = [...LEGACY_MOCK_KEYS];
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = String(window.localStorage.key(index) || "");
+    if (key.startsWith(LEGACY_STORAGE_PREFIX)) {
+      keysToRemove.push(key);
+    }
+  }
+
+  [...new Set(keysToRemove)].forEach((key) => window.localStorage.removeItem(key));
 
   const rawCareStorage = window.localStorage.getItem(CARE_STORAGE_KEY);
   if (rawCareStorage) {
@@ -33,8 +42,6 @@ function cleanupLegacyMockStorage() {
       window.localStorage.removeItem(CARE_STORAGE_KEY);
     }
   }
-
-  window.localStorage.setItem(LEGACY_CLEANUP_FLAG_KEY, "true");
 }
 
 cleanupLegacyMockStorage();
