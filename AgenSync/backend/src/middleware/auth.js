@@ -20,6 +20,11 @@ function supabaseJwtSecret() {
   return secret;
 }
 
+function isJwtValidationError(error) {
+  const name = String(error?.name || "");
+  return name === "JsonWebTokenError" || name === "TokenExpiredError" || name === "NotBeforeError";
+}
+
 const userSelect = {
   id: true,
   name: true,
@@ -120,8 +125,30 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
 
   try {
     req.user = await authenticateWithLegacyJwt(token);
-  } catch {
-    req.user = await authenticateWithSupabaseJwt(token);
+  } catch (legacyError) {
+    try {
+      req.user = await authenticateWithSupabaseJwt(token);
+    } catch (supabaseError) {
+      const isMissingSupabaseSecret =
+        supabaseError instanceof ApiError &&
+        supabaseError.message === "SUPABASE_JWT_SECRET nao configurado no backend.";
+
+      if (isMissingSupabaseSecret) {
+        throw supabaseError;
+      }
+
+      const isAuthFailure =
+        isJwtValidationError(legacyError) ||
+        isJwtValidationError(supabaseError) ||
+        (legacyError instanceof ApiError && legacyError.statusCode === 401) ||
+        (supabaseError instanceof ApiError && supabaseError.statusCode === 401);
+
+      if (isAuthFailure) {
+        throw new ApiError(401, "Sessao expirada ou nao autenticada.");
+      }
+
+      throw supabaseError;
+    }
   }
 
   next();

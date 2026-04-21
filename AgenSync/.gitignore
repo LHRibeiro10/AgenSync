@@ -8,3 +8,5 @@ coverage
 .DS_Store
 backend/.postgres-data
 backend/postgres.log
+
+.vercel
