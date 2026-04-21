@@ -7,7 +7,15 @@ import {
   updateProductApi
 } from "../api/modules/productsApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
-import * as productsMock from "../mocks/legacy/productsMock.js";
+
+export const productCategories = [
+  { value: "cosmeticos", label: "Cosmeticos" },
+  { value: "cuidados", label: "Cuidados" },
+  { value: "acessorios", label: "Acessorios" },
+  { value: "finalizadores", label: "Finalizadores" },
+  { value: "kits", label: "Kits" },
+  { value: "outros", label: "Outros" }
+];
 
 function asList(value, key) {
   if (Array.isArray(value)) return value;
@@ -20,15 +28,20 @@ function asItem(value, key) {
   return value;
 }
 
-export const productCategories = productsMock.productCategories;
-export const productCategoryLabel = productsMock.productCategoryLabel;
-export const stockStatus = productsMock.stockStatus;
+export function productCategoryLabel(value) {
+  return productCategories.find((category) => category.value === value)?.label || value;
+}
+
+export function stockStatus(product) {
+  if (Number(product.stockQty) <= 0) return "out";
+  if (Number(product.stockQty) <= Number(product.minStock)) return "low";
+  return "ok";
+}
 
 export async function listProducts(filters = {}) {
   const response = await executeDataSource({
     feature: "products.list",
-    remote: () => listProductsApi(filters),
-    mock: () => productsMock.listProducts(filters)
+    remote: () => listProductsApi(filters)
   });
   return asList(response, "products");
 }
@@ -36,8 +49,7 @@ export async function listProducts(filters = {}) {
 export async function createProduct(payload) {
   const response = await executeDataSource({
     feature: "products.create",
-    remote: () => createProductApi(payload),
-    mock: () => productsMock.createProduct(payload)
+    remote: () => createProductApi(payload)
   });
   return asItem(response, "product");
 }
@@ -45,8 +57,7 @@ export async function createProduct(payload) {
 export async function updateProduct(productId, payload) {
   const response = await executeDataSource({
     feature: "products.update",
-    remote: () => updateProductApi(productId, payload),
-    mock: () => productsMock.updateProduct(productId, payload)
+    remote: () => updateProductApi(productId, payload)
   });
   return asItem(response, "product");
 }
@@ -54,8 +65,7 @@ export async function updateProduct(productId, payload) {
 export async function deleteProduct(productId) {
   return executeDataSource({
     feature: "products.delete",
-    remote: () => deleteProductApi(productId),
-    mock: () => productsMock.deleteProduct(productId)
+    remote: () => deleteProductApi(productId)
   });
 }
 
@@ -72,8 +82,7 @@ export async function toggleProduct(productId) {
 export async function createProductSale(payload) {
   const response = await executeDataSource({
     feature: "sales.create",
-    remote: () => createSaleApi(payload),
-    mock: () => productsMock.createProductSale(payload)
+    remote: () => createSaleApi(payload)
   });
   return asItem(response, "sale");
 }
@@ -81,16 +90,18 @@ export async function createProductSale(payload) {
 export async function listProductSales(filters = {}) {
   const response = await executeDataSource({
     feature: "sales.list",
-    remote: () => listSalesApi(filters),
-    mock: () => productsMock.listProductSales(filters)
+    remote: () => listSalesApi(filters)
   });
   return asList(response, "sales");
 }
 
 export function sumProductSales(sales) {
-  return productsMock.sumProductSales(sales);
+  return sales.reduce((total, sale) => total + Number(sale.total || 0), 0);
 }
 
 export function productSalesProfit(sales) {
-  return productsMock.productSalesProfit(sales);
+  return sales.reduce(
+    (total, sale) => total + (Number(sale.unitPrice || 0) - Number(sale.unitCost || 0)) * Number(sale.quantity || 0),
+    0
+  );
 }

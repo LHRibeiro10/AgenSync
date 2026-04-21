@@ -5,7 +5,16 @@ import {
   updateExpenseApi
 } from "../api/modules/expensesApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
-import * as expensesMock from "../mocks/legacy/expensesMock.js";
+
+export const expenseCategories = [
+  { value: "materiais", label: "Materiais" },
+  { value: "produtos", label: "Produtos" },
+  { value: "aluguel", label: "Aluguel" },
+  { value: "transporte", label: "Transporte" },
+  { value: "contas", label: "Contas" },
+  { value: "marketing", label: "Marketing" },
+  { value: "outros", label: "Outros" }
+];
 
 function asList(value, key) {
   if (Array.isArray(value)) return value;
@@ -18,14 +27,14 @@ function asItem(value, key) {
   return value;
 }
 
-export const expenseCategories = expensesMock.expenseCategories;
-export const expenseCategoryLabel = expensesMock.expenseCategoryLabel;
+export function expenseCategoryLabel(value) {
+  return expenseCategories.find((category) => category.value === value)?.label || value;
+}
 
 export async function listExpenses(filters = {}) {
   const response = await executeDataSource({
     feature: "expenses.list",
-    remote: () => listExpensesApi(filters),
-    mock: () => expensesMock.listExpenses(filters)
+    remote: () => listExpensesApi(filters)
   });
   return asList(response, "expenses");
 }
@@ -33,8 +42,7 @@ export async function listExpenses(filters = {}) {
 export async function createExpense(payload) {
   const response = await executeDataSource({
     feature: "expenses.create",
-    remote: () => createExpenseApi(payload),
-    mock: () => expensesMock.createExpense(payload)
+    remote: () => createExpenseApi(payload)
   });
   return asItem(response, "expense");
 }
@@ -42,8 +50,7 @@ export async function createExpense(payload) {
 export async function updateExpense(expenseId, payload) {
   const response = await executeDataSource({
     feature: "expenses.update",
-    remote: () => updateExpenseApi(expenseId, payload),
-    mock: () => expensesMock.updateExpense(expenseId, payload)
+    remote: () => updateExpenseApi(expenseId, payload)
   });
   return asItem(response, "expense");
 }
@@ -51,11 +58,10 @@ export async function updateExpense(expenseId, payload) {
 export async function deleteExpense(expenseId) {
   return executeDataSource({
     feature: "expenses.delete",
-    remote: () => deleteExpenseApi(expenseId),
-    mock: () => expensesMock.deleteExpense(expenseId)
+    remote: () => deleteExpenseApi(expenseId)
   });
 }
 
 export function sumExpenses(expenses) {
-  return expensesMock.sumExpenses(expenses);
+  return expenses.reduce((total, expense) => total + Number(expense.amount || 0), 0);
 }

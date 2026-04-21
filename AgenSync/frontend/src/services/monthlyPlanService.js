@@ -6,7 +6,6 @@ import {
   updateMonthlyPlanApi
 } from "../api/modules/monthlyPlansApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
-import * as subscriptionsMock from "../mocks/legacy/subscriptionsMock.js";
 
 function asList(value, key) {
   if (Array.isArray(value)) return value;
@@ -19,15 +18,27 @@ function asItem(value, key) {
   return value;
 }
 
-export const subscriptionStatusLabel = subscriptionsMock.subscriptionStatusLabel;
-export const sumPaidSubscriptionCycles = subscriptionsMock.sumPaidSubscriptionCycles;
-export const sumExpectedSubscriptionCycles = subscriptionsMock.sumExpectedSubscriptionCycles;
+export function subscriptionStatusLabel(status) {
+  if (status === "paid") return "Pago";
+  if (status === "overdue") return "Atrasado";
+  if (status === "canceled") return "Cancelada";
+  return "Pendente";
+}
+
+export function sumPaidSubscriptionCycles(cycles) {
+  return cycles
+    .filter((cycle) => cycle.status === "paid")
+    .reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
+}
+
+export function sumExpectedSubscriptionCycles(cycles) {
+  return cycles.reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
+}
 
 export async function listSubscriptions(filters = {}) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.list",
-    remote: () => listMonthlyPlansApi(filters),
-    mock: () => subscriptionsMock.listSubscriptions(filters)
+    remote: () => listMonthlyPlansApi(filters)
   });
   return asList(response, "monthlyPlans");
 }
@@ -35,8 +46,7 @@ export async function listSubscriptions(filters = {}) {
 export async function listSubscriptionCycles(filters = {}) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.cycles",
-    remote: () => listMonthlyPlansApi({ ...filters, includeCycles: true }),
-    mock: () => subscriptionsMock.listSubscriptionCycles(filters)
+    remote: () => listMonthlyPlansApi({ ...filters, includeCycles: true })
   });
 
   if (Array.isArray(response?.cycles)) return response.cycles;
@@ -46,8 +56,7 @@ export async function listSubscriptionCycles(filters = {}) {
 export async function subscriptionSummary(filters = {}) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.summary",
-    remote: () => listMonthlyPlansApi({ ...filters, includeSummary: true }),
-    mock: () => subscriptionsMock.subscriptionSummary(filters)
+    remote: () => listMonthlyPlansApi({ ...filters, includeSummary: true })
   });
 
   if (response?.summary) return response.summary;
@@ -57,8 +66,7 @@ export async function subscriptionSummary(filters = {}) {
 export async function createSubscription(payload) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.create",
-    remote: () => createMonthlyPlanApi(payload),
-    mock: () => subscriptionsMock.createSubscription(payload)
+    remote: () => createMonthlyPlanApi(payload)
   });
   return asItem(response, "monthlyPlan");
 }
@@ -66,8 +74,7 @@ export async function createSubscription(payload) {
 export async function updateSubscription(subscriptionId, payload) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.update",
-    remote: () => updateMonthlyPlanApi(subscriptionId, payload),
-    mock: () => subscriptionsMock.updateSubscription(subscriptionId, payload)
+    remote: () => updateMonthlyPlanApi(subscriptionId, payload)
   });
   return asItem(response, "monthlyPlan");
 }
@@ -75,8 +82,7 @@ export async function updateSubscription(subscriptionId, payload) {
 export async function cancelSubscription(subscriptionId) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.cancel",
-    remote: () => cancelMonthlyPlanApi(subscriptionId),
-    mock: () => subscriptionsMock.cancelSubscription(subscriptionId)
+    remote: () => cancelMonthlyPlanApi(subscriptionId)
   });
   return asItem(response, "monthlyPlan");
 }
@@ -84,8 +90,7 @@ export async function cancelSubscription(subscriptionId) {
 export async function markSubscriptionPayment(subscriptionId, month, status) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.payments",
-    remote: () => markMonthlyPlanPaymentApi(subscriptionId, { month, status }),
-    mock: () => subscriptionsMock.markSubscriptionPayment(subscriptionId, month, status)
+    remote: () => markMonthlyPlanPaymentApi(subscriptionId, { month, status })
   });
   return asItem(response, "cycle");
 }
