@@ -82,7 +82,10 @@ export default function Login() {
   const isLogin = view === "login";
   const isRegister = view === "register";
   const isRecovery = view === "recovery";
-  const canResendConfirmation = isLogin && feedback.code === "EMAIL_NOT_CONFIRMED" && form.email.trim();
+  const canResendConfirmation =
+    isLogin &&
+    ["EMAIL_NOT_CONFIRMED", "EMAIL_CONFIRMATION_REQUIRED"].includes(feedback.code) &&
+    form.email.trim();
 
   const actionLabel = useMemo(() => {
     if (isLogin) return "Entrar";
@@ -120,8 +123,10 @@ export default function Login() {
     });
 
     if (data?.emailConfirmationRequired) {
+      setView("login");
       setFeedback({
         type: "success",
+        code: "EMAIL_CONFIRMATION_REQUIRED",
         message: data.message || "Conta criada. Verifique seu email para confirmar o acesso."
       });
       return;

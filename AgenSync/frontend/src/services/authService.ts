@@ -22,7 +22,11 @@ function authResult(data: any = {}) {
   const user = publicSupabaseUser(data.user || session?.user || null);
   const token = session?.access_token || "";
 
-  if (token) setAccessToken(token);
+  if (token) {
+    setAccessToken(token);
+  } else {
+    clearAccessToken();
+  }
 
   return { user, session, token };
 }

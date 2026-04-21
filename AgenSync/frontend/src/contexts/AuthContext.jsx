@@ -65,9 +65,10 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (payload) => {
     const result = await authService.register(payload);
-    setUser(result.user || null);
-    setSession(result.session || null);
-    setToken(result.token || "");
+    const hasAuthenticatedSession = Boolean(result.token || result.session?.access_token);
+    setUser(hasAuthenticatedSession ? result.user || null : null);
+    setSession(hasAuthenticatedSession ? result.session || null : null);
+    setToken(hasAuthenticatedSession ? result.token || result.session?.access_token || "" : "");
     return result;
   }, []);
 
@@ -107,7 +108,7 @@ export function AuthProvider({ children }) {
       session,
       loading,
       authConfigurationError,
-      isAuthenticated: Boolean(session || user),
+      isAuthenticated: Boolean(token),
       refreshSession,
       login,
       register,
