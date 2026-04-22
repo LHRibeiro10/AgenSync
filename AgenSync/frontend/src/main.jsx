@@ -12,6 +12,7 @@ const LEGACY_MOCK_KEYS = [
   "agensync_local_expenses_v1",
   "agensync_local_subscriptions_v1",
   "agensync_token",
+  "@agensync-token",
   "agensync_cleanup_legacy_mock_data_v1"
 ];
 const CARE_STORAGE_KEY = "agensync_client_care_v1";

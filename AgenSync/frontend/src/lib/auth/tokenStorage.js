@@ -1,6 +1,6 @@
 import { env } from "../../config/env.js";
 
-const MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH = 6000;
+const MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH = 3500;
 
 function hasWindow() {
   return typeof window !== "undefined";
@@ -33,7 +33,7 @@ function clearTokenEverywhere() {
   writeToken(getLocalStorage(), "");
 }
 
-function isOversizedToken(token) {
+export function isLikelyOversizedAuthToken(token) {
   return String(token || "").length > MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH;
 }
 
@@ -43,7 +43,7 @@ export function getAccessToken() {
 
   const sessionToken = readToken(sessionStorage);
   if (sessionToken) {
-    if (isOversizedToken(sessionToken)) {
+    if (isLikelyOversizedAuthToken(sessionToken)) {
       clearTokenEverywhere();
       return "";
     }
@@ -53,7 +53,7 @@ export function getAccessToken() {
   const legacyLocalToken = readToken(localStorage);
   if (!legacyLocalToken) return "";
 
-  if (isOversizedToken(legacyLocalToken)) {
+  if (isLikelyOversizedAuthToken(legacyLocalToken)) {
     clearTokenEverywhere();
     return "";
   }
@@ -68,6 +68,10 @@ export function setAccessToken(token) {
   const sessionStorage = getSessionStorage();
   const localStorage = getLocalStorage();
   if (!token) {
+    clearTokenEverywhere();
+    return;
+  }
+  if (isLikelyOversizedAuthToken(token)) {
     clearTokenEverywhere();
     return;
   }

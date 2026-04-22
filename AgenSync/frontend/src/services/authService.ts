@@ -1,8 +1,6 @@
 import { env } from "../config/env.js";
-import { clearAccessToken, setAccessToken } from "../lib/auth/tokenStorage.js";
+import { clearAccessToken, isLikelyOversizedAuthToken, setAccessToken } from "../lib/auth/tokenStorage.js";
 import { supabase, supabaseConfigError } from "../lib/supabase.ts";
-
-const MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH = 6000;
 
 function publicSupabaseUser(user: any) {
   if (!user) return null;
@@ -89,15 +87,22 @@ function mergeUser(primary: any, secondary: any) {
   };
 }
 
+function safeTokenForAuthHeader(token: string) {
+  const safeToken = String(token || "");
+  if (!safeToken || isLikelyOversizedAuthToken(safeToken)) return "";
+  return safeToken;
+}
+
 async function requestBackendMe(token: string) {
+  const safeToken = safeTokenForAuthHeader(token);
   const apiBaseUrl = resolveApiBaseUrl();
-  if (!apiBaseUrl || !token) return null;
+  if (!apiBaseUrl || !safeToken) return null;
 
   try {
     const response = await fetch(`${apiBaseUrl}/auth/me`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${safeToken}`
       }
     });
 
@@ -110,13 +115,14 @@ async function requestBackendMe(token: string) {
 }
 
 async function requestBackendSettingsUpdate(token: string, payload: any) {
+  const safeToken = safeTokenForAuthHeader(token);
   const apiBaseUrl = resolveApiBaseUrl();
-  if (!apiBaseUrl || !token) return null;
+  if (!apiBaseUrl || !safeToken) return null;
 
   const response = await fetch(`${apiBaseUrl}/auth/me`, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${safeToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -169,7 +175,7 @@ async function refreshAndPersistToken(client: any) {
 
 async function maybeShrinkOversizedTokenSession(session: any) {
   if (!session?.access_token) return session;
-  if (session.access_token.length <= MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH) return session;
+  if (!isLikelyOversizedAuthToken(session.access_token)) return session;
   if (!session.user?.user_metadata?.businessLogo) return session;
 
   const client = requireSupabase();
@@ -187,8 +193,10 @@ async function maybeShrinkOversizedTokenSession(session: any) {
 }
 
 async function enrichAuthResultWithBackend(result: any) {
-  if (!result?.token) return result;
-  const backendUser = await requestBackendMe(result.token);
+  const safeToken = safeTokenForAuthHeader(result?.token || "");
+  if (!safeToken) return result;
+
+  const backendUser = await requestBackendMe(safeToken);
   if (!backendUser) return result;
 
   return {
@@ -246,7 +254,9 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
   });
 
   if (error) throw friendlyError(error, "Email ou senha invalidos.");
-  return enrichAuthResultWithBackend(authResult(data));
+
+  const safeSession = await maybeShrinkOversizedTokenSession(data.session);
+  return enrichAuthResultWithBackend(authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }));
 }
 
 export async function login(payload: any) {
@@ -275,7 +285,10 @@ export async function signUp(emailOrPayload: any, maybePassword?: string) {
 
   if (error) throw friendlyError(error, "Nao foi possivel criar a conta.");
 
-  const result = await enrichAuthResultWithBackend(authResult(data));
+  const safeSession = await maybeShrinkOversizedTokenSession(data.session);
+  const result = await enrichAuthResultWithBackend(
+    authResult({ ...data, session: safeSession, user: safeSession?.user || data.user })
+  );
 
   if (result?.token) {
     const backendUser = await requestBackendSettingsUpdate(result.token, {
