@@ -13,6 +13,8 @@ export const supabase = supabaseConfigError
       auth: {
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: true,
+        // Keep Supabase auth session scoped to the current browser tab/session.
+        storage: typeof window !== "undefined" ? window.sessionStorage : undefined
       }
     });
