@@ -20,7 +20,7 @@ function publicSupabaseUser(user: any) {
 function authResult(data: any = {}) {
   const session = data.session || null;
   const user = publicSupabaseUser(data.user || session?.user || null);
-  const token = session?.access_token || "";
+  const token = safeTokenForAuthHeader(session?.access_token || "");
 
   if (token) {
     setAccessToken(token);
@@ -231,12 +231,22 @@ export function onAuthStateChange(callback: (event: string, session: any) => voi
   if (!supabase) return () => {};
 
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    if (session?.access_token) {
-      setAccessToken(session.access_token);
+    const token = safeTokenForAuthHeader(session?.access_token || "");
+
+    if (token) {
+      setAccessToken(token);
     } else {
       clearAccessToken();
     }
-    callback(event, session);
+
+    const normalizedSession = session
+      ? {
+          ...session,
+          access_token: token
+        }
+      : null;
+
+    callback(event, normalizedSession);
   });
 
   return () => data.subscription.unsubscribe();
