@@ -52,8 +52,27 @@ function normalizeCare(care = {}) {
 }
 
 function readCareDb() {
+  const sessionStorage = typeof window !== "undefined" ? window.sessionStorage : null;
+  const localStorage = typeof window !== "undefined" ? window.localStorage : null;
+
   try {
-    const data = JSON.parse(localStorage.getItem(CLIENT_CARE_KEY) || "{}");
+    const sessionRaw = sessionStorage?.getItem(CLIENT_CARE_KEY);
+    if (sessionRaw) {
+      const data = JSON.parse(sessionRaw);
+      return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    }
+
+    const legacyLocalRaw = localStorage?.getItem(CLIENT_CARE_KEY);
+    if (!legacyLocalRaw) return {};
+
+    const data = JSON.parse(legacyLocalRaw);
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      // One-time migration to sessionStorage so cache is cleared when tab closes.
+      sessionStorage?.setItem(CLIENT_CARE_KEY, JSON.stringify(data));
+      localStorage?.removeItem(CLIENT_CARE_KEY);
+      return data;
+    }
+
     return data && typeof data === "object" && !Array.isArray(data) ? data : {};
   } catch {
     return {};
@@ -61,7 +80,17 @@ function readCareDb() {
 }
 
 function writeCareDb(data) {
-  localStorage.setItem(CLIENT_CARE_KEY, JSON.stringify(data));
+  const sessionStorage = typeof window !== "undefined" ? window.sessionStorage : null;
+  const localStorage = typeof window !== "undefined" ? window.localStorage : null;
+  const serialized = JSON.stringify(data);
+
+  if (sessionStorage) {
+    sessionStorage.setItem(CLIENT_CARE_KEY, serialized);
+    localStorage?.removeItem(CLIENT_CARE_KEY);
+    return;
+  }
+
+  localStorage?.setItem(CLIENT_CARE_KEY, serialized);
 }
 
 function cacheClientCare(clientId, care) {

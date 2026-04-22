@@ -1,24 +1,83 @@
 import { env } from "../../config/env.js";
 
-function hasStorage() {
-  return typeof window !== "undefined" && Boolean(window.localStorage);
+const MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH = 6000;
+
+function hasWindow() {
+  return typeof window !== "undefined";
+}
+
+function getSessionStorage() {
+  return hasWindow() ? window.sessionStorage : null;
+}
+
+function getLocalStorage() {
+  return hasWindow() ? window.localStorage : null;
+}
+
+function readToken(storage) {
+  if (!storage) return "";
+  return storage.getItem(env.tokenStorageKey) || "";
+}
+
+function writeToken(storage, token) {
+  if (!storage) return;
+  if (!token) {
+    storage.removeItem(env.tokenStorageKey);
+    return;
+  }
+  storage.setItem(env.tokenStorageKey, token);
+}
+
+function clearTokenEverywhere() {
+  writeToken(getSessionStorage(), "");
+  writeToken(getLocalStorage(), "");
+}
+
+function isOversizedToken(token) {
+  return String(token || "").length > MAX_SAFE_AUTH_HEADER_TOKEN_LENGTH;
 }
 
 export function getAccessToken() {
-  if (!hasStorage()) return "";
-  return window.localStorage.getItem(env.tokenStorageKey) || "";
+  const sessionStorage = getSessionStorage();
+  const localStorage = getLocalStorage();
+
+  const sessionToken = readToken(sessionStorage);
+  if (sessionToken) {
+    if (isOversizedToken(sessionToken)) {
+      clearTokenEverywhere();
+      return "";
+    }
+    return sessionToken;
+  }
+
+  const legacyLocalToken = readToken(localStorage);
+  if (!legacyLocalToken) return "";
+
+  if (isOversizedToken(legacyLocalToken)) {
+    clearTokenEverywhere();
+    return "";
+  }
+
+  // Migrate legacy token from localStorage to sessionStorage (logout on tab close).
+  writeToken(sessionStorage, legacyLocalToken);
+  writeToken(localStorage, "");
+  return legacyLocalToken;
 }
 
 export function setAccessToken(token) {
-  if (!hasStorage()) return;
+  const sessionStorage = getSessionStorage();
+  const localStorage = getLocalStorage();
   if (!token) {
-    window.localStorage.removeItem(env.tokenStorageKey);
+    clearTokenEverywhere();
     return;
   }
-  window.localStorage.setItem(env.tokenStorageKey, token);
+
+  // Keep auth token scoped to current browser tab/session.
+  writeToken(sessionStorage, token);
+  // Remove legacy persistent token to avoid stale oversized headers.
+  writeToken(localStorage, "");
 }
 
 export function clearAccessToken() {
-  if (!hasStorage()) return;
-  window.localStorage.removeItem(env.tokenStorageKey);
+  clearTokenEverywhere();
 }
