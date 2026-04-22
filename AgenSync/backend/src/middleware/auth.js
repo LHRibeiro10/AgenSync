@@ -168,55 +168,56 @@ async function ensureSupabaseUser(payload) {
   const businessName = metadata.businessName || `Agenda de ${name}`;
   const businessLogo = metadata.businessLogo || null;
 
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.upsert({
-      where: { id: supabaseId },
-      create: {
-        id: supabaseId,
-        name,
-        email,
-        passwordHash: "supabase-auth",
-        businessName,
-        businessLogo,
-        businessType
-      },
-      update: {
-        name,
-        email,
-        businessName,
-        businessLogo,
-        businessType
-      },
-      select: userSelect
-    });
+ const user = await prisma.user.upsert({
+  where: { id: supabaseId },
+  create: {
+    id: supabaseId,
+    name,
+    email,
+    passwordHash: "supabase-auth",
+    businessName,
+    businessLogo,
+    businessType
+  },
+  update: {
+    name,
+    email,
+    businessName,
+    businessLogo,
+    businessType
+  },
+  select: userSelect
+});
 
-    const professionalCount = await tx.professional.count({ where: { userId: user.id } });
-    if (!professionalCount) {
-      await tx.professional.create({
-        data: {
-          userId: user.id,
-          name: user.name,
-          role: "Profissional principal",
-          isActive: true
-        }
-      });
+const [professionalCount, servicesCount] = await Promise.all([
+  prisma.professional.count({ where: { userId: user.id } }),
+  prisma.service.count({ where: { userId: user.id } })
+]);
+
+if (!professionalCount) {
+  await prisma.professional.create({
+    data: {
+      userId: user.id,
+      name: user.name,
+      role: "Profissional principal",
+      isActive: true
     }
-
-    const servicesCount = await tx.service.count({ where: { userId: user.id } });
-    if (!servicesCount) {
-      await tx.service.createMany({
-        data: getSuggestedServices(user.businessType).map((service) => ({
-          userId: user.id,
-          name: service.name,
-          priceDefault: Number(service.priceDefault || 0),
-          durationMinutes: Number(service.durationMinutes || 60),
-          isActive: true
-        }))
-      });
-    }
-
-    return user;
   });
+}
+
+if (!servicesCount) {
+  await prisma.service.createMany({
+    data: getSuggestedServices(user.businessType).map((service) => ({
+      userId: user.id,
+      name: service.name,
+      priceDefault: Number(service.priceDefault || 0),
+      durationMinutes: Number(service.durationMinutes || 60),
+      isActive: true
+    }))
+  });
+}
+
+return user;
 }
 
 async function authenticateWithSupabaseJwt(token) {
