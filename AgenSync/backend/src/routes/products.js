@@ -5,6 +5,7 @@ import { parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicProduct, publicProductSale } from "../utils/formatters.js";
 import {
   optionalString,
+  parsePagination,
   parseNonNegativeInteger,
   parsePositiveInteger,
   parsePositiveMoney,
@@ -12,6 +13,26 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
+
+const clientSelect = {
+  id: true,
+  name: true
+};
+
+const productSaleSelect = {
+  id: true,
+  productId: true,
+  clientId: true,
+  productName: true,
+  unitPrice: true,
+  unitCost: true,
+  quantity: true,
+  total: true,
+  date: true,
+  notes: true,
+  createdAt: true,
+  client: { select: clientSelect }
+};
 
 async function findProductOrFail(userId, id) {
   const product = await prisma.product.findFirst({ where: { id, userId } });
@@ -23,6 +44,8 @@ function productWhere(userId, query) {
   const where = { userId };
   if (query.activeOnly === "true" || query.active === "true") where.isActive = true;
   if (query.category) where.category = String(query.category);
+  if (query.stock === "out") where.stockQty = { lte: 0 };
+
   if (query.search) {
     const search = String(query.search).trim();
     where.OR = [
@@ -34,21 +57,36 @@ function productWhere(userId, query) {
   return where;
 }
 
+function applyStockFilter(products, stockFilter) {
+  if (!stockFilter) return products;
+
+  return products.filter((product) => {
+    if (stockFilter === "out") return product.stockQty <= 0;
+    if (stockFilter === "low") return product.stockQty > 0 && product.stockQty <= product.minStock;
+    if (stockFilter === "attention") return product.stockQty <= product.minStock;
+    return true;
+  });
+}
+
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+    const postFilterStock = req.query.stock === "low" || req.query.stock === "attention";
+
     let products = await prisma.product.findMany({
       where: productWhere(req.user.id, req.query),
+      ...(pagination.enabled && !postFilterStock ? { skip: pagination.skip, take: pagination.take } : {}),
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 
-    if (req.query.stock) {
-      products = products.filter((product) => {
-        if (req.query.stock === "out") return product.stockQty <= 0;
-        if (req.query.stock === "low") return product.stockQty > 0 && product.stockQty <= product.minStock;
-        if (req.query.stock === "attention") return product.stockQty <= product.minStock;
-        return true;
-      });
+    products = applyStockFilter(products, req.query.stock);
+
+    if (pagination.enabled && postFilterStock) {
+      products = products.slice(pagination.skip, pagination.skip + pagination.take);
     }
 
     res.json({ products: products.map(publicProduct) });
@@ -136,9 +174,15 @@ function saleWhere(userId, query) {
 router.get(
   "/sales/list",
   asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+
     const sales = await prisma.productSale.findMany({
       where: saleWhere(req.user.id, req.query),
-      include: { client: true },
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
+      select: productSaleSelect,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }]
     });
 
@@ -156,15 +200,15 @@ router.post(
     const notes = optionalString(req.body.notes);
 
     const sale = await prisma.$transaction(async (tx) => {
-      const product = await tx.product.findFirst({ where: { id: productId, userId: req.user.id } });
+      const [product, client] = await Promise.all([
+        tx.product.findFirst({ where: { id: productId, userId: req.user.id } }),
+        clientId ? tx.client.findFirst({ where: { id: clientId, userId: req.user.id } }) : Promise.resolve(null)
+      ]);
+
       if (!product) throw new ApiError(404, "Produto não encontrado.");
       if (!product.isActive) throw new ApiError(400, "Produto inativo não pode ser vendido.");
       if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
-
-      if (clientId) {
-        const client = await tx.client.findFirst({ where: { id: clientId, userId: req.user.id } });
-        if (!client) throw new ApiError(400, "Cliente inválido para esta venda.");
-      }
+      if (clientId && !client) throw new ApiError(400, "Cliente inválido para esta venda.");
 
       await tx.product.update({
         where: { id: product.id },
@@ -184,7 +228,7 @@ router.post(
           date,
           notes
         },
-        include: { client: true }
+        select: productSaleSelect
       });
     });
 

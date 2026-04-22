@@ -13,9 +13,39 @@ import { publicAppointment } from "../utils/formatters.js";
 
 const router = Router();
 
-const appointmentInclude = {
-  client: true,
-  service: true
+const appointmentSelect = {
+  id: true,
+  clientId: true,
+  serviceId: true,
+  professionalId: true,
+  startsAt: true,
+  endsAt: true,
+  price: true,
+  notes: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  client: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  },
+  service: {
+    select: {
+      id: true,
+      name: true,
+      priceDefault: true,
+      durationMinutes: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  }
 };
 
 router.get(
@@ -33,7 +63,7 @@ router.get(
           userId: req.user.id,
           startsAt: { gte: dayStart, lt: dayEnd }
         },
-        include: appointmentInclude,
+        select: appointmentSelect,
         orderBy: [{ startsAt: "asc" }]
       }),
       prisma.appointment.aggregate({
@@ -58,7 +88,7 @@ router.get(
           status: "SCHEDULED",
           startsAt: { gte: new Date() }
         },
-        include: appointmentInclude,
+        select: appointmentSelect,
         orderBy: [{ startsAt: "asc" }]
       })
     ]);

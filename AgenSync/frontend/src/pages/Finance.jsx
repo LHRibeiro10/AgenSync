@@ -204,10 +204,6 @@ export default function Finance() {
         startDate: appliedFilters.startDate,
         endDate: appliedFilters.endDate
       }),
-      listProductSales({
-        startDate: appliedFilters.endDate,
-        endDate: appliedFilters.endDate
-      }),
       listProductSales(monthRange),
       listProductSales({
         startDate: currentWeekStart,
@@ -240,11 +236,6 @@ export default function Finance() {
         category: appliedFilters.category
       }),
       listExpenses({
-        startDate: appliedFilters.endDate,
-        endDate: appliedFilters.endDate,
-        category: appliedFilters.category
-      }),
-      listExpenses({
         ...monthRange,
         category: appliedFilters.category
       })
@@ -255,7 +246,6 @@ export default function Finance() {
           appointmentsData,
           previousData,
           nextPeriodSales,
-          nextTodaySales,
           nextMonthSales,
           nextCurrentWeekSales,
           nextPreviousWeekSales,
@@ -265,7 +255,6 @@ export default function Finance() {
           nextTodaySubscriptions,
           nextMonthSubscriptions,
           nextPeriodExpenses,
-          nextTodayExpenses,
           nextMonthExpenses
         ]) => {
           if (!active) return;
@@ -274,7 +263,7 @@ export default function Finance() {
           setCompletedAppointments(appointmentsData.appointments);
           setPreviousWeekCompleted(previousData.appointments);
           setPeriodSales(nextPeriodSales);
-          setTodaySales(nextTodaySales);
+          setTodaySales(nextPeriodSales.filter((sale) => sale.date === appliedFilters.endDate));
           setMonthSales(nextMonthSales);
           setCurrentWeekSales(nextCurrentWeekSales);
           setPreviousWeekSales(nextPreviousWeekSales);
@@ -284,7 +273,7 @@ export default function Finance() {
           setTodaySubscriptions(nextTodaySubscriptions);
           setMonthSubscriptions(nextMonthSubscriptions);
           setPeriodExpenses(nextPeriodExpenses);
-          setTodayExpenses(nextTodayExpenses);
+          setTodayExpenses(nextPeriodExpenses.filter((expense) => expense.date === appliedFilters.endDate));
           setMonthExpenses(nextMonthExpenses);
           requestAnimationFrame(() => setChartReady(true));
         }

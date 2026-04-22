@@ -51,3 +51,49 @@ export function validateEmail(value) {
   }
   return email;
 }
+
+export function parsePagination(query, { defaultPageSize = 50, maxPageSize = 200 } = {}) {
+  const hasPagination =
+    query?.page !== undefined ||
+    query?.pageSize !== undefined ||
+    query?.take !== undefined ||
+    query?.skip !== undefined;
+
+  if (!hasPagination) {
+    return { enabled: false };
+  }
+
+  if (query?.take !== undefined || query?.skip !== undefined) {
+    const take = Number(query?.take ?? defaultPageSize);
+    const skip = Number(query?.skip ?? 0);
+    if (!Number.isInteger(take) || take <= 0) {
+      throw new ApiError(400, "take deve ser um número inteiro maior que zero.");
+    }
+    if (!Number.isInteger(skip) || skip < 0) {
+      throw new ApiError(400, "skip deve ser um número inteiro maior ou igual a zero.");
+    }
+
+    return {
+      enabled: true,
+      take: Math.min(take, maxPageSize),
+      skip
+    };
+  }
+
+  const page = Number(query?.page ?? 1);
+  const pageSize = Number(query?.pageSize ?? defaultPageSize);
+  if (!Number.isInteger(page) || page <= 0) {
+    throw new ApiError(400, "page deve ser um número inteiro maior que zero.");
+  }
+  if (!Number.isInteger(pageSize) || pageSize <= 0) {
+    throw new ApiError(400, "pageSize deve ser um número inteiro maior que zero.");
+  }
+
+  const safePageSize = Math.min(pageSize, maxPageSize);
+
+  return {
+    enabled: true,
+    take: safePageSize,
+    skip: (page - 1) * safePageSize
+  };
+}

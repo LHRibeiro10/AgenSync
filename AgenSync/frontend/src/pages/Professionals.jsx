@@ -62,7 +62,7 @@ export default function Professionals() {
       .sort((first, second) => second.total - first.total || second.completed - first.completed)[0];
   }, [professionals, stats]);
 
-  async function load() {
+  async function loadAll() {
     setLoading(true);
     setError("");
 
@@ -81,8 +81,13 @@ export default function Professionals() {
   }
 
   useEffect(() => {
-    load();
+    loadAll();
   }, []);
+
+  async function loadProfessionalsOnly() {
+    const professionalsData = await api.listProfessionals();
+    setProfessionals(professionalsData.professionals);
+  }
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -120,7 +125,7 @@ export default function Professionals() {
       }
 
       resetForm();
-      await load();
+      await loadProfessionalsOnly();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -140,7 +145,7 @@ export default function Professionals() {
         isActive: !professional.isActive
       });
       showToast(professional.isActive ? "Profissional inativado." : "Profissional ativado.");
-      await load();
+      await loadProfessionalsOnly();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -156,7 +161,7 @@ export default function Professionals() {
       showToast("Profissional excluído.");
       setPendingDelete(null);
       if (editing === pendingDelete.id) resetForm();
-      await load();
+      await loadProfessionalsOnly();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");

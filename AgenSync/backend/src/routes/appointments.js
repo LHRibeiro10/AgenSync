@@ -3,20 +3,60 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { addMinutes, combineDateAndTime, dateRangeFromQuery } from "../utils/dates.js";
 import { normalizeStatus, publicAppointment } from "../utils/formatters.js";
-import { optionalString, parsePositiveMoney, requiredString } from "../utils/validation.js";
+import { optionalString, parsePagination, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
 
-const appointmentInclude = {
-  client: true,
-  service: true,
-  professional: true
+const clientSelect = {
+  id: true,
+  name: true,
+  phone: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const serviceSelect = {
+  id: true,
+  name: true,
+  priceDefault: true,
+  durationMinutes: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const professionalSelect = {
+  id: true,
+  name: true,
+  role: true,
+  phone: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const appointmentSelect = {
+  id: true,
+  clientId: true,
+  serviceId: true,
+  professionalId: true,
+  startsAt: true,
+  endsAt: true,
+  price: true,
+  notes: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  client: { select: clientSelect },
+  service: { select: serviceSelect },
+  professional: { select: professionalSelect }
 };
 
 async function findAppointmentOrFail(userId, id) {
   const appointment = await prisma.appointment.findFirst({
     where: { id, userId },
-    include: appointmentInclude
+    select: appointmentSelect
   });
 
   if (!appointment) {
@@ -27,7 +67,10 @@ async function findAppointmentOrFail(userId, id) {
 }
 
 async function findClientOrFail(userId, clientId) {
-  const client = await prisma.client.findFirst({ where: { id: clientId, userId } });
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, userId },
+    select: { id: true }
+  });
   if (!client) {
     throw new ApiError(400, "Cliente inválido para este usuário.");
   }
@@ -35,7 +78,15 @@ async function findClientOrFail(userId, clientId) {
 }
 
 async function findServiceOrFail(userId, serviceId) {
-  const service = await prisma.service.findFirst({ where: { id: serviceId, userId } });
+  const service = await prisma.service.findFirst({
+    where: { id: serviceId, userId },
+    select: {
+      id: true,
+      priceDefault: true,
+      durationMinutes: true,
+      isActive: true
+    }
+  });
   if (!service) {
     throw new ApiError(400, "Serviço inválido para este usuário.");
   }
@@ -45,7 +96,10 @@ async function findServiceOrFail(userId, serviceId) {
 async function findProfessionalOrFail(userId, professionalId) {
   if (!professionalId) return null;
 
-  const professional = await prisma.professional.findFirst({ where: { id: professionalId, userId } });
+  const professional = await prisma.professional.findFirst({
+    where: { id: professionalId, userId },
+    select: { id: true, isActive: true }
+  });
   if (!professional) {
     throw new ApiError(400, "Profissional inválido para este usuário.");
   }
@@ -62,7 +116,11 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt }
     },
-    include: appointmentInclude
+    select: {
+      startsAt: true,
+      client: { select: { name: true } },
+      professional: { select: { name: true } }
+    }
   });
 
   if (conflict) {
@@ -100,9 +158,16 @@ function buildWhereFromQuery(userId, query) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+    const where = buildWhereFromQuery(req.user.id, req.query);
+
     const appointments = await prisma.appointment.findMany({
-      where: buildWhereFromQuery(req.user.id, req.query),
-      include: appointmentInclude,
+      where,
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
+      select: appointmentSelect,
       orderBy: [{ startsAt: "asc" }]
     });
 
@@ -121,9 +186,11 @@ router.post(
     const status = normalizeStatus(req.body.status, "SCHEDULED");
     const notes = optionalString(req.body.notes);
 
-    await findClientOrFail(req.user.id, clientId);
-    const service = await findServiceOrFail(req.user.id, serviceId);
-    const professional = await findProfessionalOrFail(req.user.id, professionalId);
+    const [, service, professional] = await Promise.all([
+      findClientOrFail(req.user.id, clientId),
+      findServiceOrFail(req.user.id, serviceId),
+      findProfessionalOrFail(req.user.id, professionalId)
+    ]);
 
     if (!service.isActive) {
       throw new ApiError(400, "Serviços inativos não podem ser usados em novos agendamentos.");
@@ -156,7 +223,7 @@ router.post(
         notes,
         status
       },
-      include: appointmentInclude
+      select: appointmentSelect
     });
 
     res.status(201).json({ appointment: publicAppointment(appointment) });
@@ -197,9 +264,11 @@ router.put(
     const timeChanged =
       req.body.date !== undefined || req.body.startTime !== undefined || req.body.serviceId !== undefined;
 
-    await findClientOrFail(req.user.id, clientId);
-    const service = await findServiceOrFail(req.user.id, serviceId);
-    const professional = await findProfessionalOrFail(req.user.id, professionalId);
+    const [, service, professional] = await Promise.all([
+      findClientOrFail(req.user.id, clientId),
+      findServiceOrFail(req.user.id, serviceId),
+      findProfessionalOrFail(req.user.id, professionalId)
+    ]);
 
     if (serviceId !== current.serviceId && !service.isActive) {
       throw new ApiError(400, "Serviços inativos não podem ser usados em novos agendamentos.");
@@ -231,7 +300,7 @@ router.put(
     const appointment = await prisma.appointment.update({
       where: { id: req.params.id },
       data: { clientId, serviceId, professionalId, startsAt, endsAt, price, notes, status },
-      include: appointmentInclude
+      select: appointmentSelect
     });
 
     res.json({ appointment: publicAppointment(appointment) });

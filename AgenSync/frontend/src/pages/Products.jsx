@@ -138,19 +138,35 @@ export default function Products() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError("");
-
-    Promise.all([listProducts(filters), listProducts()])
-      .then(([filteredProducts, everyProduct]) => {
+    listProducts()
+      .then((everyProduct) => {
         if (!active) return;
-        setProducts(filteredProducts);
         setAllProducts(everyProduct);
       })
       .catch((err) => {
         if (!active) return;
-        setProducts([]);
         setAllProducts([]);
+        showToast(err.message, "error");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [version, showToast]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    listProducts(filters)
+      .then((filteredProducts) => {
+        if (!active) return;
+        setProducts(filteredProducts);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setProducts([]);
         setError(err.message);
         showToast(err.message, "error");
       })
@@ -222,7 +238,7 @@ export default function Products() {
 
   async function handleToggle(product) {
     try {
-      await toggleProduct(product.id);
+      await toggleProduct(product.id, product);
       showToast(product.isActive ? "Produto inativado." : "Produto ativado.");
       refresh();
     } catch (err) {

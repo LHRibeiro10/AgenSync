@@ -15,6 +15,20 @@ function jwtSecret() {
 
 const JWKS_CACHE_TTL_MS = 5 * 60 * 1000;
 const jwksCache = new Map();
+const SUPABASE_BOOTSTRAP_CHECK_TTL_MS = 15 * 60 * 1000;
+const supabaseBootstrapCheckCache = new Map();
+
+function readPositiveIntEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.floor(parsed);
+}
+
+const AUTH_USER_CACHE_TTL_MS = Math.max(5000, readPositiveIntEnv("AUTH_USER_CACHE_TTL_MS", 30000));
+const AUTH_USER_CACHE_MAX_SIZE = Math.max(100, readPositiveIntEnv("AUTH_USER_CACHE_MAX_SIZE", 5000));
+const authUserCache = new Map();
 
 function getSupabaseJwtSecret() {
   return normalizeEnvValue(process.env.SUPABASE_JWT_SECRET);
@@ -124,6 +138,10 @@ function isJwtValidationError(error) {
   return name === "JsonWebTokenError" || name === "TokenExpiredError" || name === "NotBeforeError";
 }
 
+function isAuthFailure(error) {
+  return isJwtValidationError(error) || (error instanceof ApiError && error.statusCode === 401);
+}
+
 function debugAuthLog(label, error) {
   if (process.env.AUTH_DEBUG !== "1") return;
   const statusCode = error?.statusCode ?? "";
@@ -132,6 +150,67 @@ function debugAuthLog(label, error) {
   const message = error?.message ?? "";
   // eslint-disable-next-line no-console
   console.error(`[AUTH_DEBUG] ${label}`, { statusCode, code, name, message });
+}
+
+function tokenStrategy(token) {
+  const decoded = jwt.decode(token);
+  if (!decoded || typeof decoded !== "object") return "legacy";
+
+  const payload = decoded.payload && typeof decoded.payload === "object" ? decoded.payload : decoded;
+
+  if (payload?.userId) return "legacy";
+  if (payload?.iss || payload?.sub || payload?.aud) return "supabase";
+
+  return "legacy";
+}
+
+function shouldCheckSupabaseBootstrap(userId) {
+  const cachedUntil = supabaseBootstrapCheckCache.get(userId) || 0;
+  return Date.now() > cachedUntil;
+}
+
+function markSupabaseBootstrapChecked(userId) {
+  supabaseBootstrapCheckCache.set(userId, Date.now() + SUPABASE_BOOTSTRAP_CHECK_TTL_MS);
+}
+
+function getCachedAuthUser(userId, metadataKey) {
+  const cached = authUserCache.get(userId);
+  if (!cached) return null;
+
+  if (cached.expiresAt <= Date.now()) {
+    authUserCache.delete(userId);
+    return null;
+  }
+
+  if (metadataKey !== undefined && cached.metadataKey !== metadataKey) {
+    return null;
+  }
+
+  return cached.user;
+}
+
+function setCachedAuthUser(user, metadataKey = null) {
+  if (!user?.id) return;
+
+  if (!authUserCache.has(user.id) && authUserCache.size >= AUTH_USER_CACHE_MAX_SIZE) {
+    const oldestKey = authUserCache.keys().next().value;
+    if (oldestKey) authUserCache.delete(oldestKey);
+  }
+
+  authUserCache.set(user.id, {
+    user,
+    metadataKey,
+    expiresAt: Date.now() + AUTH_USER_CACHE_TTL_MS
+  });
+}
+
+export function invalidateAuthUserCache(userId) {
+  if (!userId) return;
+  authUserCache.delete(userId);
+}
+
+function supabaseMetadataKey({ email, name, businessType, businessName, businessLogo }) {
+  return JSON.stringify([email, name, businessType, businessName, businessLogo || null]);
 }
 
 const userSelect = {
@@ -148,13 +227,62 @@ async function authenticateWithLegacyJwt(token) {
   const payload = jwt.verify(token, jwtSecret());
   if (!payload?.userId) throw new ApiError(401, "Sessao invalida.");
 
+  const cachedUser = getCachedAuthUser(payload.userId);
+  if (cachedUser) {
+    return cachedUser;
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: userSelect
   });
 
   if (!user) throw new ApiError(401, "Usuario nao encontrado.");
+  setCachedAuthUser(user);
   return user;
+}
+
+async function ensureSupabaseBootstrap(user) {
+  if (!shouldCheckSupabaseBootstrap(user.id)) {
+    return;
+  }
+
+  const [professionalCount, servicesCount] = await Promise.all([
+    prisma.professional.count({ where: { userId: user.id } }),
+    prisma.service.count({ where: { userId: user.id } })
+  ]);
+
+  if (!professionalCount || !servicesCount) {
+    await prisma.$transaction(async (tx) => {
+      if (!professionalCount) {
+        await tx.professional.create({
+          data: {
+            userId: user.id,
+            name: user.name,
+            role: "Profissional principal",
+            isActive: true
+          }
+        });
+      }
+
+      if (!servicesCount) {
+        const suggestedServices = getSuggestedServices(user.businessType);
+        if (suggestedServices.length) {
+          await tx.service.createMany({
+            data: suggestedServices.map((service) => ({
+              userId: user.id,
+              name: service.name,
+              priceDefault: Number(service.priceDefault || 0),
+              durationMinutes: Number(service.durationMinutes || 60),
+              isActive: true
+            }))
+          });
+        }
+      }
+    });
+  }
+
+  markSupabaseBootstrapChecked(user.id);
 }
 
 async function ensureSupabaseUser(payload) {
@@ -167,57 +295,45 @@ async function ensureSupabaseUser(payload) {
   const businessType = metadata.businessType || "Manicure";
   const businessName = metadata.businessName || `Agenda de ${name}`;
   const businessLogo = metadata.businessLogo || null;
-
- const user = await prisma.user.upsert({
-  where: { id: supabaseId },
-  create: {
-    id: supabaseId,
-    name,
+  const metadataKey = supabaseMetadataKey({
     email,
-    passwordHash: "supabase-auth",
-    businessName,
-    businessLogo,
-    businessType
-  },
-  update: {
     name,
-    email,
+    businessType,
     businessName,
-    businessLogo,
-    businessType
-  },
-  select: userSelect
-});
-
-const [professionalCount, servicesCount] = await Promise.all([
-  prisma.professional.count({ where: { userId: user.id } }),
-  prisma.service.count({ where: { userId: user.id } })
-]);
-
-if (!professionalCount) {
-  await prisma.professional.create({
-    data: {
-      userId: user.id,
-      name: user.name,
-      role: "Profissional principal",
-      isActive: true
-    }
+    businessLogo
   });
-}
 
-if (!servicesCount) {
-  await prisma.service.createMany({
-    data: getSuggestedServices(user.businessType).map((service) => ({
-      userId: user.id,
-      name: service.name,
-      priceDefault: Number(service.priceDefault || 0),
-      durationMinutes: Number(service.durationMinutes || 60),
-      isActive: true
-    }))
+  const cachedUser = getCachedAuthUser(supabaseId, metadataKey);
+  if (cachedUser) {
+    await ensureSupabaseBootstrap(cachedUser);
+    return cachedUser;
+  }
+
+  const user = await prisma.user.upsert({
+    where: { id: supabaseId },
+    create: {
+      id: supabaseId,
+      name,
+      email,
+      passwordHash: "supabase-auth",
+      businessName,
+      businessLogo,
+      businessType
+    },
+    update: {
+      name,
+      email,
+      businessName,
+      businessLogo,
+      businessType
+    },
+    select: userSelect
   });
-}
 
-return user;
+  await ensureSupabaseBootstrap(user);
+
+  setCachedAuthUser(user, metadataKey);
+  return user;
 }
 
 async function authenticateWithSupabaseJwt(token) {
@@ -233,33 +349,49 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, "Sessao expirada ou nao autenticada.");
   }
 
+  const strategy = tokenStrategy(token);
+  const primaryAuth = strategy === "supabase" ? authenticateWithSupabaseJwt : authenticateWithLegacyJwt;
+  const fallbackAuth = strategy === "supabase" ? authenticateWithLegacyJwt : authenticateWithSupabaseJwt;
+
   try {
-    req.user = await authenticateWithLegacyJwt(token);
-  } catch (legacyError) {
-    debugAuthLog("legacy_error", legacyError);
-    try {
-      req.user = await authenticateWithSupabaseJwt(token);
-    } catch (supabaseError) {
-      debugAuthLog("supabase_error", supabaseError);
-      const isMissingSupabaseSecret =
-        supabaseError instanceof ApiError &&
-        supabaseError.message === "SUPABASE_JWT_SECRET nao configurado no backend.";
+    req.user = await primaryAuth(token);
+    next();
+    return;
+  } catch (primaryError) {
+    debugAuthLog("primary_auth_error", primaryError);
 
-      if (isMissingSupabaseSecret) {
-        throw supabaseError;
-      }
+    const isMissingSupabaseSecret =
+      primaryError instanceof ApiError &&
+      primaryError.message === "SUPABASE_JWT_SECRET nao configurado no backend.";
 
-      const isAuthFailure =
-        isJwtValidationError(supabaseError) ||
-        (supabaseError instanceof ApiError && supabaseError.statusCode === 401);
+    if (isMissingSupabaseSecret) {
+      throw primaryError;
+    }
 
-      if (isAuthFailure) {
-        throw new ApiError(401, "Sessao expirada ou nao autenticada.");
-      }
-
-      throw supabaseError;
+    if (!isAuthFailure(primaryError)) {
+      throw primaryError;
     }
   }
 
-  next();
+  try {
+    req.user = await fallbackAuth(token);
+    next();
+    return;
+  } catch (fallbackError) {
+    debugAuthLog("fallback_auth_error", fallbackError);
+
+    const isMissingSupabaseSecret =
+      fallbackError instanceof ApiError &&
+      fallbackError.message === "SUPABASE_JWT_SECRET nao configurado no backend.";
+
+    if (isMissingSupabaseSecret) {
+      throw fallbackError;
+    }
+
+    if (isAuthFailure(fallbackError)) {
+      throw new ApiError(401, "Sessao expirada ou nao autenticada.");
+    }
+
+    throw fallbackError;
+  }
 });

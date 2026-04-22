@@ -65,6 +65,7 @@ model Client {
 
   @@index([userId])
   @@index([userId, name])
+  @@index([userId, createdAt])
 }
 
 model Expense {
@@ -82,6 +83,7 @@ model Expense {
 
   @@index([userId, date])
   @@index([userId, category, date])
+  @@index([userId, createdAt])
 }
 
 model Product {
@@ -103,6 +105,8 @@ model Product {
   @@index([userId])
   @@index([userId, isActive])
   @@index([userId, category])
+  @@index([userId, isActive, name])
+  @@index([userId, createdAt])
 }
 
 model ProductSale {
@@ -125,6 +129,7 @@ model ProductSale {
   @@index([userId, date])
   @@index([userId, productId, date])
   @@index([userId, clientId, date])
+  @@index([userId, createdAt])
 }
 
 model MonthlyPlan {
@@ -147,6 +152,8 @@ model MonthlyPlan {
   @@index([userId, status])
   @@index([userId, clientId])
   @@index([userId, startDate])
+  @@index([userId, status, createdAt])
+  @@index([userId, createdAt])
 }
 
 model MonthlyPlanPayment {
@@ -193,6 +200,8 @@ model Service {
 
   @@index([userId])
   @@index([userId, isActive])
+  @@index([userId, isActive, name])
+  @@index([userId, createdAt])
 }
 
 model Professional {
@@ -210,6 +219,8 @@ model Professional {
   @@index([userId])
   @@index([userId, isActive])
   @@index([userId, name])
+  @@index([userId, isActive, name])
+  @@index([userId, createdAt])
 }
 
 model Appointment {
@@ -234,4 +245,5 @@ model Appointment {
   @@index([userId, status, startsAt])
   @@index([userId, clientId])
   @@index([userId, professionalId, startsAt])
+  @@index([userId, createdAt])
 }

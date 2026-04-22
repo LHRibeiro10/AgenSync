@@ -69,9 +69,10 @@ export async function deleteProduct(productId) {
   });
 }
 
-export async function toggleProduct(productId) {
-  const products = await listProducts();
-  const product = products.find((item) => item.id === productId);
+export async function toggleProduct(productId, currentProduct = null) {
+  const product =
+    currentProduct ||
+    (await listProducts()).find((item) => item.id === productId);
   if (!product) {
     throw new Error("Produto nao encontrado.");
   }

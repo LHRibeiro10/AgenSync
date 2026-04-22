@@ -103,17 +103,31 @@ export default function Subscriptions() {
 
   useEffect(() => {
     let active = true;
+    api
+      .listClients()
+      .then((clientsData) => {
+        if (!active) return;
+        setClients(clientsData.clients);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setClients([]);
+        setError(err.message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     setLoading(true);
     setError("");
 
-    Promise.all([
-      api.listClients(),
-      listSubscriptions({ month: currentMonth }),
-      subscriptionSummary({ month: currentMonth })
-    ])
-      .then(([clientsData, monthlySubscriptions, monthlySummary]) => {
+    Promise.all([listSubscriptions({ month: currentMonth }), subscriptionSummary({ month: currentMonth })])
+      .then(([monthlySubscriptions, monthlySummary]) => {
         if (!active) return;
-        setClients(clientsData.clients);
         setSubscriptions(monthlySubscriptions);
         setSummary(monthlySummary);
       })

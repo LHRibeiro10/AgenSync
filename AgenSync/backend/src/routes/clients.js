@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { publicClient, publicClientCareRecord } from "../utils/formatters.js";
-import { optionalString, requiredString } from "../utils/validation.js";
+import { optionalString, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
 
@@ -26,8 +26,14 @@ function jsonArray(value) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+
     const clients = await prisma.client.findMany({
       where: { userId: req.user.id },
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       orderBy: [{ name: "asc" }]
     });
 

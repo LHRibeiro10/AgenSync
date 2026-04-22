@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../middleware/auth.js";
+import { invalidateAuthUserCache, requireAuth } from "../middleware/auth.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
@@ -216,6 +216,7 @@ router.put(
       }
     });
 
+    invalidateAuthUserCache(user.id);
     res.json({ user: publicUser(user) });
   })
 );

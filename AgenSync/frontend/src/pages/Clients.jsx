@@ -34,26 +34,44 @@ export default function Clients() {
   const selectedClient = clients.find((client) => client.id === selectedClientId);
   const isDocumentsLayout = Boolean(selectedClient && activeTab === "documents");
 
-  async function load() {
-    setLoading(true);
+  async function loadClients() {
+    const clientsData = await api.listClients();
+    setClients(clientsData.clients);
+  }
+
+  async function retryLoadClients() {
+    setError("");
     try {
-      const [clientsData, servicesData, activeProducts] = await Promise.all([
-        api.listClients(),
-        api.listServices({ active: true }),
-        listProducts({ activeOnly: true })
-      ]);
-      setClients(clientsData.clients);
-      setServices(servicesData.services);
-      setProducts(activeProducts);
+      await loadClients();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
+      showToast(err.message, "error");
     }
   }
 
   useEffect(() => {
-    load();
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    Promise.all([api.listClients(), api.listServices({ active: true }), listProducts({ activeOnly: true })])
+      .then(([clientsData, servicesData, activeProducts]) => {
+        if (!active) return;
+        setClients(clientsData.clients);
+        setServices(servicesData.services);
+        setProducts(activeProducts);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -126,7 +144,7 @@ export default function Clients() {
         showToast("Cliente cadastrado.");
       }
       resetForm();
-      await load();
+      await loadClients();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -148,7 +166,7 @@ export default function Clients() {
         setClientCare(getClientCare(""));
       }
       setPendingDelete(null);
-      await load();
+      await loadClients();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -159,7 +177,7 @@ export default function Clients() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader title="Clientes" description="Dados, histórico, fichas personalizadas, evolução, fotos, documentos, orçamentos e assinatura em um só lugar." />
-      <Message type="error" actionLabel="Tentar novamente" onAction={load}>
+      <Message type="error" actionLabel="Tentar novamente" onAction={retryLoadClients}>
         {error}
       </Message>
 

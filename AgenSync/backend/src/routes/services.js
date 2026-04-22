@@ -4,6 +4,7 @@ import { ApiError, asyncHandler } from "../middleware/error.js";
 import { publicService } from "../utils/formatters.js";
 import {
   parseBoolean,
+  parsePagination,
   parsePositiveInteger,
   parsePositiveMoney,
   requiredString
@@ -26,9 +27,14 @@ router.get(
     if (req.query.active === "true") {
       where.isActive = true;
     }
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
 
     const services = await prisma.service.findMany({
       where,
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 

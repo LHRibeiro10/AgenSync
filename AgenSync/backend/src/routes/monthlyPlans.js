@@ -3,9 +3,39 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { formatDate, parseDateOnly, todayString } from "../utils/dates.js";
 import { publicMonthlyPlan } from "../utils/formatters.js";
-import { optionalString, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
+import { optionalString, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
+
+const monthlyPlanSelect = {
+  id: true,
+  userId: true,
+  clientId: true,
+  planName: true,
+  amount: true,
+  dueDay: true,
+  startDate: true,
+  status: true,
+  canceledAt: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+  client: {
+    select: {
+      id: true,
+      name: true
+    }
+  },
+  payments: {
+    select: {
+      month: true,
+      status: true,
+      paidAt: true,
+      amount: true,
+      manual: true
+    }
+  }
+};
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -76,13 +106,14 @@ function cyclesForRange(plans, startDate, endDate) {
       cursor = nextMonth(cursor);
     }
   });
+
   return cycles.sort((first, second) => `${second.dueDate}${second.clientName}`.localeCompare(`${first.dueDate}${first.clientName}`));
 }
 
 async function findPlan(userId, id) {
   const plan = await prisma.monthlyPlan.findFirst({
     where: { id, userId },
-    include: { client: true, payments: true }
+    select: monthlyPlanSelect
   });
   if (!plan) throw new ApiError(404, "Mensalidade não encontrada.");
   return plan;
@@ -92,12 +123,22 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     const month = monthKey(req.query.month || req.query.endDate || todayString());
+    const includeCycles = req.query.includeCycles === "true";
+    const includeSummary = req.query.includeSummary === "true";
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+
     const plans = await prisma.monthlyPlan.findMany({
       where: {
         userId: req.user.id,
         ...(req.query.status ? { status: req.query.status === "canceled" ? "CANCELED" : "ACTIVE" } : {})
       },
-      include: { client: true, payments: true },
+      ...(!includeCycles && !includeSummary && pagination.enabled
+        ? { skip: pagination.skip, take: pagination.take }
+        : {}),
+      select: monthlyPlanSelect,
       orderBy: [{ createdAt: "desc" }]
     });
 
@@ -106,13 +147,13 @@ router.get(
       currentCycle: shouldIncludePlan(plan, month) ? cycleForMonth(plan, month) : null
     }));
 
-    if (req.query.includeCycles === "true") {
+    if (includeCycles) {
       const startDate = req.query.startDate || `${month}-01`;
       const endDate = req.query.endDate || `${month}-${pad(monthEndDate(month))}`;
       return res.json({ cycles: cyclesForRange(plans, startDate, endDate) });
     }
 
-    if (req.query.includeSummary === "true") {
+    if (includeSummary) {
       const startDate = `${month}-01`;
       const endDate = `${month}-${pad(monthEndDate(month))}`;
       const cycles = cyclesForRange(plans, startDate, endDate);
@@ -137,7 +178,7 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const clientId = requiredString(req.body.clientId, "cliente");
-    const client = await prisma.client.findFirst({ where: { id: clientId, userId: req.user.id } });
+    const client = await prisma.client.findFirst({ where: { id: clientId, userId: req.user.id }, select: { id: true } });
     if (!client) throw new ApiError(400, "Cliente inválido para esta mensalidade.");
 
     const amount = parsePositiveMoney(req.body.amount, "valor mensal");
@@ -160,7 +201,7 @@ router.post(
           }
         }
       },
-      include: { client: true, payments: true }
+      select: monthlyPlanSelect
     });
 
     res.status(201).json({ monthlyPlan: publicMonthlyPlan(plan) });
@@ -172,6 +213,7 @@ router.put(
   asyncHandler(async (req, res) => {
     await findPlan(req.user.id, req.params.id);
     const amount = parsePositiveMoney(req.body.amount, "valor mensal");
+
     const plan = await prisma.monthlyPlan.update({
       where: { id: req.params.id },
       data: {
@@ -183,7 +225,7 @@ router.put(
         status: req.body.status === "canceled" ? "CANCELED" : "ACTIVE",
         notes: optionalString(req.body.notes)
       },
-      include: { client: true, payments: true }
+      select: monthlyPlanSelect
     });
 
     res.json({ monthlyPlan: publicMonthlyPlan(plan) });
@@ -197,7 +239,7 @@ router.post(
     const plan = await prisma.monthlyPlan.update({
       where: { id: req.params.id },
       data: { status: "CANCELED", canceledAt: new Date() },
-      include: { client: true, payments: true }
+      select: monthlyPlanSelect
     });
     res.json({ monthlyPlan: publicMonthlyPlan(plan) });
   })
@@ -209,7 +251,8 @@ router.post(
     const plan = await findPlan(req.user.id, req.params.id);
     const month = monthKey(req.body.month || todayString());
     const status = req.body.status === "paid" ? "PAID" : "PENDING";
-    await prisma.monthlyPlanPayment.upsert({
+
+    const payment = await prisma.monthlyPlanPayment.upsert({
       where: { monthlyPlanId_month: { monthlyPlanId: plan.id, month } },
       create: {
         monthlyPlanId: plan.id,
@@ -224,11 +267,22 @@ router.post(
         paidAt: status === "PAID" ? new Date() : null,
         amount: plan.amount,
         manual: status !== "PAID"
+      },
+      select: {
+        month: true,
+        status: true,
+        paidAt: true,
+        amount: true,
+        manual: true
       }
     });
 
-    const updated = await findPlan(req.user.id, req.params.id);
-    res.json({ cycle: cycleForMonth(updated, month) });
+    const updatedPlan = {
+      ...plan,
+      payments: [...plan.payments.filter((item) => item.month !== month), payment]
+    };
+
+    res.json({ cycle: cycleForMonth(updatedPlan, month) });
   })
 );
 

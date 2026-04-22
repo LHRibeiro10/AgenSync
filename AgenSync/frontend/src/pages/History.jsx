@@ -28,16 +28,12 @@ export default function History() {
     setLoading(true);
     setError("");
     try {
-      const [clientsData, appointmentsData] = await Promise.all([
-        api.listClients(),
-        api.listAppointments({
-          startDate: nextFilters.startDate,
-          endDate: nextFilters.endDate,
-          clientId: nextFilters.clientId,
-          status: nextFilters.status
-        })
-      ]);
-      setClients(clientsData.clients);
+      const appointmentsData = await api.listAppointments({
+        startDate: nextFilters.startDate,
+        endDate: nextFilters.endDate,
+        clientId: nextFilters.clientId,
+        status: nextFilters.status
+      });
       setAppointments(appointmentsData.appointments);
     } catch (err) {
       setError(err.message);
@@ -45,6 +41,25 @@ export default function History() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    let active = true;
+    api
+      .listClients()
+      .then((clientsData) => {
+        if (!active) return;
+        setClients(clientsData.clients);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setClients([]);
+        setError(err.message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     load();

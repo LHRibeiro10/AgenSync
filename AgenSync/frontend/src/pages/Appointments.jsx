@@ -205,6 +205,10 @@ export default function Appointments() {
   );
   const endTime = addMinutesToTime(form.startTime, selectedService?.durationMinutes);
 
+  function sortAppointmentsByStartTime(items) {
+    return [...items].sort((first, second) => new Date(first.startsAt) - new Date(second.startsAt));
+  }
+
   async function load() {
     setLoading(true);
     setError("");
@@ -335,14 +339,19 @@ export default function Appointments() {
 
     try {
       if (editing) {
-        await api.updateAppointment(editing, payload);
+        const result = await api.updateAppointment(editing, payload);
+        setAppointments((current) =>
+          sortAppointmentsByStartTime(
+            current.map((appointment) => (appointment.id === result.appointment.id ? result.appointment : appointment))
+          )
+        );
         showToast(editIntent === "reschedule" ? "Agendamento reagendado." : "Agendamento atualizado.");
       } else {
-        await api.createAppointment(payload);
+        const result = await api.createAppointment(payload);
+        setAppointments((current) => sortAppointmentsByStartTime([...current, result.appointment]));
         showToast("Agendamento criado.");
       }
       resetForm();
-      await load();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -357,9 +366,12 @@ export default function Appointments() {
 
     try {
       await api.deleteAppointment(pendingDelete.id);
-      showToast("Agendamento excluído.");
+      showToast("Agendamento excluido.");
+      setAppointments((current) => current.filter((item) => item.id !== pendingDelete.id));
+      if (editing === pendingDelete.id) {
+        resetForm();
+      }
       setPendingDelete(null);
-      await load();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -370,9 +382,13 @@ export default function Appointments() {
   async function updateStatus(appointment, status) {
     setError("");
     try {
-      await api.updateAppointment(appointment.id, { status });
+      const result = await api.updateAppointment(appointment.id, { status });
+      setAppointments((current) =>
+        sortAppointmentsByStartTime(
+          current.map((item) => (item.id === result.appointment.id ? result.appointment : item))
+        )
+      );
       showToast("Status atualizado.");
-      await load();
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -597,3 +613,4 @@ export default function Appointments() {
     </div>
   );
 }
+

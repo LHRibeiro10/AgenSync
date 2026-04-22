@@ -205,8 +205,6 @@ export default function Dashboard() {
         periodExpenses,
         periodSales,
         periodSubscriptions,
-        dayExpenses,
-        daySales,
         daySubscriptions,
         monthExpenses,
         monthSales,
@@ -228,14 +226,6 @@ export default function Dashboard() {
           startDate: nextFilters.startDate,
           endDate: nextFilters.endDate
         }),
-        listExpenses({
-          startDate: nextFilters.endDate,
-          endDate: nextFilters.endDate
-        }),
-        listProductSales({
-          startDate: nextFilters.endDate,
-          endDate: nextFilters.endDate
-        }),
         listSubscriptionCycles({
           startDate: nextFilters.endDate,
           endDate: nextFilters.endDate
@@ -248,6 +238,9 @@ export default function Dashboard() {
         listSubscriptionCycles(comparisonRange),
         subscriptionSummary({ month: nextFilters.endDate.slice(0, 7) })
       ]);
+
+      const daySales = periodSales.filter((sale) => sale.date === nextFilters.endDate);
+      const dayExpenses = periodExpenses.filter((expense) => expense.date === nextFilters.endDate);
       const servicesPeriod = earnedCompleted(appointmentsData.appointments);
       const productsPeriod = sumProductSales(periodSales);
       const subscriptionsPeriod = sumPaidSubscriptionCycles(periodSubscriptions);

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { publicProfessional } from "../utils/formatters.js";
-import { optionalString, parseBoolean, requiredString } from "../utils/validation.js";
+import { optionalString, parseBoolean, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
 
@@ -21,9 +21,14 @@ router.get(
     if (req.query.active === "true") {
       where.isActive = true;
     }
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
 
     const professionals = await prisma.professional.findMany({
       where,
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 

@@ -3,7 +3,7 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { formatDate, parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicExpense } from "../utils/formatters.js";
-import { optionalString, parsePositiveMoney, requiredString } from "../utils/validation.js";
+import { optionalString, parsePagination, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
 
@@ -69,6 +69,10 @@ function expandRecurring(expense, startDate, endDate) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
     const startDate = startOfDay(parseDateOnly(req.query.startDate || formatDate(new Date()), "data inicial"));
     const endDate = startOfDay(parseDateOnly(req.query.endDate || formatDate(new Date()), "data final"));
     const expenses = await prisma.expense.findMany({
@@ -82,10 +86,16 @@ router.get(
       orderBy: [{ date: "desc" }, { createdAt: "desc" }]
     });
 
+    const normalizedExpenses = expenses
+      .flatMap((expense) => expandRecurring(expense, startDate, endDate))
+      .sort((first, second) => `${second.date}${second.createdAt}`.localeCompare(`${first.date}${first.createdAt}`));
+
+    const pagedExpenses = pagination.enabled
+      ? normalizedExpenses.slice(pagination.skip, pagination.skip + pagination.take)
+      : normalizedExpenses;
+
     res.json({
-      expenses: expenses
-        .flatMap((expense) => expandRecurring(expense, startDate, endDate))
-        .sort((first, second) => `${second.date}${second.createdAt}`.localeCompare(`${first.date}${first.createdAt}`))
+      expenses: pagedExpenses
     });
   })
 );

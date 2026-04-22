@@ -63,31 +63,43 @@ export default function ProductSales() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError("");
-
-    Promise.all([
-      listProducts({ activeOnly: true }),
-      listProductSales({
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-        productId: filters.productId,
-        clientId: filters.clientId,
-        search: filters.search
-      }),
-      listProducts({ stock: "attention" })
-    ])
-      .then(([activeProducts, filteredSales, stockAlerts]) => {
+    Promise.all([listProducts({ activeOnly: true }), listProducts({ stock: "attention" })])
+      .then(([activeProducts, stockAlerts]) => {
         if (!active) return;
         setProducts(activeProducts);
-        setSales(filteredSales);
         setLowStockProducts(stockAlerts);
       })
       .catch((err) => {
         if (!active) return;
         setProducts([]);
-        setSales([]);
         setLowStockProducts([]);
+        showToast(err.message, "error");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [version, showToast]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    listProductSales({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      productId: filters.productId,
+      clientId: filters.clientId,
+      search: filters.search
+    })
+      .then((filteredSales) => {
+        if (!active) return;
+        setSales(filteredSales);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setSales([]);
         setError(err.message);
       })
       .finally(() => {
@@ -98,6 +110,11 @@ export default function ProductSales() {
       active = false;
     };
   }, [filters, version]);
+
+  useEffect(() => {
+    if (!error) return;
+    showToast(error, "error");
+  }, [error, showToast]);
 
   function refresh() {
     setVersion((current) => current + 1);
