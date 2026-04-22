@@ -29,18 +29,19 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribeAuth = authService.onAuthStateChange?.((event, nextSession) => {
+      if (!nextSession) {
+        setSession(null);
+        setToken("");
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
       setSession(nextSession || null);
       setToken(nextSession?.access_token || "");
-      setUser(nextSession?.user ? {
-        id: nextSession.user.id,
-        name: nextSession.user.user_metadata?.name || nextSession.user.email || "Usuario",
-        email: nextSession.user.email || "",
-        businessName: nextSession.user.user_metadata?.businessName || "",
-        businessLogo: nextSession.user.user_metadata?.businessLogo || "",
-        businessType: nextSession.user.user_metadata?.businessType || "",
-        createdAt: nextSession.user.created_at || new Date().toISOString()
-      } : null);
-      setLoading(false);
+      refreshSession().catch(() => {
+        setLoading(false);
+      });
     });
 
     setUnauthorizedHandler(() => {
@@ -53,7 +54,7 @@ export function AuthProvider({ children }) {
       unsubscribeAuth?.();
       setUnauthorizedHandler(null);
     };
-  }, []);
+  }, [refreshSession]);
 
   const login = useCallback(async (payload) => {
     const result = await authService.login(payload);

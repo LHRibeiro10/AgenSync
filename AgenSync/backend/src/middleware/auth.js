@@ -209,8 +209,8 @@ export function invalidateAuthUserCache(userId) {
   authUserCache.delete(userId);
 }
 
-function supabaseMetadataKey({ email, name, businessType, businessName, businessLogo }) {
-  return JSON.stringify([email, name, businessType, businessName, businessLogo || null]);
+function supabaseMetadataKey({ email, name, businessType, businessName }) {
+  return JSON.stringify([email, name, businessType, businessName]);
 }
 
 const userSelect = {
@@ -291,16 +291,14 @@ async function ensureSupabaseUser(payload) {
   if (!supabaseId || !email) throw new ApiError(401, "Token Supabase invalido.");
 
   const metadata = payload.user_metadata || {};
-  const name = metadata.name || email;
-  const businessType = metadata.businessType || "Manicure";
-  const businessName = metadata.businessName || `Agenda de ${name}`;
-  const businessLogo = metadata.businessLogo || null;
+  const metadataName = metadata.name || "";
+  const metadataBusinessType = metadata.businessType || "";
+  const metadataBusinessName = metadata.businessName || "";
   const metadataKey = supabaseMetadataKey({
     email,
-    name,
-    businessType,
-    businessName,
-    businessLogo
+    name: metadataName,
+    businessType: metadataBusinessType,
+    businessName: metadataBusinessName
   });
 
   const cachedUser = getCachedAuthUser(supabaseId, metadataKey);
@@ -309,26 +307,44 @@ async function ensureSupabaseUser(payload) {
     return cachedUser;
   }
 
-  const user = await prisma.user.upsert({
+  const existingUser = await prisma.user.findUnique({
     where: { id: supabaseId },
-    create: {
-      id: supabaseId,
-      name,
-      email,
-      passwordHash: "supabase-auth",
-      businessName,
-      businessLogo,
-      businessType
-    },
-    update: {
-      name,
-      email,
-      businessName,
-      businessLogo,
-      businessType
-    },
     select: userSelect
   });
+
+  const resolvedName = metadataName || existingUser?.name || email;
+  const resolvedBusinessType = metadataBusinessType || existingUser?.businessType || "Manicure";
+  const resolvedBusinessName = metadataBusinessName || existingUser?.businessName || `Agenda de ${resolvedName}`;
+  const resolvedBusinessLogo = existingUser?.businessLogo || null;
+
+  const user = !existingUser
+    ? await prisma.user.create({
+        data: {
+          id: supabaseId,
+          name: resolvedName,
+          email,
+          passwordHash: "supabase-auth",
+          businessName: resolvedBusinessName,
+          businessLogo: resolvedBusinessLogo,
+          businessType: resolvedBusinessType
+        },
+        select: userSelect
+      })
+    : await (async () => {
+        const updates = {};
+        if (existingUser.name !== resolvedName) updates.name = resolvedName;
+        if (existingUser.email !== email) updates.email = email;
+        if (existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
+        if (existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
+
+        if (!Object.keys(updates).length) return existingUser;
+
+        return prisma.user.update({
+          where: { id: supabaseId },
+          data: updates,
+          select: userSelect
+        });
+      })();
 
   await ensureSupabaseBootstrap(user);
 
