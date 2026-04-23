@@ -33,6 +33,35 @@ const emptyForm = {
   notes: ""
 };
 
+function QuickCreateModal({ open, title, description, children, saving, onSubmit, onClose }) {
+  if (!open) return null;
+
+  return (
+    <div className="agensync-overlay z-50 flex items-end bg-slate-950/45 p-3 sm:items-center sm:justify-center">
+      <form onSubmit={onSubmit} className="w-full rounded-xl border border-line bg-white p-5 shadow-panel sm:max-w-md">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-black text-ink">{title}</h2>
+            {description ? <p className="mt-1 text-sm leading-6 text-muted">{description}</p> : null}
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Fechar">
+            Fechar
+          </Button>
+        </div>
+        <div className="mt-5 space-y-4">{children}</div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={saving}>
+            Cadastrar
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function monthKey(value = todayInputValue()) {
   return value.slice(0, 7);
 }
@@ -97,6 +126,9 @@ export default function Subscriptions() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
+  const [quickClientForm, setQuickClientForm] = useState({ name: "", phone: "", notes: "" });
+  const [quickSaving, setQuickSaving] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const currentMonth = monthKey();
@@ -229,6 +261,26 @@ export default function Subscriptions() {
     }
   }
 
+  async function createQuickClient(event) {
+    event.preventDefault();
+    setQuickSaving(true);
+    setError("");
+
+    try {
+      const result = await api.createClient(quickClientForm);
+      setClients((current) => [...current, result.client].sort((first, second) => first.name.localeCompare(second.name)));
+      updateForm("clientId", result.client.id);
+      setQuickClientForm({ name: "", phone: "", notes: "" });
+      setQuickClientOpen(false);
+      showToast("Cliente cadastrado e selecionado.");
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setQuickSaving(false);
+    }
+  }
+
   async function markCycle(subscription, status) {
     if (!subscription.currentCycle) return;
     try {
@@ -297,7 +349,21 @@ export default function Subscriptions() {
             </p>
           </div>
 
-          <Field label="Cliente">
+          <Field
+            label={
+              <span className="flex items-center justify-between gap-3">
+                <span>Cliente</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-2 text-[13px] font-black text-muted hover:text-brand"
+                  onClick={() => setQuickClientOpen(true)}
+                >
+                  + Novo cliente
+                </Button>
+              </span>
+            }
+          >
             <select
               required
               value={form.clientId}
@@ -499,6 +565,42 @@ export default function Subscriptions() {
           </div>
         </div>
       ) : null}
+
+      <QuickCreateModal
+        open={quickClientOpen}
+        title="Novo cliente"
+        description="Cadastre sem sair da mensalidade."
+        saving={quickSaving}
+        onSubmit={createQuickClient}
+        onClose={() => setQuickClientOpen(false)}
+      >
+        <Field label="Nome">
+          <input
+            required
+            minLength={2}
+            value={quickClientForm.name}
+            onChange={(event) => setQuickClientForm((current) => ({ ...current, name: event.target.value }))}
+            className={inputClass}
+            placeholder="Nome do cliente"
+          />
+        </Field>
+        <Field label="Telefone">
+          <input
+            value={quickClientForm.phone}
+            onChange={(event) => setQuickClientForm((current) => ({ ...current, phone: event.target.value }))}
+            className={inputClass}
+            placeholder="(00) 00000-0000"
+          />
+        </Field>
+        <Field label="Observacoes">
+          <textarea
+            value={quickClientForm.notes}
+            onChange={(event) => setQuickClientForm((current) => ({ ...current, notes: event.target.value }))}
+            className={`${inputClass} min-h-24 resize-none`}
+            placeholder="Preferencias ou detalhes importantes"
+          />
+        </Field>
+      </QuickCreateModal>
 
       <ConfirmDialog
         open={Boolean(pendingCancel)}
