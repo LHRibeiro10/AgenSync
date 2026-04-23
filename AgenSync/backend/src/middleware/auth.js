@@ -236,13 +236,28 @@ function roleForEmail(email) {
   return String(email || "").trim().toLowerCase() === "luiz.henrique.ribeiro770@gmail.com" ? "ADMIN" : "USER";
 }
 
+async function ensureInitialAdminRole(user) {
+  if (!user?.id) return user;
+  if (roleForEmail(user.email) !== "ADMIN") return user;
+  if (String(user.role || "").toUpperCase() === "ADMIN") return user;
+
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { role: "ADMIN" },
+    select: userSelect
+  });
+
+  setCachedAuthUser(updatedUser);
+  return updatedUser;
+}
+
 async function authenticateWithLegacyJwt(token) {
   const payload = jwt.verify(token, jwtSecret());
   if (!payload?.userId) throw new ApiError(401, "Sessao invalida.");
 
   const cachedUser = getCachedAuthUser(payload.userId);
   if (cachedUser) {
-    return cachedUser;
+    return ensureInitialAdminRole(cachedUser);
   }
 
   const user = await prisma.user.findUnique({
@@ -251,8 +266,9 @@ async function authenticateWithLegacyJwt(token) {
   });
 
   if (!user) throw new ApiError(401, "Usuario nao encontrado.");
-  setCachedAuthUser(user);
-  return user;
+  const ensuredUser = await ensureInitialAdminRole(user);
+  setCachedAuthUser(ensuredUser);
+  return ensuredUser;
 }
 
 async function ensureSupabaseBootstrap(user) {

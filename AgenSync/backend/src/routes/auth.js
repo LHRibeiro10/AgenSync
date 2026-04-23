@@ -33,6 +33,20 @@ function roleForEmail(email) {
   return String(email || "").trim().toLowerCase() === INITIAL_ADMIN_EMAIL ? "ADMIN" : "USER";
 }
 
+async function ensureInitialAdminRole(user) {
+  if (!user?.id) return user;
+  if (roleForEmail(user.email) !== "ADMIN") return user;
+  if (String(user.role || "").toUpperCase() === "ADMIN") return user;
+
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { role: "ADMIN" }
+  });
+
+  invalidateAuthUserCache(user.id);
+  return updatedUser;
+}
+
 function normalizeInitialServices(body, businessType) {
   const hasCustomServices = Array.isArray(body.initialServices);
   const source = hasCustomServices ? body.initialServices : getSuggestedServices(businessType);
@@ -158,15 +172,17 @@ router.post(
       throw new ApiError(401, "Email ou senha invalidos.");
     }
 
+    const authenticatedUser = await ensureInitialAdminRole(user);
+
     await recordAuditEvent({
       req,
-      userId: user.id,
-      email: user.email,
+      userId: authenticatedUser.id,
+      email: authenticatedUser.email,
       eventType: "auth.login_success",
       message: "Login realizado com sucesso."
     });
 
-    res.json({ token: signToken(user.id), user: publicUser(user) });
+    res.json({ token: signToken(authenticatedUser.id), user: publicUser(authenticatedUser) });
   })
 );
 
