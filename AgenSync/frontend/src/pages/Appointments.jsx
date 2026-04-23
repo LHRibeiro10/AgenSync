@@ -21,6 +21,7 @@ const emptyForm = {
   serviceId: "",
   date: todayInputValue(),
   startTime: "09:00",
+  durationMinutes: "",
   price: "",
   notes: "",
   status: "agendado"
@@ -30,7 +31,7 @@ function AppointmentPreview({ client, professional, service, form, endTime, edit
   const clientName = client?.name || "Cliente ainda não escolhido";
   const professionalName = professional?.name || "Profissional ainda não escolhido";
   const serviceName = service?.name || "Serviço ainda não escolhido";
-  const duration = service ? `${service.durationMinutes} min` : "Escolha um serviço";
+  const duration = form.durationMinutes ? `${form.durationMinutes} min` : service ? `${service.durationMinutes} min` : "Escolha um serviço";
   const price = form.price !== "" ? money(form.price) : service ? money(service.priceDefault) : "R$ 0,00";
 
   return (
@@ -173,6 +174,35 @@ function AppointmentManager({
   );
 }
 
+function QuickCreateModal({ open, title, description, children, saving, onSubmit, onClose }) {
+  if (!open) return null;
+
+  return (
+    <div className="agensync-overlay z-50 flex items-end bg-slate-950/45 p-3 sm:items-center sm:justify-center">
+      <form onSubmit={onSubmit} className="w-full rounded-xl border border-line bg-white p-5 shadow-panel sm:max-w-md">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-black text-ink">{title}</h2>
+            {description ? <p className="mt-1 text-sm leading-6 text-muted">{description}</p> : null}
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Fechar">
+            Fechar
+          </Button>
+        </div>
+        <div className="mt-5 space-y-4">{children}</div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={saving}>
+            Cadastrar
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function Appointments() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -186,6 +216,17 @@ export default function Appointments() {
   const [managerOpen, setManagerOpen] = useState(false);
   const [reminderAppointment, setReminderAppointment] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingConflict, setPendingConflict] = useState(null);
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
+  const [quickServiceOpen, setQuickServiceOpen] = useState(false);
+  const [quickClientForm, setQuickClientForm] = useState({ name: "", phone: "", notes: "" });
+  const [quickServiceForm, setQuickServiceForm] = useState({
+    name: "",
+    priceDefault: "",
+    durationMinutes: 60,
+    isActive: true
+  });
+  const [quickSaving, setQuickSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -203,7 +244,7 @@ export default function Appointments() {
     () => professionals.find((professional) => professional.id === form.professionalId),
     [professionals, form.professionalId]
   );
-  const endTime = addMinutesToTime(form.startTime, selectedService?.durationMinutes);
+  const endTime = addMinutesToTime(form.startTime, form.durationMinutes || selectedService?.durationMinutes);
 
   function sortAppointmentsByStartTime(items) {
     return [...items].sort((first, second) => new Date(first.startsAt) - new Date(second.startsAt));
@@ -298,7 +339,13 @@ export default function Appointments() {
       const next = { ...current, [field]: value };
       if (field === "serviceId") {
         const service = services.find((item) => item.id === value);
-        if (service) next.price = service.priceDefault;
+        if (service) {
+          next.price = service.priceDefault;
+          next.durationMinutes = service.durationMinutes;
+        } else {
+          next.price = "";
+          next.durationMinutes = "";
+        }
       }
       return next;
     });
@@ -313,6 +360,7 @@ export default function Appointments() {
       serviceId: appointment.serviceId,
       date: appointment.date,
       startTime: appointment.startTime,
+      durationMinutes: appointment.durationMinutes || appointment.service?.durationMinutes || "",
       price: appointment.price,
       notes: appointment.notes || "",
       status: appointment.status
@@ -327,6 +375,35 @@ export default function Appointments() {
     setForm(emptyForm);
   }
 
+  function isConflictError(error) {
+    return error?.status === 409 && error?.details?.code === "APPOINTMENT_CONFLICT";
+  }
+
+  function conflictDescription(conflict) {
+    if (!conflict) return "Existe um agendamento em andamento nesse horário. Deseja continuar mesmo assim?";
+
+    const clientText = conflict.clientName ? ` para ${conflict.clientName}` : "";
+    const serviceText = conflict.serviceName ? ` (${conflict.serviceName})` : "";
+    return `Existe outro atendimento${clientText}${serviceText} das ${conflict.startTime} às ${conflict.endTime}. Deseja continuar mesmo assim?`;
+  }
+
+  async function persistAppointment(payload) {
+    if (editing) {
+      const result = await api.updateAppointment(editing, payload);
+      setAppointments((current) =>
+        sortAppointmentsByStartTime(
+          current.map((appointment) => (appointment.id === result.appointment.id ? result.appointment : appointment))
+        )
+      );
+      showToast(editIntent === "reschedule" ? "Agendamento reagendado." : "Agendamento atualizado.");
+      return;
+    }
+
+    const result = await api.createAppointment(payload);
+    setAppointments((current) => sortAppointmentsByStartTime([...current, result.appointment]));
+    showToast("Agendamento criado.");
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSaving(true);
@@ -334,23 +411,34 @@ export default function Appointments() {
 
     const payload = {
       ...form,
-      price: Number(form.price)
+      price: Number(form.price),
+      durationMinutes: Number(form.durationMinutes || selectedService?.durationMinutes || 0)
     };
 
     try {
-      if (editing) {
-        const result = await api.updateAppointment(editing, payload);
-        setAppointments((current) =>
-          sortAppointmentsByStartTime(
-            current.map((appointment) => (appointment.id === result.appointment.id ? result.appointment : appointment))
-          )
-        );
-        showToast(editIntent === "reschedule" ? "Agendamento reagendado." : "Agendamento atualizado.");
-      } else {
-        const result = await api.createAppointment(payload);
-        setAppointments((current) => sortAppointmentsByStartTime([...current, result.appointment]));
-        showToast("Agendamento criado.");
+      await persistAppointment(payload);
+      resetForm();
+    } catch (err) {
+      if (isConflictError(err)) {
+        setPendingConflict({ payload, conflict: err.details?.conflict || null });
+        setError("");
+        return;
       }
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmConflictSave() {
+    if (!pendingConflict) return;
+    setSaving(true);
+    setError("");
+
+    try {
+      await persistAppointment({ ...pendingConflict.payload, confirmConflict: true });
+      setPendingConflict(null);
       resetForm();
     } catch (err) {
       setError(err.message);
@@ -392,6 +480,58 @@ export default function Appointments() {
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
+    }
+  }
+
+  async function createQuickClient(event) {
+    event.preventDefault();
+    setQuickSaving(true);
+    setError("");
+
+    try {
+      const result = await api.createClient(quickClientForm);
+      setClients((current) => [...current, result.client].sort((first, second) => first.name.localeCompare(second.name)));
+      update("clientId", result.client.id);
+      setQuickClientForm({ name: "", phone: "", notes: "" });
+      setQuickClientOpen(false);
+      showToast("Cliente cadastrado e selecionado.");
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setQuickSaving(false);
+    }
+  }
+
+  async function createQuickService(event) {
+    event.preventDefault();
+    setQuickSaving(true);
+    setError("");
+
+    const payload = {
+      ...quickServiceForm,
+      priceDefault: Number(quickServiceForm.priceDefault),
+      durationMinutes: Number(quickServiceForm.durationMinutes),
+      isActive: true
+    };
+
+    try {
+      const result = await api.createService(payload);
+      setServices((current) => [...current, result.service].sort((first, second) => first.name.localeCompare(second.name)));
+      setForm((current) => ({
+        ...current,
+        serviceId: result.service.id,
+        price: result.service.priceDefault,
+        durationMinutes: result.service.durationMinutes
+      }));
+      setQuickServiceForm({ name: "", priceDefault: "", durationMinutes: 60, isActive: true });
+      setQuickServiceOpen(false);
+      showToast("Serviço cadastrado e selecionado.");
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setQuickSaving(false);
     }
   }
 
@@ -438,12 +578,18 @@ export default function Appointments() {
           </div>
 
           <div className="space-y-4 p-5">
-            <Field label="Cliente">
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-black text-ink sm:text-sm">Cliente</span>
+                <Button variant="ghost" size="sm" onClick={() => setQuickClientOpen(true)}>
+                  + Novo cliente
+                </Button>
+              </div>
               <select
                 required
                 value={form.clientId}
                 onChange={(event) => update("clientId", event.target.value)}
-                className={inputClass}
+                className={`${inputClass} mt-1`}
               >
                 <option value="">Selecione</option>
                 {clients.map((client) => (
@@ -452,7 +598,7 @@ export default function Appointments() {
                   </option>
                 ))}
               </select>
-            </Field>
+            </div>
 
             <Field label="Profissional">
               <select
@@ -472,21 +618,27 @@ export default function Appointments() {
               </select>
             </Field>
 
-            <Field label="Serviço">
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-black text-ink sm:text-sm">Serviço</span>
+                <Button variant="ghost" size="sm" onClick={() => setQuickServiceOpen(true)}>
+                  + Novo serviço
+                </Button>
+              </div>
               <select
                 required
                 value={form.serviceId}
                 onChange={(event) => update("serviceId", event.target.value)}
-                className={inputClass}
+                className={`${inputClass} mt-1`}
               >
                 <option value="">Selecione</option>
                 {formServices.map((service) => (
                   <option key={service.id} value={service.id}>
-                    {service.name} · {service.durationMinutes} min {service.isActive ? "" : "· inativo"}
+                    {service.name} - {service.durationMinutes} min {service.isActive ? "" : "- inativo"}
                   </option>
                 ))}
               </select>
-            </Field>
+            </div>
 
             {selectedService ? (
               <div className="grid grid-cols-2 gap-3 rounded-2xl border border-brand/20 bg-blue-50 p-4 shadow-sm">
@@ -522,7 +674,17 @@ export default function Appointments() {
               </Field>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Duração">
+                <input
+                  required
+                  min="1"
+                  type="number"
+                  value={form.durationMinutes}
+                  onChange={(event) => update("durationMinutes", event.target.value)}
+                  className={inputClass}
+                />
+              </Field>
               <Field label="Valor">
                 <input
                   required
@@ -597,6 +759,16 @@ export default function Appointments() {
       ) : null}
 
       <ConfirmDialog
+        open={Boolean(pendingConflict)}
+        title="Horario em conflito"
+        description={conflictDescription(pendingConflict?.conflict)}
+        confirmLabel="Continuar mesmo assim"
+        cancelLabel="Voltar"
+        onConfirm={confirmConflictSave}
+        onCancel={() => setPendingConflict(null)}
+      />
+
+      <ConfirmDialog
         open={Boolean(pendingDelete)}
         title="Excluir agendamento?"
         description={
@@ -609,6 +781,88 @@ export default function Appointments() {
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
+
+      <QuickCreateModal
+        open={quickClientOpen}
+        title="Novo cliente"
+        description="Cadastre sem sair do agendamento."
+        saving={quickSaving}
+        onSubmit={createQuickClient}
+        onClose={() => setQuickClientOpen(false)}
+      >
+        <Field label="Nome">
+          <input
+            required
+            minLength={2}
+            value={quickClientForm.name}
+            onChange={(event) => setQuickClientForm((current) => ({ ...current, name: event.target.value }))}
+            className={inputClass}
+            placeholder="Nome do cliente"
+          />
+        </Field>
+        <Field label="Telefone">
+          <input
+            required
+            minLength={8}
+            value={quickClientForm.phone}
+            onChange={(event) => setQuickClientForm((current) => ({ ...current, phone: event.target.value }))}
+            className={inputClass}
+            placeholder="(00) 00000-0000"
+          />
+        </Field>
+        <Field label="Observacoes">
+          <textarea
+            value={quickClientForm.notes}
+            onChange={(event) => setQuickClientForm((current) => ({ ...current, notes: event.target.value }))}
+            className={`${inputClass} min-h-24 resize-none`}
+            placeholder="Preferências ou detalhes importantes"
+          />
+        </Field>
+      </QuickCreateModal>
+
+      <QuickCreateModal
+        open={quickServiceOpen}
+        title="Novo serviço"
+        description="O novo serviço já fica selecionado neste agendamento."
+        saving={quickSaving}
+        onSubmit={createQuickService}
+        onClose={() => setQuickServiceOpen(false)}
+      >
+        <Field label="Nome">
+          <input
+            required
+            minLength={2}
+            value={quickServiceForm.name}
+            onChange={(event) => setQuickServiceForm((current) => ({ ...current, name: event.target.value }))}
+            className={inputClass}
+            placeholder="Drenagem, corte, limpeza"
+          />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Preço padrão">
+            <input
+              required
+              min="0"
+              step="0.01"
+              type="number"
+              value={quickServiceForm.priceDefault}
+              onChange={(event) => setQuickServiceForm((current) => ({ ...current, priceDefault: event.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Duração">
+            <input
+              required
+              min="1"
+              type="number"
+              value={quickServiceForm.durationMinutes}
+              onChange={(event) => setQuickServiceForm((current) => ({ ...current, durationMinutes: event.target.value }))}
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      </QuickCreateModal>
+
       <ReminderModal appointment={reminderAppointment} onClose={() => setReminderAppointment(null)} />
     </div>
   );

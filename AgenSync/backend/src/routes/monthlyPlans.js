@@ -142,11 +142,6 @@ router.get(
       orderBy: [{ createdAt: "desc" }]
     });
 
-    const publicPlans = plans.map((plan) => ({
-      ...publicMonthlyPlan(plan),
-      currentCycle: shouldIncludePlan(plan, month) ? cycleForMonth(plan, month) : null
-    }));
-
     if (includeCycles) {
       const startDate = req.query.startDate || `${month}-01`;
       const endDate = req.query.endDate || `${month}-${pad(monthEndDate(month))}`;
@@ -159,7 +154,7 @@ router.get(
       const cycles = cyclesForRange(plans, startDate, endDate);
       return res.json({
         summary: {
-          activeCount: publicPlans.filter((plan) => plan.status === "active").length,
+          activeCount: plans.filter((plan) => plan.status === "ACTIVE").length,
           pending: cycles.filter((cycle) => cycle.status === "pending").length,
           overdue: cycles.filter((cycle) => cycle.status === "overdue").length,
           paid: cycles.filter((cycle) => cycle.status === "paid").length,
@@ -169,6 +164,11 @@ router.get(
         }
       });
     }
+
+    const publicPlans = plans.map((plan) => ({
+      ...publicMonthlyPlan(plan),
+      currentCycle: shouldIncludePlan(plan, month) ? cycleForMonth(plan, month) : null
+    }));
 
     res.json({ monthlyPlans: publicPlans });
   })

@@ -90,10 +90,11 @@ router.post(
       if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
       if (clientId && !client) throw new ApiError(400, "Cliente inválido para esta venda.");
 
-      await tx.product.update({
-        where: { id: product.id },
-        data: { stockQty: product.stockQty - quantity }
+      const stockUpdate = await tx.product.updateMany({
+        where: { id: product.id, userId: req.user.id, stockQty: { gte: quantity } },
+        data: { stockQty: { decrement: quantity } }
       });
+      if (stockUpdate.count !== 1) throw new ApiError(400, "Quantidade maior que o estoque disponivel.");
 
       return tx.productSale.create({
         data: {

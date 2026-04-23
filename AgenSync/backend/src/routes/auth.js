@@ -7,9 +7,11 @@ import { ApiError, asyncHandler } from "../middleware/error.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
+import { recordAuditEvent } from "../utils/audit.js";
 import { requiredString, validateEmail } from "../utils/validation.js";
 
 const router = Router();
+const INITIAL_ADMIN_EMAIL = "luiz.henrique.ribeiro770@gmail.com";
 
 function jwtSecret() {
   const secret = normalizeEnvValue(process.env.JWT_SECRET);
@@ -25,6 +27,10 @@ function signToken(userId) {
 
 function signPasswordResetToken(userId) {
   return jwt.sign({ userId, purpose: "password-reset" }, jwtSecret(), { expiresIn: "30m" });
+}
+
+function roleForEmail(email) {
+  return String(email || "").trim().toLowerCase() === INITIAL_ADMIN_EMAIL ? "ADMIN" : "USER";
 }
 
 function normalizeInitialServices(body, businessType) {
@@ -87,7 +93,7 @@ router.post(
     const initialServices = normalizeInitialServices(req.body, businessType);
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
-        data: { name, email, passwordHash, businessName, businessLogo, businessType }
+        data: { name, email, passwordHash, role: roleForEmail(email), businessName, businessLogo, businessType }
       });
 
       if (initialServices.length) {
@@ -111,6 +117,14 @@ router.post(
       return createdUser;
     });
 
+    await recordAuditEvent({
+      req,
+      userId: user.id,
+      email: user.email,
+      eventType: "auth.register",
+      message: "Usuario registrado com sucesso."
+    });
+
     res.status(201).json({ token: signToken(user.id), user: publicUser(user) });
   })
 );
@@ -123,13 +137,34 @@ router.post(
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
+      await recordAuditEvent({
+        req,
+        email,
+        eventType: "auth.login_failed",
+        message: "Tentativa de login com email nao encontrado."
+      });
       throw new ApiError(401, "Email ou senha invalidos.");
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
+      await recordAuditEvent({
+        req,
+        userId: user.id,
+        email: user.email,
+        eventType: "auth.login_failed",
+        message: "Tentativa de login com senha invalida."
+      });
       throw new ApiError(401, "Email ou senha invalidos.");
     }
+
+    await recordAuditEvent({
+      req,
+      userId: user.id,
+      email: user.email,
+      eventType: "auth.login_success",
+      message: "Login realizado com sucesso."
+    });
 
     res.json({ token: signToken(user.id), user: publicUser(user) });
   })
@@ -194,7 +229,34 @@ router.get(
   "/me",
   requireAuth,
   asyncHandler(async (req, res) => {
+    const authEvent = String(req.get("x-agensync-auth-event") || "");
+    if (authEvent === "login_success" || authEvent === "register") {
+      await recordAuditEvent({
+        req,
+        userId: req.user.id,
+        email: req.user.email,
+        eventType: authEvent === "register" ? "auth.register" : "auth.login_success",
+        message: authEvent === "register" ? "Cadastro Supabase validado pelo backend." : "Login Supabase validado pelo backend."
+      });
+    }
+
     res.json({ user: req.user });
+  })
+);
+
+router.post(
+  "/logout",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await recordAuditEvent({
+      req,
+      userId: req.user.id,
+      email: req.user.email,
+      eventType: "auth.logout",
+      message: "Logout solicitado pelo usuario."
+    });
+
+    res.status(204).send();
   })
 );
 

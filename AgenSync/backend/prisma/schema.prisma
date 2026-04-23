@@ -29,11 +29,17 @@ enum MonthlyPaymentStatus {
   PAID
 }
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
 model User {
   id            String         @id @default(cuid())
   name          String
   email         String         @unique
   passwordHash  String
+  role          UserRole       @default(USER)
   businessName  String
   businessLogo  String?
   businessType  String
@@ -45,8 +51,30 @@ model User {
   products      Product[]
   productSales  ProductSale[]
   monthlyPlans  MonthlyPlan[]
+  auditLogs     AuditLog[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String?
+  eventType String
+  message   String?
+  ipAddress String?
+  userAgent String?
+  route     String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([eventType, createdAt])
+  @@index([userId, createdAt])
 }
 
 model Client {
@@ -224,22 +252,23 @@ model Professional {
 }
 
 model Appointment {
-  id             String            @id @default(cuid())
-  userId         String
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId       String
-  client         Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  serviceId      String
-  service        Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  professionalId String?
-  professional   Professional?     @relation(fields: [professionalId], references: [id], onDelete: Restrict)
-  startsAt       DateTime
-  endsAt         DateTime
-  price          Decimal           @db.Decimal(10, 2)
-  notes          String?
-  status         AppointmentStatus @default(SCHEDULED)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId       String
+  service         Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  professionalId  String?
+  professional    Professional?     @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  startsAt        DateTime
+  endsAt          DateTime
+  durationMinutes Int?
+  price           Decimal           @db.Decimal(10, 2)
+  notes           String?
+  status          AppointmentStatus @default(SCHEDULED)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@index([userId, startsAt])
   @@index([userId, status, startsAt])

@@ -1,5 +1,6 @@
 ﻿import {
   appointmentService,
+  adminService,
   authService,
   clientService,
   dashboardService,
@@ -46,5 +47,9 @@ export const api = {
   deleteAppointment: (id) => appointmentService.deleteAppointment(id),
 
   dashboard: (params) => dashboardService.getDashboard(params),
-  finance: (params) => financeService.getFinanceSummary(params)
+  finance: (params) => financeService.getFinanceSummary(params),
+  adminSummary: () => adminService.getAdminSummary(),
+  listAdminUsers: (params) => adminService.listAdminUsers(params),
+  updateAdminUserRole: (id, role) => adminService.updateAdminUserRole(id, role),
+  listAdminAuditLogs: (params) => adminService.listAdminAuditLogs(params)
 };

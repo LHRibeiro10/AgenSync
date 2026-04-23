@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import adminRouter from "./admin.js";
 import appointmentsRouter from "./appointments.js";
 import authRouter from "./auth.js";
 import clientsRouter from "./clients.js";
@@ -19,6 +20,7 @@ router.get("/health", (req, res) => {
 });
 
 router.use("/auth", authRouter);
+router.use("/admin", requireAuth, requireAdmin, adminRouter);
 router.use("/clients", requireAuth, clientsRouter);
 router.use("/professionals", requireAuth, professionalsRouter);
 router.use("/services", requireAuth, servicesRouter);

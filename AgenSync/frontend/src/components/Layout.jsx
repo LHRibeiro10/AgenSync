@@ -8,6 +8,7 @@ import PageTransition from "./PageTransition.jsx";
 
 const navigation = [
   { to: "/", label: "Dashboard", icon: "dashboard" },
+  { to: "/admin", label: "Admin", icon: "settings", adminOnly: true },
   { to: "/agenda", label: "Agenda", icon: "agenda" },
   { to: "/clientes", label: "Clientes", icon: "clients" },
   { to: "/profissionais", label: "Profissionais", icon: "professionals" },
@@ -23,6 +24,7 @@ const navigation = [
 
 const mobileNavigation = [
   { to: "/", label: "Dashboard", icon: "dashboard" },
+  { to: "/admin", label: "Admin", icon: "settings", adminOnly: true },
   { to: "/agenda", label: "Agenda", icon: "agenda" },
   { to: "/clientes", label: "Clientes", icon: "clients" },
   { to: "/profissionais", label: "Profissionais", icon: "professionals" },
@@ -78,6 +80,7 @@ function SidebarBrand() {
 }
 
 function titleFromPath(pathname) {
+  if (pathname.startsWith("/admin")) return "Painel Admin";
   if (pathname.startsWith("/agendamentos")) return "Agendar";
   if (pathname.startsWith("/relatorios")) return "Relatórios";
 
@@ -109,12 +112,14 @@ function mobileActionFor(pathname, navigate) {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const mobileTitle = titleFromPath(location.pathname);
   const mobileAction = mobileActionFor(location.pathname, navigate);
+  const visibleNavigation = navigation.filter((item) => !item.adminOnly || isAdmin);
+  const visibleMobileNavigation = mobileNavigation.filter((item) => !item.adminOnly || isAdmin);
 
   function handleLogout() {
     logout();
@@ -141,7 +146,7 @@ export default function Layout() {
           </button>
 
           <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
-            {navigation.map((item) => (
+            {visibleNavigation.map((item) => (
               <NavLink key={item.to} to={item.to} className={desktopLinkClass} end={item.to === "/"}>
                 <Icon name={item.icon} className="h-5 w-5 opacity-90 transition group-hover:opacity-100" />
                 {item.label}
@@ -233,7 +238,7 @@ export default function Layout() {
             </button>
 
             <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
-              {mobileNavigation.map((item) => (
+              {visibleMobileNavigation.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

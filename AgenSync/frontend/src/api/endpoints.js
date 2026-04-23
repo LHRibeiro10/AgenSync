@@ -3,8 +3,15 @@ export const endpoints = Object.freeze({
     login: "/auth/login",
     register: "/auth/register",
     me: "/auth/me",
+    logout: "/auth/logout",
     forgotPassword: "/auth/forgot-password",
     resetPassword: "/auth/reset-password"
+  },
+  admin: {
+    summary: "/admin/summary",
+    users: "/admin/users",
+    userRole: (id) => `/admin/users/${id}/role`,
+    auditLogs: "/admin/audit-logs"
   },
   clients: {
     list: "/clients",

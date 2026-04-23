@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as authService from "../services/authService.js";
 import { setUnauthorizedHandler } from "../api/httpClient.js";
 
@@ -10,16 +10,18 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [authConfigurationError] = useState(authService.getAuthConfigurationError?.() || "");
+  const didRunInitialRestore = useRef(false);
 
-  const refreshSession = useCallback(async () => {
-    setLoading(true);
+  const refreshSession = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const restored = await authService.restoreSession();
       setUser(restored.user || null);
       setSession(restored.session || null);
       setToken(restored.token || "");
     } finally {
-      setLoading(false);
+      didRunInitialRestore.current = true;
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -29,6 +31,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribeAuth = authService.onAuthStateChange?.((event, nextSession) => {
+      if (event === "INITIAL_SESSION" && !didRunInitialRestore.current) {
+        return;
+      }
+
       if (!nextSession) {
         setSession(null);
         setToken("");
@@ -39,7 +45,7 @@ export function AuthProvider({ children }) {
 
       setSession(nextSession || null);
       setToken(nextSession?.access_token || "");
-      refreshSession().catch(() => {
+      refreshSession({ silent: true }).catch(() => {
         setLoading(false);
       });
     });
@@ -110,6 +116,7 @@ export function AuthProvider({ children }) {
       loading,
       authConfigurationError,
       isAuthenticated: Boolean(token),
+      isAdmin: user?.role === "admin",
       refreshSession,
       login,
       register,

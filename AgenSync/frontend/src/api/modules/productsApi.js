@@ -2,7 +2,7 @@
 import { httpClient } from "../httpClient.js";
 
 export function listProductsApi(params) {
-  return httpClient.get(endpoints.products.list, { params });
+  return httpClient.get(endpoints.products.list, { params, cacheTtlMs: 30_000 });
 }
 
 export function createProductApi(payload) {
@@ -18,7 +18,7 @@ export function deleteProductApi(productId) {
 }
 
 export function listSalesApi(params) {
-  return httpClient.get(endpoints.sales.list, { params });
+  return httpClient.get(endpoints.sales.list, { params, cacheTtlMs: 10_000 });
 }
 
 export function createSaleApi(payload) {

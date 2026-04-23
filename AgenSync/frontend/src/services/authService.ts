@@ -93,17 +93,20 @@ function safeTokenForAuthHeader(token: string) {
   return safeToken;
 }
 
-async function requestBackendMe(token: string) {
+async function requestBackendMe(token: string, authEvent = "") {
   const safeToken = safeTokenForAuthHeader(token);
   const apiBaseUrl = resolveApiBaseUrl();
   if (!apiBaseUrl || !safeToken) return null;
 
   try {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${safeToken}`
+    };
+    if (authEvent) headers["X-AgenSync-Auth-Event"] = authEvent;
+
     const response = await fetch(`${apiBaseUrl}/auth/me`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${safeToken}`
-      }
+      headers
     });
 
     if (!response.ok) return null;
@@ -144,6 +147,19 @@ async function requestBackendSettingsUpdate(token: string, payload: any) {
   }
 
   return data?.user || null;
+}
+
+async function requestBackendLogout(token: string) {
+  const safeToken = safeTokenForAuthHeader(token);
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl || !safeToken) return;
+
+  await fetch(`${apiBaseUrl}/auth/logout`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${safeToken}`
+    }
+  }).catch(() => null);
 }
 
 function metadataWithoutHeavyLogo(user: any, payload: any) {
@@ -192,11 +208,11 @@ async function maybeShrinkOversizedTokenSession(session: any) {
   return refreshed.session;
 }
 
-async function enrichAuthResultWithBackend(result: any) {
+async function enrichAuthResultWithBackend(result: any, authEvent = "") {
   const safeToken = safeTokenForAuthHeader(result?.token || "");
   if (!safeToken) return result;
 
-  const backendUser = await requestBackendMe(safeToken);
+  const backendUser = await requestBackendMe(safeToken, authEvent);
   if (!backendUser) return result;
 
   return {
@@ -266,7 +282,10 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
   if (error) throw friendlyError(error, "Email ou senha invalidos.");
 
   const safeSession = await maybeShrinkOversizedTokenSession(data.session);
-  return enrichAuthResultWithBackend(authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }));
+  return enrichAuthResultWithBackend(
+    authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }),
+    "login_success"
+  );
 }
 
 export async function login(payload: any) {
@@ -297,7 +316,8 @@ export async function signUp(emailOrPayload: any, maybePassword?: string) {
 
   const safeSession = await maybeShrinkOversizedTokenSession(data.session);
   const result = await enrichAuthResultWithBackend(
-    authResult({ ...data, session: safeSession, user: safeSession?.user || data.user })
+    authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }),
+    "register"
   );
 
   if (result?.token) {
@@ -330,6 +350,9 @@ export async function signOut() {
     clearAccessToken();
     return;
   }
+
+  const { data: currentSessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+  await requestBackendLogout(currentSessionData.session?.access_token || "");
 
   const { error } = await supabase.auth.signOut();
   clearAccessToken();

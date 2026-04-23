@@ -2,7 +2,7 @@
 import { httpClient } from "../httpClient.js";
 
 export function listExpensesApi(params) {
-  return httpClient.get(endpoints.expenses.list, { params });
+  return httpClient.get(endpoints.expenses.list, { params, cacheTtlMs: 10_000 });
 }
 
 export function createExpenseApi(payload) {

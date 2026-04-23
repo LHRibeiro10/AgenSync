@@ -3,7 +3,14 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { addMinutes, combineDateAndTime, dateRangeFromQuery } from "../utils/dates.js";
 import { normalizeStatus, publicAppointment } from "../utils/formatters.js";
-import { optionalString, parsePagination, parsePositiveMoney, requiredString } from "../utils/validation.js";
+import {
+  optionalString,
+  parseBoolean,
+  parsePagination,
+  parsePositiveInteger,
+  parsePositiveMoney,
+  requiredString
+} from "../utils/validation.js";
 
 const router = Router();
 
@@ -43,6 +50,7 @@ const appointmentSelect = {
   professionalId: true,
   startsAt: true,
   endsAt: true,
+  durationMinutes: true,
   price: true,
   notes: true,
   status: true,
@@ -106,7 +114,7 @@ async function findProfessionalOrFail(userId, professionalId) {
   return professional;
 }
 
-async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null, professionalId = null }) {
+async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null, professionalId = null, confirmConflict = false }) {
   const conflict = await prisma.appointment.findFirst({
     where: {
       userId,
@@ -117,19 +125,48 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
       endsAt: { gt: startsAt }
     },
     select: {
+      id: true,
+      clientId: true,
+      serviceId: true,
+      professionalId: true,
       startsAt: true,
+      endsAt: true,
+      durationMinutes: true,
+      price: true,
+      notes: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
       client: { select: { name: true } },
+      service: { select: { id: true, name: true, priceDefault: true, durationMinutes: true, isActive: true } },
       professional: { select: { name: true } }
     }
   });
 
   if (conflict) {
+    if (confirmConflict) return conflict;
+
+    const publicConflict = publicAppointment(conflict);
     const professionalText = conflict.professional ? ` com ${conflict.professional.name}` : "";
     throw new ApiError(
       409,
-      `Conflito de horário${professionalText}: ${conflict.client.name} às ${publicAppointment(conflict).startTime}.`
+      `Conflito de horário${professionalText}: ${conflict.client.name} às ${publicConflict.startTime}.`,
+      {
+        code: "APPOINTMENT_CONFLICT",
+        conflict: {
+          id: publicConflict.id,
+          date: publicConflict.date,
+          startTime: publicConflict.startTime,
+          endTime: publicConflict.endTime,
+          clientName: conflict.client?.name || "",
+          serviceName: conflict.service?.name || "",
+          professionalName: conflict.professional?.name || ""
+        }
+      }
     );
   }
+
+  return null;
 }
 
 function buildWhereFromQuery(userId, query) {
@@ -185,6 +222,11 @@ router.post(
     const startTime = requiredString(req.body.startTime, "hora inicial");
     const status = normalizeStatus(req.body.status, "SCHEDULED");
     const notes = optionalString(req.body.notes);
+    const durationMinutes =
+      req.body.durationMinutes === undefined || req.body.durationMinutes === null || req.body.durationMinutes === ""
+        ? null
+        : parsePositiveInteger(req.body.durationMinutes, "duração");
+    const confirmConflict = parseBoolean(req.body.confirmConflict, false);
 
     const [, service, professional] = await Promise.all([
       findClientOrFail(req.user.id, clientId),
@@ -201,14 +243,15 @@ router.post(
     }
 
     const startsAt = combineDateAndTime(date, startTime);
-    const endsAt = addMinutes(startsAt, service.durationMinutes);
+    const effectiveDurationMinutes = durationMinutes || service.durationMinutes;
+    const endsAt = addMinutes(startsAt, effectiveDurationMinutes);
     const price =
       req.body.price === undefined || req.body.price === null || req.body.price === ""
         ? Number(service.priceDefault)
         : parsePositiveMoney(req.body.price, "valor");
 
     if (status !== "CANCELED") {
-      await assertNoConflict({ userId: req.user.id, startsAt, endsAt, professionalId });
+      await assertNoConflict({ userId: req.user.id, startsAt, endsAt, professionalId, confirmConflict });
     }
 
     const appointment = await prisma.appointment.create({
@@ -219,6 +262,7 @@ router.post(
         professionalId,
         startsAt,
         endsAt,
+        durationMinutes: effectiveDurationMinutes,
         price,
         notes,
         status
@@ -261,8 +305,16 @@ router.put(
         : requiredString(req.body.startTime, "hora inicial");
     const status = normalizeStatus(req.body.status, current.status);
     const notes = req.body.notes === undefined ? current.notes || "" : optionalString(req.body.notes);
+    const durationMinutes =
+      req.body.durationMinutes === undefined || req.body.durationMinutes === null || req.body.durationMinutes === ""
+        ? currentPublic.durationMinutes || null
+        : parsePositiveInteger(req.body.durationMinutes, "duração");
+    const confirmConflict = parseBoolean(req.body.confirmConflict, false);
     const timeChanged =
-      req.body.date !== undefined || req.body.startTime !== undefined || req.body.serviceId !== undefined;
+      req.body.date !== undefined ||
+      req.body.startTime !== undefined ||
+      req.body.serviceId !== undefined ||
+      req.body.durationMinutes !== undefined;
 
     const [, service, professional] = await Promise.all([
       findClientOrFail(req.user.id, clientId),
@@ -279,7 +331,8 @@ router.put(
     }
 
     const startsAt = timeChanged ? combineDateAndTime(date, startTime) : current.startsAt;
-    const endsAt = timeChanged ? addMinutes(startsAt, service.durationMinutes) : current.endsAt;
+    const effectiveDurationMinutes = durationMinutes || service.durationMinutes;
+    const endsAt = timeChanged ? addMinutes(startsAt, effectiveDurationMinutes) : current.endsAt;
     const price =
       req.body.price === undefined || req.body.price === null || req.body.price === ""
         ? serviceId !== current.serviceId
@@ -287,19 +340,24 @@ router.put(
           : Number(current.price)
         : parsePositiveMoney(req.body.price, "valor");
 
-    if (status !== "CANCELED") {
+    const shouldCheckConflict =
+      status !== "CANCELED" &&
+      (timeChanged || professionalId !== current.professionalId || current.status === "CANCELED");
+
+    if (shouldCheckConflict) {
       await assertNoConflict({
         userId: req.user.id,
         startsAt,
         endsAt,
         appointmentId: req.params.id,
-        professionalId
+        professionalId,
+        confirmConflict
       });
     }
 
     const appointment = await prisma.appointment.update({
       where: { id: req.params.id },
-      data: { clientId, serviceId, professionalId, startsAt, endsAt, price, notes, status },
+      data: { clientId, serviceId, professionalId, startsAt, endsAt, durationMinutes: effectiveDurationMinutes, price, notes, status },
       select: appointmentSelect
     });
 

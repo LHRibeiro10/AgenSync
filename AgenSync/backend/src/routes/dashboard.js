@@ -12,6 +12,9 @@ import {
 import { publicAppointment } from "../utils/formatters.js";
 
 const router = Router();
+const DASHBOARD_CACHE_TTL_MS = 10_000;
+const DASHBOARD_CACHE_MAX_ITEMS = 200;
+const dashboardCache = new Map();
 
 const appointmentSelect = {
   id: true,
@@ -20,6 +23,7 @@ const appointmentSelect = {
   professionalId: true,
   startsAt: true,
   endsAt: true,
+  durationMinutes: true,
   price: true,
   notes: true,
   status: true,
@@ -28,11 +32,7 @@ const appointmentSelect = {
   client: {
     select: {
       id: true,
-      name: true,
-      phone: true,
-      notes: true,
-      createdAt: true,
-      updatedAt: true
+      name: true
     }
   },
   service: {
@@ -40,18 +40,41 @@ const appointmentSelect = {
       id: true,
       name: true,
       priceDefault: true,
-      durationMinutes: true,
-      isActive: true,
-      createdAt: true,
-      updatedAt: true
+      durationMinutes: true
     }
   }
 };
 
+function getCachedDashboard(key) {
+  const cached = dashboardCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    dashboardCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedDashboard(key, value) {
+  if (dashboardCache.size >= DASHBOARD_CACHE_MAX_ITEMS) {
+    const oldestKey = dashboardCache.keys().next().value;
+    if (oldestKey) dashboardCache.delete(oldestKey);
+  }
+
+  dashboardCache.set(key, {
+    value,
+    expiresAt: Date.now() + DASHBOARD_CACHE_TTL_MS
+  });
+}
+
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const selectedDate = parseDateOnly(req.query.date || todayString());
+    const dateParam = req.query.date || todayString();
+    const cacheKey = `${req.user.id}:${dateParam}`;
+    const cached = getCachedDashboard(cacheKey);
+    if (cached) return res.json(cached);
+
+    const selectedDate = parseDateOnly(dateParam);
     const dayStart = startOfDay(selectedDate);
     const dayEnd = endOfDay(selectedDate);
     const monthStart = startOfMonth(selectedDate);
@@ -93,14 +116,17 @@ router.get(
       })
     ]);
 
-    res.json({
-      date: req.query.date || todayString(),
+    const payload = {
+      date: dateParam,
       appointmentsToday: todayAppointments.length,
       earnedToday: Number(todayRevenue._sum.price || 0),
       earnedMonth: Number(monthRevenue._sum.price || 0),
       nextAppointment: nextAppointment ? publicAppointment(nextAppointment) : null,
       todayAppointments: todayAppointments.map(publicAppointment)
-    });
+    };
+
+    setCachedDashboard(cacheKey, payload);
+    res.json(payload);
   })
 );
 

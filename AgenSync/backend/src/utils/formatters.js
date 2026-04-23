@@ -1,5 +1,10 @@
 import { formatDate, formatTime } from "./dates.js";
 
+function minutesBetween(start, end) {
+  if (!start || !end) return 0;
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+}
+
 export const statusToDb = {
   agendado: "SCHEDULED",
   concluido: "COMPLETED",
@@ -33,6 +38,7 @@ export function publicUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
+    role: String(user.role || "USER").toLowerCase(),
     businessName: user.businessName,
     businessLogo: user.businessLogo || "",
     businessType: user.businessType,
@@ -87,6 +93,9 @@ export function publicProfessional(professional) {
 }
 
 export function publicAppointment(appointment) {
+  const durationMinutes =
+    appointment.durationMinutes || minutesBetween(appointment.startsAt, appointment.endsAt);
+
   return {
     id: appointment.id,
     clientId: appointment.clientId,
@@ -97,6 +106,7 @@ export function publicAppointment(appointment) {
     endTime: formatTime(appointment.endsAt),
     startsAt: appointment.startsAt,
     endsAt: appointment.endsAt,
+    durationMinutes,
     price: Number(appointment.price),
     notes: appointment.notes || "",
     status: dbToStatus[appointment.status],

@@ -10,6 +10,7 @@ export function setUnauthorizedHandler(handler) {
 
 function handleUnauthorized(error) {
   clearAccessToken();
+  httpClient.clearCache?.();
   if (unauthorizedHandler) unauthorizedHandler(error);
 }
 

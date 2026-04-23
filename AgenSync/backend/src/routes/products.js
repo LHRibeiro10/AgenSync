@@ -34,6 +34,20 @@ const productSaleSelect = {
   client: { select: clientSelect }
 };
 
+const productSelect = {
+  id: true,
+  name: true,
+  category: true,
+  costPrice: true,
+  salePrice: true,
+  stockQty: true,
+  minStock: true,
+  description: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true
+};
+
 async function findProductOrFail(userId, id) {
   const product = await prisma.product.findFirst({ where: { id, userId } });
   if (!product) throw new ApiError(404, "Produto não encontrado.");
@@ -45,6 +59,8 @@ function productWhere(userId, query) {
   if (query.activeOnly === "true" || query.active === "true") where.isActive = true;
   if (query.category) where.category = String(query.category);
   if (query.stock === "out") where.stockQty = { lte: 0 };
+  if (query.stock === "low") where.stockQty = { gt: 0, lte: prisma.product.fields.minStock };
+  if (query.stock === "attention") where.stockQty = { lte: prisma.product.fields.minStock };
 
   if (query.search) {
     const search = String(query.search).trim();
@@ -57,17 +73,6 @@ function productWhere(userId, query) {
   return where;
 }
 
-function applyStockFilter(products, stockFilter) {
-  if (!stockFilter) return products;
-
-  return products.filter((product) => {
-    if (stockFilter === "out") return product.stockQty <= 0;
-    if (stockFilter === "low") return product.stockQty > 0 && product.stockQty <= product.minStock;
-    if (stockFilter === "attention") return product.stockQty <= product.minStock;
-    return true;
-  });
-}
-
 router.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -75,19 +80,13 @@ router.get(
       defaultPageSize: 120,
       maxPageSize: 300
     });
-    const postFilterStock = req.query.stock === "low" || req.query.stock === "attention";
 
-    let products = await prisma.product.findMany({
+    const products = await prisma.product.findMany({
       where: productWhere(req.user.id, req.query),
-      ...(pagination.enabled && !postFilterStock ? { skip: pagination.skip, take: pagination.take } : {}),
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
+      select: productSelect,
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
-
-    products = applyStockFilter(products, req.query.stock);
-
-    if (pagination.enabled && postFilterStock) {
-      products = products.slice(pagination.skip, pagination.skip + pagination.take);
-    }
 
     res.json({ products: products.map(publicProduct) });
   })
@@ -210,10 +209,11 @@ router.post(
       if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
       if (clientId && !client) throw new ApiError(400, "Cliente inválido para esta venda.");
 
-      await tx.product.update({
-        where: { id: product.id },
-        data: { stockQty: product.stockQty - quantity }
+      const stockUpdate = await tx.product.updateMany({
+        where: { id: product.id, userId: req.user.id, stockQty: { gte: quantity } },
+        data: { stockQty: { decrement: quantity } }
       });
+      if (stockUpdate.count !== 1) throw new ApiError(400, "Quantidade maior que o estoque disponivel.");
 
       return tx.productSale.create({
         data: {

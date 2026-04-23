@@ -2,7 +2,7 @@ import { endpoints } from "../endpoints.js";
 import { httpClient } from "../httpClient.js";
 
 export function listServicesApi(params) {
-  return httpClient.get(endpoints.services.list, { params });
+  return httpClient.get(endpoints.services.list, { params, cacheTtlMs: 30_000 });
 }
 
 export function createServiceApi(payload) {

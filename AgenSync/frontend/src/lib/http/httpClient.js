@@ -23,6 +23,33 @@ export function createHttpClient({
 } = {}) {
   const requestInterceptors = [];
   const responseInterceptors = [];
+  const responseCache = new Map();
+  const inflightRequests = new Map();
+
+  function buildCacheKey(url, authHeader) {
+    return `${authHeader || "public"}:${url}`;
+  }
+
+  function getCachedResponse(key) {
+    const cached = responseCache.get(key);
+    if (!cached || cached.expiresAt <= Date.now()) {
+      responseCache.delete(key);
+      return null;
+    }
+    return cached.value;
+  }
+
+  function setCachedResponse(key, value, ttlMs) {
+    responseCache.set(key, {
+      value,
+      expiresAt: Date.now() + ttlMs
+    });
+  }
+
+  function clearResponseCache() {
+    responseCache.clear();
+    inflightRequests.clear();
+  }
 
   async function request(path, options = {}) {
     const {
@@ -32,6 +59,7 @@ export function createHttpClient({
       body,
       rawBody = false,
       omitAuth = false,
+      cacheTtlMs = 0,
       ...rest
     } = options;
     const requestHeaders = { ...defaultHeaders, ...headers };
@@ -58,49 +86,76 @@ export function createHttpClient({
     }
 
     const url = resolveUrl(baseURL, context.path, params);
+    const requestMethod = String(context.config.method || method).toUpperCase();
+    const canUseCache = requestMethod === "GET" && cacheTtlMs > 0;
+    const cacheKey = canUseCache ? buildCacheKey(url, requestHeaders.Authorization) : "";
+
+    if (canUseCache) {
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return cached;
+      const inflight = inflightRequests.get(cacheKey);
+      if (inflight) return inflight;
+    }
+
     let response;
 
-    try {
-      response = await fetch(url, context.config);
-    } catch (error) {
-      throw new ApiError({
-        message: "Falha de conexao com o backend. Verifique sua internet ou API.",
-        code: "NETWORK_ERROR",
-        cause: error
-      });
-    }
-
-    const text = await response.text();
-    let payload = null;
-    if (text) {
+    const executeRequest = async () => {
       try {
-        payload = JSON.parse(text);
-      } catch {
-        payload = text;
-      }
-    }
-
-    if (!response.ok) {
-      const apiError = new ApiError({
-        status: response.status,
-        code: payload?.code || "",
-        details: payload,
-        message: payload?.message || defaultMessageByStatus(response.status)
-      });
-
-      if (response.status === 401) {
-        onUnauthorized?.(apiError);
+        response = await fetch(url, context.config);
+      } catch (error) {
+        throw new ApiError({
+          message: "Falha de conexao com o backend. Verifique sua internet ou API.",
+          code: "NETWORK_ERROR",
+          cause: error
+        });
       }
 
-      throw apiError;
-    }
+      const text = await response.text();
+      let payload = null;
+      if (text) {
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          payload = text;
+        }
+      }
 
-    let result = payload;
-    for (const interceptor of responseInterceptors) {
-      result = await interceptor(result, response);
-    }
+      if (!response.ok) {
+        const apiError = new ApiError({
+          status: response.status,
+          code: payload?.code || "",
+          details: payload,
+          message: payload?.message || defaultMessageByStatus(response.status)
+        });
 
-    return result;
+        if (response.status === 401) {
+          onUnauthorized?.(apiError);
+        }
+
+        throw apiError;
+      }
+
+      let result = payload;
+      for (const interceptor of responseInterceptors) {
+        result = await interceptor(result, response);
+      }
+
+      if (canUseCache) {
+        setCachedResponse(cacheKey, result, cacheTtlMs);
+      } else if (requestMethod !== "GET") {
+        clearResponseCache();
+      }
+
+      return result;
+    };
+
+    if (!canUseCache) return executeRequest();
+
+    const requestPromise = executeRequest().finally(() => {
+      inflightRequests.delete(cacheKey);
+    });
+    inflightRequests.set(cacheKey, requestPromise);
+    return requestPromise;
   }
 
   return {
@@ -110,6 +165,7 @@ export function createHttpClient({
     put: (path, options) => request(path, { ...options, method: "PUT" }),
     patch: (path, options) => request(path, { ...options, method: "PATCH" }),
     delete: (path, options) => request(path, { ...options, method: "DELETE" }),
+    clearCache: clearResponseCache,
     useRequestInterceptor: (interceptor) => {
       requestInterceptors.push(interceptor);
       return () => {

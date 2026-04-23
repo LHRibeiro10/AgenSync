@@ -209,6 +209,14 @@ export function invalidateAuthUserCache(userId) {
   authUserCache.delete(userId);
 }
 
+export function requireAdmin(req, res, next) {
+  const role = String(req.user?.role || "").toUpperCase();
+  if (role !== "ADMIN") {
+    throw new ApiError(403, "Acesso restrito a administradores.");
+  }
+  next();
+}
+
 function supabaseMetadataKey({ email, name, businessType, businessName }) {
   return JSON.stringify([email, name, businessType, businessName]);
 }
@@ -217,11 +225,16 @@ const userSelect = {
   id: true,
   name: true,
   email: true,
+  role: true,
   businessName: true,
   businessLogo: true,
   businessType: true,
   createdAt: true
 };
+
+function roleForEmail(email) {
+  return String(email || "").trim().toLowerCase() === "luiz.henrique.ribeiro770@gmail.com" ? "ADMIN" : "USER";
+}
 
 async function authenticateWithLegacyJwt(token) {
   const payload = jwt.verify(token, jwtSecret());
@@ -323,6 +336,7 @@ async function ensureSupabaseUser(payload) {
           id: supabaseId,
           name: resolvedName,
           email,
+          role: roleForEmail(email),
           passwordHash: "supabase-auth",
           businessName: resolvedBusinessName,
           businessLogo: resolvedBusinessLogo,
@@ -334,6 +348,7 @@ async function ensureSupabaseUser(payload) {
         const updates = {};
         if (existingUser.name !== resolvedName) updates.name = resolvedName;
         if (existingUser.email !== email) updates.email = email;
+        if (existingUser.role !== roleForEmail(email) && roleForEmail(email) === "ADMIN") updates.role = "ADMIN";
         if (existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
         if (existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
 

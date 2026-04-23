@@ -2,7 +2,7 @@
 import { httpClient } from "../httpClient.js";
 
 export function listMonthlyPlansApi(params) {
-  return httpClient.get(endpoints.subscriptions.monthlyPlans, { params });
+  return httpClient.get(endpoints.subscriptions.monthlyPlans, { params, cacheTtlMs: 10_000 });
 }
 
 export function createMonthlyPlanApi(payload) {
