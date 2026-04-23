@@ -50,7 +50,6 @@ const appointmentSelect = {
   professionalId: true,
   startsAt: true,
   endsAt: true,
-  durationMinutes: true,
   price: true,
   notes: true,
   status: true,
@@ -131,7 +130,6 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
       professionalId: true,
       startsAt: true,
       endsAt: true,
-      durationMinutes: true,
       price: true,
       notes: true,
       status: true,
@@ -262,7 +260,6 @@ router.post(
         professionalId,
         startsAt,
         endsAt,
-        durationMinutes: effectiveDurationMinutes,
         price,
         notes,
         status
@@ -357,7 +354,7 @@ router.put(
 
     const appointment = await prisma.appointment.update({
       where: { id: req.params.id },
-      data: { clientId, serviceId, professionalId, startsAt, endsAt, durationMinutes: effectiveDurationMinutes, price, notes, status },
+      data: { clientId, serviceId, professionalId, startsAt, endsAt, price, notes, status },
       select: appointmentSelect
     });
 

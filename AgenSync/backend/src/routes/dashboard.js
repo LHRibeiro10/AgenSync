@@ -23,7 +23,6 @@ const appointmentSelect = {
   professionalId: true,
   startsAt: true,
   endsAt: true,
-  durationMinutes: true,
   price: true,
   notes: true,
   status: true,
