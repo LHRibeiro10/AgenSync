@@ -108,6 +108,9 @@ export function AuthProvider({ children }) {
     setSession(null);
   }, []);
 
+  const normalizedRole = String(user?.role || "").trim().toLowerCase();
+  const isAdmin = normalizedRole === "admin";
+
   const value = useMemo(
     () => ({
       token,
@@ -116,7 +119,7 @@ export function AuthProvider({ children }) {
       loading,
       authConfigurationError,
       isAuthenticated: Boolean(token),
-      isAdmin: user?.role === "admin",
+      isAdmin,
       refreshSession,
       login,
       register,
@@ -134,6 +137,7 @@ export function AuthProvider({ children }) {
       session,
       loading,
       authConfigurationError,
+      isAdmin,
       refreshSession,
       login,
       register,

@@ -26,6 +26,7 @@ const emptyForm = {
   notes: "",
   status: "agendado"
 };
+const QUICK_NEW_CLIENT_OPTION = "__new-client__";
 
 function AppointmentPreview({ client, professional, service, form, endTime, editing, onGoAgenda, onToggleManager, managerOpen }) {
   const clientName = client?.name || "Cliente ainda não escolhido";
@@ -375,8 +376,16 @@ export default function Appointments() {
     setForm(emptyForm);
   }
 
+  function conflictDetailsFromError(error) {
+    if (!error?.details) return null;
+    if (error.details?.details && typeof error.details.details === "object") return error.details.details;
+    if (typeof error.details === "object") return error.details;
+    return null;
+  }
+
   function isConflictError(error) {
-    return error?.status === 409 && error?.details?.code === "APPOINTMENT_CONFLICT";
+    const details = conflictDetailsFromError(error);
+    return error?.status === 409 && details?.code === "APPOINTMENT_CONFLICT";
   }
 
   function conflictDescription(conflict) {
@@ -420,7 +429,8 @@ export default function Appointments() {
       resetForm();
     } catch (err) {
       if (isConflictError(err)) {
-        setPendingConflict({ payload, conflict: err.details?.conflict || null });
+        const details = conflictDetailsFromError(err);
+        setPendingConflict({ payload, conflict: details?.conflict || null });
         setError("");
         return;
       }
@@ -588,10 +598,18 @@ export default function Appointments() {
               <select
                 required
                 value={form.clientId}
-                onChange={(event) => update("clientId", event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (nextValue === QUICK_NEW_CLIENT_OPTION) {
+                    setQuickClientOpen(true);
+                    return;
+                  }
+                  update("clientId", nextValue);
+                }}
                 className={`${inputClass} mt-1`}
               >
                 <option value="">Selecione</option>
+                <option value={QUICK_NEW_CLIENT_OPTION}>+ Cadastrar cliente rapido</option>
                 {clients.map((client) => (
                   <option key={client.id} value={client.id}>
                     {client.name}
@@ -675,7 +693,7 @@ export default function Appointments() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Duração">
+              <Field label="Duracao deste atendimento">
                 <input
                   required
                   min="1"
@@ -684,6 +702,9 @@ export default function Appointments() {
                   onChange={(event) => update("durationMinutes", event.target.value)}
                   className={inputClass}
                 />
+                <p className="mt-1 text-xs font-semibold text-muted">
+                  Esse valor sobrescreve a duracao padrao do servico somente neste horario.
+                </p>
               </Field>
               <Field label="Valor">
                 <input
