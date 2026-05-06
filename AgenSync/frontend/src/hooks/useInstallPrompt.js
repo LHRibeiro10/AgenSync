@@ -7,9 +7,33 @@ function isStandalone() {
   return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 }
 
+function deviceInfo() {
+  if (typeof window === "undefined") {
+    return {
+      isAndroid: false,
+      isIOS: false,
+      isDesktop: false
+    };
+  }
+
+  const userAgent = window.navigator.userAgent || "";
+  const platform = window.navigator.platform || "";
+  const isIOS =
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(userAgent);
+
+  return {
+    isAndroid,
+    isIOS,
+    isDesktop: !isAndroid && !isIOS
+  };
+}
+
 export function useInstallPrompt() {
   const [installEvent, setInstallEvent] = useState(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISSED_KEY) === "1");
+  const [device] = useState(deviceInfo);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event) {
@@ -50,6 +74,8 @@ export function useInstallPrompt() {
     canInstall: Boolean(installEvent) && !dismissed && !isStandalone(),
     promptInstall,
     dismissInstallPrompt,
-    isStandalone: isStandalone()
+    isDismissed: dismissed,
+    isStandalone: isStandalone(),
+    ...device
   };
 }
