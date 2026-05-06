@@ -75,9 +75,8 @@ function AccountMark({ user, size = "sm" }) {
 
 function SidebarBrand() {
   return (
-    <div className="flex items-center justify-center gap-3 pb-3 pt-1">
-      <BrandLogo className="h-14 w-14 shrink-0" />
-      <span className="text-xl font-black tracking-tight text-white">AgenSync</span>
+    <div className="flex items-center justify-center pb-4 pt-2">
+      <BrandLogo src="/AgenSync_sidebar.png" className="h-14 w-56 shrink-0" />
     </div>
   );
 }
@@ -221,9 +220,8 @@ export default function Layout() {
           />
           <aside className="agensync-drawer-panel relative flex h-full w-[86vw] max-w-[320px] flex-col rounded-r-[30px] border-r border-white/10 bg-gradient-to-b from-[#111827] via-[#0F172A] to-[#020617] p-4 shadow-[24px_0_70px_rgba(15,23,42,0.42)]">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-1 items-center justify-center gap-3 pt-1">
-                <BrandLogo className="h-12 w-12 shrink-0" />
-                <span className="text-lg font-black tracking-tight text-white">AgenSync</span>
+              <div className="flex flex-1 justify-center pt-1">
+                <BrandLogo src="/AgenSync_sidebar.png" className="h-14 w-56 shrink-0" />
               </div>
               <button
                 type="button"
