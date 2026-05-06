@@ -260,3 +260,86 @@ O build do frontend passou e o schema Prisma está válido. A migration não foi
 - Adicionar máscara de telefone e moeda no frontend.
 - Criar lembretes internos ou exportação de agenda em uma próxima versão.
 - Preparar scripts de deploy e variáveis seguras para produção.
+## PWA e Android
+
+O frontend continua sendo um site Vite normal, mas agora tambem gera manifest e service worker de PWA no build de producao.
+
+Comandos principais:
+
+```bash
+npm run dev:frontend
+npm run build
+npm run preview -w frontend
+```
+
+Para testar instalacao PWA em desktop/Android:
+
+1. Rode `npm run build`.
+2. Rode `npm run preview -w frontend`.
+3. Abra `http://127.0.0.1:4173`.
+4. No Chrome/Edge, confira o manifest e o service worker em DevTools > Application.
+5. Use o prompt nativo de instalacao quando o botao "Instalar AgenSync" aparecer.
+
+O service worker cacheia apenas assets estaticos e navegacao HTML de forma conservadora. Respostas da API recebem `Cache-Control: no-store` no backend, e chamadas autenticadas sensiveis nao sao cacheadas pelo service worker.
+
+Base Capacitor preparada:
+
+```bash
+npm run cap:sync
+npm run cap:android
+npm run cap:open:android
+```
+
+O arquivo `frontend/capacitor.config.json` usa `appId` `br.com.agensync.app`, `appName` `AgenSync` e `webDir` `dist`. A pasta Android nao foi adicionada automaticamente para evitar entrada grande desnecessaria nesta etapa; `npm run cap:android` cria a base quando for abrir no Android Studio.
+
+## Notificacoes
+
+Notificacoes internas funcionam pela API autenticada:
+
+- `GET /api/notifications`
+- `PATCH /api/notifications/:id/read`
+- `PATCH /api/notifications/read-all`
+
+Tokens push FCM sao registrados em:
+
+- `POST /api/notification-tokens`
+
+Variaveis de ambiente para habilitar Firebase no frontend:
+
+```env
+VITE_FIREBASE_API_KEY=""
+VITE_FIREBASE_AUTH_DOMAIN=""
+VITE_FIREBASE_PROJECT_ID=""
+VITE_FIREBASE_MESSAGING_SENDER_ID=""
+VITE_FIREBASE_APP_ID=""
+VITE_FIREBASE_VAPID_KEY=""
+```
+
+O service worker de background (`frontend/public/firebase-messaging-sw.js`) le `frontend/public/firebase-messaging-config.json`. Preencha esse JSON no deploy com os mesmos dados publicos do Firebase Web App.
+
+Variaveis de ambiente do backend para envio via Firebase Admin:
+
+```env
+FIREBASE_PROJECT_ID=""
+FIREBASE_CLIENT_EMAIL=""
+FIREBASE_PRIVATE_KEY=""
+ENABLE_PUSH_SEND="0"
+```
+
+Por seguranca, o backend so envia push real quando `ENABLE_PUSH_SEND="1"`. Sem essas variaveis, o app segue funcionando com notificacoes internas e sem impacto no carregamento inicial.
+
+## Lembretes de agendamento
+
+Novos agendamentos criam lembretes pendentes em `AppointmentReminder` para:
+
+- `ONE_DAY_BEFORE`
+- `TWO_HOURS_BEFORE`
+- `THIRTY_MINUTES_BEFORE`
+
+O processamento foi preparado para cron externo ou scheduler:
+
+```http
+POST /api/appointment-reminders/process-due
+```
+
+O job busca apenas lembretes `PENDING` vencidos, limita lote, marca como `PROCESSING`, cria notificacao interna, tenta push quando configurado e finaliza como `SENT` ou `FAILED`.

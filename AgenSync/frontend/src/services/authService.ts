@@ -131,7 +131,11 @@ async function requestBackendSettingsUpdate(token: string, payload: any) {
     body: JSON.stringify({
       businessType: payload.businessType,
       businessName: payload.businessName,
-      businessLogo: payload.businessLogo
+      businessLogo: payload.businessLogo,
+      whatsappReminderEnabled: payload.whatsappReminderEnabled,
+      whatsappReminderOffsetMinutes: payload.whatsappReminderOffsetMinutes,
+      whatsappReminderMessage: payload.whatsappReminderMessage,
+      whatsappReminderTestPhone: payload.whatsappReminderTestPhone
     })
   });
 

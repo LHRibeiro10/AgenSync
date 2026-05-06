@@ -88,6 +88,31 @@ function normalizeBusinessLogo(value) {
   return logo;
 }
 
+function optionalBoolean(value) {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return Boolean(value);
+}
+
+function optionalReminderOffset(value) {
+  if (value === undefined) return undefined;
+  const minutes = Number(value);
+  if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 10080) {
+    throw new ApiError(400, "Tempo do lembrete invalido.");
+  }
+  return minutes;
+}
+
+function optionalLongString(value, fieldName, maxLength = 1200) {
+  if (value === undefined) return undefined;
+  const text = String(value || "").trim();
+  if (text.length > maxLength) {
+    throw new ApiError(400, `${fieldName} deve ter ate ${maxLength} caracteres.`);
+  }
+  return text;
+}
+
 router.post(
   "/register",
   asyncHandler(async (req, res) => {
@@ -284,13 +309,21 @@ router.put(
     const businessName =
       req.body.businessName === undefined ? undefined : requiredString(req.body.businessName, "nome do negocio", 2);
     const businessLogo = req.body.businessLogo === undefined ? undefined : normalizeBusinessLogo(req.body.businessLogo);
+    const whatsappReminderEnabled = optionalBoolean(req.body.whatsappReminderEnabled);
+    const whatsappReminderOffsetMinutes = optionalReminderOffset(req.body.whatsappReminderOffsetMinutes);
+    const whatsappReminderMessage = optionalLongString(req.body.whatsappReminderMessage, "Mensagem do lembrete");
+    const whatsappReminderTestPhone = optionalLongString(req.body.whatsappReminderTestPhone, "Telefone de teste", 32);
 
     const user = await prisma.user.update({
       where: { id: req.user.id },
       data: {
         businessType,
         ...(businessName === undefined ? {} : { businessName }),
-        ...(businessLogo === undefined ? {} : { businessLogo })
+        ...(businessLogo === undefined ? {} : { businessLogo }),
+        ...(whatsappReminderEnabled === undefined ? {} : { whatsappReminderEnabled }),
+        ...(whatsappReminderOffsetMinutes === undefined ? {} : { whatsappReminderOffsetMinutes }),
+        ...(whatsappReminderMessage === undefined ? {} : { whatsappReminderMessage }),
+        ...(whatsappReminderTestPhone === undefined ? {} : { whatsappReminderTestPhone })
       }
     });
 

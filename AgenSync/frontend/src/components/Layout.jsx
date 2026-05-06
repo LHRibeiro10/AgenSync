@@ -4,36 +4,39 @@ import { useAuth } from "../contexts/AuthContext.jsx";
 import BrandLogo from "./BrandLogo.jsx";
 import Button from "./Button.jsx";
 import Icon from "./Icon.jsx";
+import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
+import NotificationBell from "./NotificationBell.jsx";
 import PageTransition from "./PageTransition.jsx";
+import WelcomeOnboardingModal from "./onboarding/WelcomeOnboardingModal.jsx";
 
 const navigation = [
-  { to: "/", label: "Dashboard", icon: "dashboard" },
+  { to: "/", label: "Dashboard", icon: "dashboard", tourId: "dashboard" },
   { to: "/admin", label: "Admin", icon: "settings", adminOnly: true },
-  { to: "/agenda", label: "Agenda", icon: "agenda" },
-  { to: "/clientes", label: "Clientes", icon: "clients" },
+  { to: "/agenda", label: "Agenda", icon: "agenda", tourId: "agenda" },
+  { to: "/clientes", label: "Clientes", icon: "clients", tourId: "clients" },
   { to: "/profissionais", label: "Profissionais", icon: "professionals" },
-  { to: "/servicos", label: "Serviços", icon: "services" },
+  { to: "/servicos", label: "Serviços", icon: "services", tourId: "services" },
   { to: "/produtos", label: "Produtos", icon: "products" },
   { to: "/vendas", label: "Vendas", icon: "sales" },
   { to: "/mensalidades", label: "Mensalidades", icon: "finance" },
   { to: "/historico", label: "Histórico", icon: "history" },
-  { to: "/financeiro", label: "Financeiro", icon: "finance" },
+  { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance" },
   { to: "/despesas", label: "Despesas", icon: "expenses" },
   { to: "/configuracoes", label: "Configurações", icon: "settings" }
 ];
 
 const mobileNavigation = [
-  { to: "/", label: "Dashboard", icon: "dashboard" },
+  { to: "/", label: "Dashboard", icon: "dashboard", tourId: "dashboard" },
   { to: "/admin", label: "Admin", icon: "settings", adminOnly: true },
-  { to: "/agenda", label: "Agenda", icon: "agenda" },
-  { to: "/clientes", label: "Clientes", icon: "clients" },
+  { to: "/agenda", label: "Agenda", icon: "agenda", tourId: "agenda" },
+  { to: "/clientes", label: "Clientes", icon: "clients", tourId: "clients" },
   { to: "/profissionais", label: "Profissionais", icon: "professionals" },
-  { to: "/servicos", label: "Serviços", icon: "services" },
+  { to: "/servicos", label: "Serviços", icon: "services", tourId: "services" },
   { to: "/produtos", label: "Produtos", icon: "products" },
   { to: "/vendas", label: "Vendas", icon: "sales" },
   { to: "/mensalidades", label: "Mensalidades", icon: "finance" },
   { to: "/despesas", label: "Despesas", icon: "expenses" },
-  { to: "/financeiro", label: "Financeiro", icon: "finance" },
+  { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance" },
   { to: "/configuracoes", label: "Configurações", icon: "settings" }
 ];
 
@@ -147,7 +150,13 @@ export default function Layout() {
 
           <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
             {visibleNavigation.map((item) => (
-              <NavLink key={item.to} to={item.to} className={desktopLinkClass} end={item.to === "/"}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={desktopLinkClass}
+                end={item.to === "/"}
+                data-tour-id={item.tourId || undefined}
+              >
                 <Icon name={item.icon} className="h-5 w-5 opacity-90 transition group-hover:opacity-100" />
                 {item.label}
               </NavLink>
@@ -155,6 +164,9 @@ export default function Layout() {
           </nav>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+            <div className="mb-3 flex justify-end">
+              <NotificationBell />
+            </div>
             <div className="flex items-center gap-3">
               <AccountMark user={user} />
               <div className="min-w-0">
@@ -199,6 +211,7 @@ export default function Layout() {
               {mobileAction.label}
             </button>
           ) : null}
+          <NotificationBell />
         </div>
       </header>
 
@@ -245,6 +258,7 @@ export default function Layout() {
                   className={mobileLinkClass}
                   end={item.to === "/"}
                   onClick={closeDrawer}
+                  data-tour-id={item.tourId || undefined}
                 >
                   <Icon name={item.icon} className="h-5 w-5 opacity-90" />
                   {item.label}
@@ -275,6 +289,9 @@ export default function Layout() {
           </PageTransition>
         </div>
       </main>
+
+      <WelcomeOnboardingModal />
+      <GuidedTourPopover />
     </div>
   );
 }

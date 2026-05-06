@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -8,6 +9,7 @@ import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { api } from "../api/client.js";
+import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import {
   expenseCategories,
   expenseCategoryLabel,
@@ -21,6 +23,11 @@ import { useToast } from "../components/Toast.jsx";
 import { money } from "../utils.js";
 
 const MONTHLY_GOAL = 3000;
+const demoFinanceSummary = {
+  gross: 5120,
+  expenses: 1840,
+  net: 3280
+};
 const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
 
 function parseDate(value) {
@@ -146,6 +153,8 @@ function FinanceBreakdownPanel({ title, description, income, subscriptions, expe
 }
 
 export default function Finance() {
+  const navigate = useNavigate();
+  const { progress, toggleDemoMode } = useOnboarding();
   const initialRange = rangeForPeriod("thisMonth");
   const [filters, setFilters] = useState({
     period: "thisMonth",
@@ -451,6 +460,12 @@ export default function Finance() {
   const goalProgress = data ? Math.min((netMonth / MONTHLY_GOAL) * 100, 100) : 0;
   const periodMargin = grossPeriod > 0 ? Math.round((netPeriod / grossPeriod) * 100) : 0;
   const expenseShare = grossPeriod > 0 ? Math.round((expensesPeriod / grossPeriod) * 100) : 0;
+  const paidSubscriptionsCount = periodSubscriptions.filter((cycle) => cycle.status === "paid").length;
+  const hasFinancialData =
+    completedAppointments.length > 0 ||
+    periodSales.length > 0 ||
+    periodExpenses.length > 0 ||
+    paidSubscriptionsCount > 0;
 
   function handleExportExcel() {
     if (!data || exporting) return;
@@ -531,6 +546,46 @@ export default function Finance() {
 
       {data ? (
         <>
+          {!hasFinancialData ? (
+            <Card className="border-dashed border-[#BFDBFE] bg-white">
+              <EmptyState
+                title="Financeiro sem movimentacoes ainda."
+                description="Conclua atendimentos e registre despesas para acompanhar seus ganhos."
+                action={
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button onClick={() => navigate("/agendamentos")}>
+                      Criar primeiro atendimento
+                    </Button>
+                    <Button variant="secondary" onClick={toggleDemoMode}>
+                      {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
+                    </Button>
+                  </div>
+                }
+              />
+              {progress.demoEnabled ? (
+                <div className="border-t border-[#E2E8F0] px-4 pb-4 sm:px-6">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
+                    Exemplo financeiro (somente visualizacao)
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <article className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Entradas</p>
+                      <p className="mt-1 text-lg font-black text-success">{money(demoFinanceSummary.gross)}</p>
+                    </article>
+                    <article className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Despesas</p>
+                      <p className="mt-1 text-lg font-black text-red-600">{money(demoFinanceSummary.expenses)}</p>
+                    </article>
+                    <article className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Liquido</p>
+                      <p className="mt-1 text-lg font-black text-brand">{money(demoFinanceSummary.net)}</p>
+                    </article>
+                  </div>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
           <Card className="overflow-hidden border-[#E2E8F0] bg-white p-0 shadow-panel">
             <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.42fr)]">
               <div className="p-5 sm:p-7">

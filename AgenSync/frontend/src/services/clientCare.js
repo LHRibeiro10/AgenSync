@@ -1,6 +1,7 @@
 import { httpClient } from "../api/httpClient.js";
 
 const CLIENT_CARE_KEY = "agensync_client_care_v1";
+const FORM_TEMPLATES_KEY = "agensync_form_templates_v1";
 const TEMPLATE_BUCKET = "__formTemplates";
 
 export const emptyAnamnesis = {
@@ -102,6 +103,32 @@ function cacheClientCare(clientId, care) {
 
 function listTemplatesFromDb(db) {
   return ensureArray(db[TEMPLATE_BUCKET]).map(normalizeTemplate);
+}
+
+function readTemplateStore() {
+  const localStorage = typeof window !== "undefined" ? window.localStorage : null;
+  try {
+    const raw = localStorage?.getItem(FORM_TEMPLATES_KEY);
+    return ensureArray(raw ? JSON.parse(raw) : []).map(normalizeTemplate);
+  } catch {
+    return [];
+  }
+}
+
+function writeTemplateStore(templates) {
+  const localStorage = typeof window !== "undefined" ? window.localStorage : null;
+  localStorage?.setItem(FORM_TEMPLATES_KEY, JSON.stringify(ensureArray(templates).map(normalizeTemplate)));
+  window.dispatchEvent(new Event("agensync:form-templates-updated"));
+}
+
+function migrateLegacyTemplates() {
+  const db = readCareDb();
+  const legacyTemplates = listTemplatesFromDb(db);
+  if (!legacyTemplates.length || readTemplateStore().length) return;
+
+  writeTemplateStore(legacyTemplates);
+  delete db[TEMPLATE_BUCKET];
+  writeCareDb(db);
 }
 
 async function saveRemote(clientId, care) {
@@ -408,27 +435,27 @@ export function signClientBudget(clientId, budgetId, signatureImage) {
 }
 
 export function listFormTemplates() {
-  const db = readCareDb();
-  return listTemplatesFromDb(db);
+  migrateLegacyTemplates();
+  return readTemplateStore();
 }
 
 export function createFormTemplate(payload) {
-  const db = readCareDb();
+  migrateLegacyTemplates();
   const template = validateTemplatePayload({
     ...payload,
     id: id("template"),
     createdAt: now(),
     updatedAt: now()
   });
-  const templates = listTemplatesFromDb(db);
-  db[TEMPLATE_BUCKET] = [template, ...templates];
-  writeCareDb(db);
-  return db[TEMPLATE_BUCKET];
+  const templates = readTemplateStore();
+  const nextTemplates = [template, ...templates];
+  writeTemplateStore(nextTemplates);
+  return nextTemplates;
 }
 
 export function updateFormTemplate(templateId, payload) {
-  const db = readCareDb();
-  const templates = listTemplatesFromDb(db);
+  migrateLegacyTemplates();
+  const templates = readTemplateStore();
   const existing = templates.find((template) => template.id === templateId);
   if (!existing) throw new Error("Modelo nao encontrado.");
   const updated = validateTemplatePayload({
@@ -438,14 +465,14 @@ export function updateFormTemplate(templateId, payload) {
     createdAt: existing.createdAt,
     updatedAt: now()
   });
-  db[TEMPLATE_BUCKET] = templates.map((template) => (template.id === templateId ? updated : template));
-  writeCareDb(db);
-  return db[TEMPLATE_BUCKET];
+  const nextTemplates = templates.map((template) => (template.id === templateId ? updated : template));
+  writeTemplateStore(nextTemplates);
+  return nextTemplates;
 }
 
 export function duplicateFormTemplate(templateId) {
-  const db = readCareDb();
-  const templates = listTemplatesFromDb(db);
+  migrateLegacyTemplates();
+  const templates = readTemplateStore();
   const source = templates.find((template) => template.id === templateId);
   if (!source) throw new Error("Modelo nao encontrado.");
   const createdAt = now();
@@ -457,17 +484,17 @@ export function duplicateFormTemplate(templateId) {
     createdAt,
     updatedAt: createdAt
   });
-  db[TEMPLATE_BUCKET] = [copy, ...templates];
-  writeCareDb(db);
-  return db[TEMPLATE_BUCKET];
+  const nextTemplates = [copy, ...templates];
+  writeTemplateStore(nextTemplates);
+  return nextTemplates;
 }
 
 export function deleteFormTemplate(templateId) {
-  const db = readCareDb();
-  const templates = listTemplatesFromDb(db);
-  db[TEMPLATE_BUCKET] = templates.filter((template) => template.id !== templateId);
-  writeCareDb(db);
-  return db[TEMPLATE_BUCKET];
+  migrateLegacyTemplates();
+  const templates = readTemplateStore();
+  const nextTemplates = templates.filter((template) => template.id !== templateId);
+  writeTemplateStore(nextTemplates);
+  return nextTemplates;
 }
 
 export function saveClientForm(clientId, payload) {

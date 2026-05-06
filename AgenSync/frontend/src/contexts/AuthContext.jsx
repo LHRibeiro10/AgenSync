@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as authService from "../services/authService.js";
-import { setUnauthorizedHandler } from "../api/httpClient.js";
+import { httpClient, setUnauthorizedHandler } from "../api/httpClient.js";
+import { clearUserDataCache } from "../lib/userDataCache.js";
 
 const AuthContext = createContext(null);
 
@@ -51,6 +52,7 @@ export function AuthProvider({ children }) {
     });
 
     setUnauthorizedHandler(() => {
+      clearUserDataCache();
       setToken("");
       setUser(null);
       setSession(null);
@@ -103,6 +105,8 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     await authService.logout();
+    httpClient.clearCache?.();
+    clearUserDataCache();
     setToken("");
     setUser(null);
     setSession(null);

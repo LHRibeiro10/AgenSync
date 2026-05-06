@@ -151,8 +151,10 @@ function AuthInput({
   required = true
 }) {
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-300">{label}</span>
+    <label className="login-auth-input block">
+      <span className="login-auth-label mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-300">
+        {label}
+      </span>
       <div className="relative">
         <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
           <InputIcon type={icon} />
@@ -165,7 +167,7 @@ function AuthInput({
           autoComplete={autoComplete}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#0C122A] pl-11 pr-4 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition duration-200 placeholder:text-slate-500 hover:border-white/20 focus:border-[#7E4FFF] focus:ring-4 focus:ring-[#7E4FFF]/20"
+          className="login-auth-field min-h-12 w-full rounded-2xl border border-white/10 bg-[#0C122A] pl-11 pr-4 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition duration-200 placeholder:text-slate-500 hover:border-white/20 focus:border-[#7E4FFF] focus:ring-4 focus:ring-[#7E4FFF]/20"
         />
       </div>
     </label>
@@ -180,7 +182,7 @@ function AuthMessage({ type, children }) {
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
       : "border-red-500/30 bg-red-500/10 text-red-200";
 
-  return <div className={`rounded-2xl border px-4 py-3 text-sm font-semibold leading-6 ${classes}`}>{children}</div>;
+  return <div className={`login-auth-message rounded-2xl border px-4 py-3 text-sm font-semibold leading-6 ${classes}`}>{children}</div>;
 }
 
 export default function Login() {
@@ -299,14 +301,14 @@ export default function Login() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#050710] px-4 py-6 text-slate-100 sm:px-6 lg:px-10 lg:py-10">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(55,18,112,0.58),transparent_38%),radial-gradient(circle_at_86%_12%,rgba(28,88,196,0.46),transparent_36%),linear-gradient(145deg,#04050C_0%,#080B18_48%,#050711_100%)]" />
-      <div className="pointer-events-none absolute -left-20 top-16 h-72 w-72 rounded-full bg-[#7E4FFF]/20 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-[#2563EB]/20 blur-3xl" />
+    <main className="login-page relative min-h-screen overflow-hidden bg-[#050710] px-4 py-6 text-slate-100 sm:px-6 lg:px-10 lg:py-10">
+      <div className="login-bg-1 pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(55,18,112,0.58),transparent_38%),radial-gradient(circle_at_86%_12%,rgba(28,88,196,0.46),transparent_36%),linear-gradient(145deg,#04050C_0%,#080B18_48%,#050711_100%)]" />
+      <div className="login-bg-2 pointer-events-none absolute -left-20 top-16 h-72 w-72 rounded-full bg-[#7E4FFF]/20 blur-3xl" />
+      <div className="login-bg-3 pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-[#2563EB]/20 blur-3xl" />
 
-      <section className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center">
-        <div className="grid w-full gap-5 rounded-[28px] border border-white/10 bg-white/[0.03] p-3 shadow-[0_36px_100px_rgba(6,8,20,0.72)] backdrop-blur-xl lg:grid-cols-[1.08fr_0.92fr] lg:gap-0">
-          <aside className="order-2 relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#1A0B2E] via-[#2A0F4F] to-[#143C85] p-7 sm:p-10 lg:order-1 lg:min-h-[680px]">
+      <section className="login-shell relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center">
+        <div className="login-frame grid w-full gap-5 rounded-[28px] border border-white/10 bg-white/[0.03] p-3 shadow-[0_36px_100px_rgba(6,8,20,0.72)] backdrop-blur-xl lg:grid-cols-[1.08fr_0.92fr] lg:gap-0">
+          <aside className="login-marketing order-2 relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#1A0B2E] via-[#2A0F4F] to-[#143C85] p-7 sm:p-10 lg:order-1 lg:min-h-[680px]">
             <div className="pointer-events-none absolute inset-0 opacity-35">
               <svg viewBox="0 0 860 760" className="h-full w-full">
                 <path d="M-10 105C95 35 215 40 305 105C395 170 390 280 306 340C238 390 134 406 75 470C16 534 30 650 132 760" stroke="white" strokeWidth="1.2" fill="none" />
@@ -354,15 +356,15 @@ export default function Login() {
 
           <form
             onSubmit={handleSubmit}
-            className="order-1 rounded-[22px] border border-white/10 bg-[#0A0F24]/88 px-6 py-7 shadow-[0_24px_50px_rgba(4,6,16,0.6)] backdrop-blur-xl sm:px-8 sm:py-9 lg:order-2 lg:min-h-[680px] lg:px-10 lg:py-11"
+            className="login-form-card order-1 rounded-[22px] border border-white/10 bg-[#0A0F24]/88 px-6 py-7 shadow-[0_24px_50px_rgba(4,6,16,0.6)] backdrop-blur-xl sm:px-8 sm:py-9 lg:order-2 lg:min-h-[680px] lg:px-10 lg:py-11"
           >
-            <div className="mx-auto w-full max-w-[380px] page-transition">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-200/85">Acesso seguro</p>
-              <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-[2.2rem]">{currentView.title}</h2>
-              <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">{currentView.subtitle}</p>
+            <div className="login-form-inner mx-auto w-full max-w-[380px] page-transition">
+              <p className="login-form-kicker text-xs font-black uppercase tracking-[0.16em] text-violet-200/85">Acesso seguro</p>
+              <h2 className="login-form-title mt-3 text-3xl font-black tracking-tight text-white sm:text-[2.2rem]">{currentView.title}</h2>
+              <p className="login-form-subtitle mt-3 text-sm font-semibold leading-6 text-slate-300">{currentView.subtitle}</p>
 
               {!isRecovery ? (
-                <div className="mt-7 grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+                <div className="login-tabs mt-7 grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
                   <button
                     type="button"
                     onClick={() => switchView("login")}
@@ -388,7 +390,7 @@ export default function Login() {
                 </div>
               ) : null}
 
-              <div key={view} className="tab-panel-enter mt-7 space-y-4">
+              <div key={view} className="login-fields tab-panel-enter mt-7 space-y-4">
                 {isRegister ? (
                   <AuthInput
                     label="Nome"
@@ -438,7 +440,7 @@ export default function Login() {
                 ) : null}
 
                 {isLogin ? (
-                  <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="login-remember-row flex items-center justify-between gap-3 text-sm">
                     <label className="inline-flex items-center gap-2 font-semibold text-slate-300">
                       <input
                         type="checkbox"
@@ -459,7 +461,7 @@ export default function Login() {
                 ) : null}
 
                 {isRecovery ? (
-                  <p className="rounded-2xl border border-[#7E4FFF]/30 bg-[#7E4FFF]/10 px-4 py-3 text-sm font-semibold text-violet-100">
+                  <p className="login-recovery-note rounded-2xl border border-[#7E4FFF]/30 bg-[#7E4FFF]/10 px-4 py-3 text-sm font-semibold text-violet-100">
                     Enviaremos um link para redefinir sua senha no e-mail informado.
                   </p>
                 ) : null}
@@ -473,7 +475,7 @@ export default function Login() {
                     type="button"
                     onClick={handleResendConfirmation}
                     disabled={resendingConfirmation}
-                    className="w-full rounded-2xl border border-[#7E4FFF]/35 bg-[#7E4FFF]/10 px-4 py-3 text-sm font-bold text-violet-100 transition duration-200 hover:bg-[#7E4FFF]/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="login-resend-button w-full rounded-2xl border border-[#7E4FFF]/35 bg-[#7E4FFF]/10 px-4 py-3 text-sm font-bold text-violet-100 transition duration-200 hover:bg-[#7E4FFF]/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {resendingConfirmation ? "Reenviando..." : "Reenviar e-mail de confirmação"}
                   </button>
@@ -482,13 +484,13 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="min-h-12 w-full rounded-2xl bg-gradient-to-r from-[#2A0F4F] via-[#47218E] to-[#1E63D6] px-5 py-3 text-base font-black text-white shadow-[0_18px_34px_rgba(26,11,46,0.58)] transition duration-200 hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+                  className="login-submit-button min-h-12 w-full rounded-2xl bg-gradient-to-r from-[#2A0F4F] via-[#47218E] to-[#1E63D6] px-5 py-3 text-base font-black text-white shadow-[0_18px_34px_rgba(26,11,46,0.58)] transition duration-200 hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
                 >
                   {loading ? "Processando..." : actionLabel}
                 </button>
               </div>
 
-              <div className="mt-7 text-center text-sm font-semibold text-slate-300">
+              <div className="login-form-footer mt-7 text-center text-sm font-semibold text-slate-300">
                 {isRecovery ? (
                   <button
                     type="button"

@@ -21,7 +21,15 @@ export const env = Object.freeze({
     "VITE_SUPABASE_RESET_PASSWORD_REDIRECT_URL",
     `${typeof window !== "undefined" ? window.location.origin : ""}/reset-password`
   ),
-  tokenStorageKey: readString("VITE_AUTH_TOKEN_STORAGE_KEY", "@agensync-token")
+  tokenStorageKey: readString("VITE_AUTH_TOKEN_STORAGE_KEY", "@agensync-token"),
+  firebase: {
+    apiKey: readString("VITE_FIREBASE_API_KEY"),
+    authDomain: readString("VITE_FIREBASE_AUTH_DOMAIN"),
+    projectId: readString("VITE_FIREBASE_PROJECT_ID"),
+    messagingSenderId: readString("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+    appId: readString("VITE_FIREBASE_APP_ID"),
+    vapidKey: readString("VITE_FIREBASE_VAPID_KEY")
+  }
 });
 
 export function hasSupabaseConfig() {

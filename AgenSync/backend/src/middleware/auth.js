@@ -229,6 +229,10 @@ const userSelect = {
   businessName: true,
   businessLogo: true,
   businessType: true,
+  whatsappReminderEnabled: true,
+  whatsappReminderOffsetMinutes: true,
+  whatsappReminderMessage: true,
+  whatsappReminderTestPhone: true,
   createdAt: true
 };
 

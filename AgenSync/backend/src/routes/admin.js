@@ -15,7 +15,16 @@ const userSelect = {
   businessName: true,
   businessType: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
+  _count: {
+    select: {
+      clients: true,
+      appointments: true,
+      services: true,
+      products: true,
+      monthlyPlans: true
+    }
+  }
 };
 
 const auditSelect = {
@@ -33,7 +42,8 @@ const auditSelect = {
     select: {
       id: true,
       name: true,
-      email: true
+      email: true,
+      role: true
     }
   }
 };
@@ -52,6 +62,15 @@ function publicAdminUser(user) {
     role: String(user.role || "USER").toLowerCase(),
     businessName: user.businessName,
     businessType: user.businessType,
+    counts: user.counts || {
+      clients: user._count?.clients || 0,
+      appointments: user._count?.appointments || 0,
+      services: user._count?.services || 0,
+      products: user._count?.products || 0,
+      monthlyPlans: user._count?.monthlyPlans || 0
+    },
+    lastLoginAt: user.lastLoginAt || null,
+    lastActivityAt: user.lastActivityAt || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -85,6 +104,7 @@ router.get(
 
     const [
       totalUsers,
+      commonUsers,
       newUsers7Days,
       newUsers30Days,
       admins,
@@ -100,15 +120,22 @@ router.get(
       products
     ] = await Promise.all([
       prisma.user.count(),
+      prisma.user.count({ where: { role: "USER" } }),
       prisma.user.count({ where: { createdAt: { gte: last7Days } } }),
       prisma.user.count({ where: { createdAt: { gte: last30Days } } }),
       prisma.user.count({ where: { role: "ADMIN" } }),
-      prisma.auditLog.count({ where: { eventType: "auth.login_success", createdAt: { gte: last7Days } } }),
-      prisma.auditLog.count({ where: { eventType: "auth.login_failed", createdAt: { gte: last7Days } } }),
-      prisma.auditLog.count({ where: { eventType: "admin.access", createdAt: { gte: last7Days } } }),
+      prisma.auditLog.count({
+        where: { eventType: "auth.login_success", createdAt: { gte: last7Days }, user: { is: { role: "USER" } } }
+      }),
+      prisma.auditLog.count({
+        where: { eventType: "auth.login_failed", createdAt: { gte: last7Days }, user: { is: { role: "USER" } } }
+      }),
+      prisma.auditLog.count({
+        where: { eventType: "admin.access", createdAt: { gte: last7Days }, user: { is: { role: "USER" } } }
+      }),
       prisma.auditLog.groupBy({
         by: ["eventType"],
-        where: { createdAt: { gte: last7Days } },
+        where: { createdAt: { gte: last7Days }, user: { is: { role: "USER" } } },
         _count: { eventType: true }
       }),
       prisma.client.count(),
@@ -122,6 +149,7 @@ router.get(
     res.json({
       summary: {
         totalUsers,
+        commonUsers,
         newUsers7Days,
         newUsers30Days,
         admins,
@@ -152,13 +180,54 @@ router.get(
       maxPageSize: 300
     });
 
+    const search = String(req.query.search || "").trim();
+    const where = {
+      role: "USER",
+      id: { not: req.user.id },
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { email: { contains: search, mode: "insensitive" } },
+              { businessName: { contains: search, mode: "insensitive" } }
+            ]
+          }
+        : {})
+    };
+
     const users = await prisma.user.findMany({
+      where,
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : { take: 100 }),
       select: userSelect,
       orderBy: [{ createdAt: "desc" }]
     });
 
-    res.json({ users: users.map(publicAdminUser) });
+    const userIds = users.map((user) => user.id);
+    const [lastLogins, lastActivities] = await Promise.all([
+      prisma.auditLog.groupBy({
+        by: ["userId"],
+        where: { userId: { in: userIds }, eventType: "auth.login_success" },
+        _max: { createdAt: true }
+      }),
+      prisma.auditLog.groupBy({
+        by: ["userId"],
+        where: { userId: { in: userIds } },
+        _max: { createdAt: true }
+      })
+    ]);
+
+    const loginByUser = new Map(lastLogins.map((item) => [item.userId, item._max.createdAt]));
+    const activityByUser = new Map(lastActivities.map((item) => [item.userId, item._max.createdAt]));
+
+    res.json({
+      users: users.map((user) =>
+        publicAdminUser({
+          ...user,
+          lastLoginAt: loginByUser.get(user.id) || null,
+          lastActivityAt: activityByUser.get(user.id) || null
+        })
+      )
+    });
   })
 );
 
@@ -215,7 +284,10 @@ router.get(
       defaultPageSize: 100,
       maxPageSize: 300
     });
-    const where = {};
+    const where = {
+      userId: { not: req.user.id },
+      user: { is: { role: "USER" } }
+    };
     if (req.query.eventType) where.eventType = String(req.query.eventType);
 
     const logs = await prisma.auditLog.findMany({

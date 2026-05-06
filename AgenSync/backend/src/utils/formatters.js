@@ -42,6 +42,10 @@ export function publicUser(user) {
     businessName: user.businessName,
     businessLogo: user.businessLogo || "",
     businessType: user.businessType,
+    whatsappReminderEnabled: Boolean(user.whatsappReminderEnabled),
+    whatsappReminderOffsetMinutes: Number(user.whatsappReminderOffsetMinutes || 120),
+    whatsappReminderMessage: user.whatsappReminderMessage || "",
+    whatsappReminderTestPhone: user.whatsappReminderTestPhone || "",
     createdAt: user.createdAt
   };
 }
@@ -51,6 +55,20 @@ export function publicClient(client) {
     id: client.id,
     name: client.name,
     phone: client.phone,
+    cpf: client.cpf || "",
+    cnpj: client.cnpj || "",
+    rg: client.rg || "",
+    birthDate: client.birthDate ? formatDate(client.birthDate) : "",
+    zipCode: client.zipCode || "",
+    address: client.address || "",
+    addressNumber: client.addressNumber || "",
+    addressComplement: client.addressComplement || "",
+    district: client.district || "",
+    state: client.state || "",
+    city: client.city || "",
+    tags: client.tags || "",
+    source: client.source || "",
+    externalId: client.externalId || "",
     notes: client.notes || "",
     createdAt: client.createdAt,
     updatedAt: client.updatedAt

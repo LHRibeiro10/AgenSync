@@ -10,6 +10,9 @@
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build -w frontend",
+    "cap:sync": "npm run cap:sync -w frontend",
+    "cap:android": "npm run cap:android -w frontend",
+    "cap:open:android": "npm run cap:open:android -w frontend",
     "prisma:generate": "npm run prisma:generate -w backend",
     "prisma:migrate": "npm run prisma:migrate -w backend",
     "prisma:deploy": "npm run prisma:deploy -w backend"

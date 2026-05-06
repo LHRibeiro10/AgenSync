@@ -7,11 +7,23 @@ import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
+import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { useToast } from "../components/Toast.jsx";
+import {
+  durationLabel,
+  durationToMinutes,
+  durationUnits,
+  minutesToDurationInput
+} from "../services/durationService.js";
 import { money } from "../utils.js";
 
-const emptyForm = { name: "", priceDefault: "", durationMinutes: 60, isActive: true };
+const emptyForm = { name: "", priceDefault: "", durationValue: 60, durationUnit: "minutes", isActive: true };
+const demoServices = [
+  { id: "demo-service-1", name: "Corte feminino", priceDefault: 95, durationMinutes: 60 },
+  { id: "demo-service-2", name: "Escova", priceDefault: 70, durationMinutes: 45 },
+  { id: "demo-service-3", name: "Hidratacao", priceDefault: 120, durationMinutes: 70 }
+];
 
 export default function Services() {
   const [services, setServices] = useState([]);
@@ -22,12 +34,16 @@ export default function Services() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
+  const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
 
   async function load() {
     setLoading(true);
     try {
       const data = await api.listServices();
       setServices(data.services);
+      if (data.services.length) {
+        markStepComplete("service", { toast: false });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -37,18 +53,20 @@ export default function Services() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [markStepComplete]);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
   function startEdit(service) {
+    const duration = minutesToDurationInput(service.durationMinutes);
     setEditing(service.id);
     setForm({
       name: service.name,
       priceDefault: service.priceDefault,
-      durationMinutes: service.durationMinutes,
+      durationValue: duration.durationValue,
+      durationUnit: duration.durationUnit,
       isActive: service.isActive
     });
     setError("");
@@ -68,8 +86,18 @@ export default function Services() {
     const payload = {
       ...form,
       priceDefault: Number(form.priceDefault),
-      durationMinutes: Number(form.durationMinutes)
+      durationMinutes: durationToMinutes(form.durationValue, form.durationUnit)
     };
+    delete payload.durationValue;
+    delete payload.durationUnit;
+
+    if (!payload.durationMinutes) {
+      const message = "Informe uma duracao valida.";
+      setError(message);
+      showToast(message, "error");
+      setSaving(false);
+      return;
+    }
 
     try {
       if (editing) {
@@ -77,6 +105,7 @@ export default function Services() {
         showToast("Serviço atualizado.");
       } else {
         await api.createService(payload);
+        markStepComplete("service", { toast: false });
         showToast("Serviço cadastrado.");
       }
       resetForm();
@@ -129,7 +158,12 @@ export default function Services() {
       <Message type="error">{error}</Message>
 
       <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <Card as="form" onSubmit={handleSubmit} className="space-y-4 p-4 lg:sticky lg:top-24 lg:self-start">
+        <Card
+          as="form"
+          id="services-create-form"
+          onSubmit={handleSubmit}
+          className="space-y-4 p-4 lg:sticky lg:top-24 lg:self-start"
+        >
           <div>
             <h2 className="text-lg font-black text-ink">{editing ? "Editar serviço" : "Novo serviço"}</h2>
             <p className="mt-1 text-sm text-muted">Serviços inativos ficam ocultos na criação de novos horários.</p>
@@ -157,15 +191,46 @@ export default function Services() {
                 className={inputClass}
               />
             </Field>
-            <Field label="Duração em minutos">
-              <input
-                required
-                min="1"
-                type="number"
-                value={form.durationMinutes}
-                onChange={(event) => update("durationMinutes", event.target.value)}
-                className={inputClass}
-              />
+            <Field label="Tempo estimado">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px] lg:grid-cols-[minmax(0,1fr)_132px]">
+                {form.durationUnit === "day" ? (
+                  <select
+                    value={form.durationValue}
+                    onChange={(event) => update("durationValue", event.target.value)}
+                    className={inputClass}
+                  >
+                    <option value={1}>Dia todo</option>
+                  </select>
+                ) : (
+                  <input
+                    required
+                    min="1"
+                    step={form.durationUnit === "hours" ? "0.25" : "1"}
+                    type="number"
+                    value={form.durationValue}
+                    onChange={(event) => update("durationValue", event.target.value)}
+                    className={inputClass}
+                  />
+                )}
+                <select
+                  value={form.durationUnit}
+                  onChange={(event) => {
+                    const nextUnit = event.target.value;
+                    update("durationUnit", nextUnit);
+                    if (nextUnit === "day") update("durationValue", 1);
+                  }}
+                  className={inputClass}
+                >
+                  {durationUnits.map((unit) => (
+                    <option key={unit.value} value={unit.value}>
+                      {unit.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-1 text-xs font-semibold text-muted">
+                Salvo como {durationLabel(durationToMinutes(form.durationValue, form.durationUnit))}.
+              </p>
             </Field>
           </div>
           <label className="flex min-h-14 items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-3">
@@ -212,7 +277,7 @@ export default function Services() {
                         </span>
                       </div>
                       <p className="mt-1 text-sm font-medium text-muted">
-                        {money(service.priceDefault)} · {service.durationMinutes} min
+                        {money(service.priceDefault)} · {durationLabel(service.durationMinutes)}
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
@@ -229,7 +294,46 @@ export default function Services() {
                   </article>
                 ))
               ) : (
-                <EmptyState title="Nenhum serviço cadastrado" description="Crie um serviço para liberar novos agendamentos." />
+                <div>
+                  <EmptyState
+                    title="Cadastre seus servicos para criar agendamentos mais rapido."
+                    description="Voce ainda nao cadastrou servicos."
+                    action={
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          onClick={() => {
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                            window.setTimeout(() => {
+                              window.document.getElementById("services-create-form")?.querySelector("input")?.focus();
+                            }, 220);
+                          }}
+                        >
+                          Cadastrar primeiro servico
+                        </Button>
+                        <Button variant="secondary" onClick={toggleDemoMode}>
+                          {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
+                        </Button>
+                      </div>
+                    }
+                  />
+                  {progress.demoEnabled ? (
+                    <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
+                        Exemplo de servicos (somente visualizacao)
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        {demoServices.map((service) => (
+                          <article key={service.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-3">
+                            <p className="text-sm font-black text-ink">{service.name}</p>
+                            <p className="mt-1 text-sm text-muted">
+                              {money(service.priceDefault)} · {durationLabel(service.durationMinutes)}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
           )}

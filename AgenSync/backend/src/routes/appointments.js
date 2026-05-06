@@ -3,6 +3,7 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { addMinutes, combineDateAndTime, dateRangeFromQuery } from "../utils/dates.js";
 import { normalizeStatus, publicAppointment } from "../utils/formatters.js";
+import { syncAppointmentReminders } from "../services/appointmentReminderService.js";
 import {
   optionalString,
   parseBoolean,
@@ -45,6 +46,7 @@ const professionalSelect = {
 
 const appointmentSelect = {
   id: true,
+  userId: true,
   clientId: true,
   serviceId: true,
   professionalId: true,
@@ -267,6 +269,8 @@ router.post(
       select: appointmentSelect
     });
 
+    await syncAppointmentReminders(appointment);
+
     res.status(201).json({ appointment: publicAppointment(appointment) });
   })
 );
@@ -357,6 +361,8 @@ router.put(
       data: { clientId, serviceId, professionalId, startsAt, endsAt, price, notes, status },
       select: appointmentSelect
     });
+
+    await syncAppointmentReminders(appointment);
 
     res.json({ appointment: publicAppointment(appointment) });
   })

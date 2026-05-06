@@ -1,11 +1,24 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
+import { useRef } from "react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import Button from "../components/Button.jsx";
+import ClientImportSection from "../components/ClientImportSection.jsx";
 import Icon from "../components/Icon.jsx";
 import Message from "../components/Message.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { businessTypes, getSuggestedServices } from "../data/businessOnboarding.js";
+import {
+  DEFAULT_WHATSAPP_REMINDER_MESSAGE,
+  buildWhatsappUrl,
+  isValidWhatsappPhone,
+  normalizeWhatsappPhone,
+  renderReminderMessage,
+  reminderSettingsFromUser,
+  whatsappReminderExample,
+  whatsappReminderOffsets,
+  whatsappReminderVariables
+} from "../services/reminders.js";
 import { money } from "../utils.js";
 
 const normalizeName = (value) =>
@@ -119,12 +132,27 @@ function InfoField({ label, value, icon }) {
   );
 }
 
+function reminderConfigSnapshot(user) {
+  const settings = reminderSettingsFromUser(user);
+  return JSON.stringify({
+    enabled: settings.enabled,
+    offsetMinutes: Number(settings.offsetMinutes),
+    message: settings.message,
+    testPhone: settings.testPhone
+  });
+}
+
 export default function Settings() {
   const { user, updateUserSettings } = useAuth();
   const { showToast } = useToast();
+  const reminderTextareaRef = useRef(null);
   const [businessName, setBusinessName] = useState(user?.businessName || "");
   const [businessLogo, setBusinessLogo] = useState(user?.businessLogo || "");
   const [businessType, setBusinessType] = useState(user?.businessType || "Manicure");
+  const [whatsappReminderEnabled, setWhatsappReminderEnabled] = useState(() => reminderSettingsFromUser(user).enabled);
+  const [whatsappReminderOffsetMinutes, setWhatsappReminderOffsetMinutes] = useState(() => reminderSettingsFromUser(user).offsetMinutes);
+  const [whatsappReminderMessage, setWhatsappReminderMessage] = useState(() => reminderSettingsFromUser(user).message);
+  const [whatsappReminderTestPhone, setWhatsappReminderTestPhone] = useState(() => reminderSettingsFromUser(user).testPhone);
   const [syncSuggestedServices, setSyncSuggestedServices] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -134,7 +162,20 @@ export default function Settings() {
     setBusinessName(user?.businessName || "");
     setBusinessLogo(user?.businessLogo || "");
     if (user?.businessType) setBusinessType(user.businessType);
-  }, [user?.businessLogo, user?.businessName, user?.businessType]);
+    const reminderSettings = reminderSettingsFromUser(user);
+    setWhatsappReminderEnabled(reminderSettings.enabled);
+    setWhatsappReminderOffsetMinutes(reminderSettings.offsetMinutes);
+    setWhatsappReminderMessage(reminderSettings.message);
+    setWhatsappReminderTestPhone(reminderSettings.testPhone);
+  }, [
+    user?.businessLogo,
+    user?.businessName,
+    user?.businessType,
+    user?.whatsappReminderEnabled,
+    user?.whatsappReminderMessage,
+    user?.whatsappReminderOffsetMinutes,
+    user?.whatsappReminderTestPhone
+  ]);
 
   const typeOptions = useMemo(() => {
     if (!businessType || businessTypes.some((type) => type.label === businessType)) {
@@ -161,7 +202,18 @@ export default function Settings() {
   const hasTypeChanged = Boolean(user?.businessType && businessType !== user.businessType);
   const hasBusinessNameChanged = businessName.trim() !== String(user?.businessName || "").trim();
   const hasLogoChanged = businessLogo !== String(user?.businessLogo || "");
-  const hasChanges = hasTypeChanged || hasBusinessNameChanged || hasLogoChanged;
+  const reminderPreview = useMemo(
+    () => renderReminderMessage(whatsappReminderMessage, whatsappReminderExample),
+    [whatsappReminderMessage]
+  );
+  const currentReminderSnapshot = JSON.stringify({
+    enabled: whatsappReminderEnabled,
+    offsetMinutes: Number(whatsappReminderOffsetMinutes),
+    message: whatsappReminderMessage,
+    testPhone: whatsappReminderTestPhone
+  });
+  const hasReminderChanges = currentReminderSnapshot !== reminderConfigSnapshot(user);
+  const hasChanges = hasTypeChanged || hasBusinessNameChanged || hasLogoChanged || hasReminderChanges;
 
   function selectBusinessType(type) {
     setBusinessType(type.label);
@@ -210,6 +262,43 @@ export default function Settings() {
     showToast("Logo removida. Salve para aplicar.");
   }
 
+  function insertReminderVariable(variable) {
+    const textarea = reminderTextareaRef.current;
+    if (!textarea) {
+      setWhatsappReminderMessage((current) => `${current}${variable}`);
+      return;
+    }
+
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const nextMessage = `${whatsappReminderMessage.slice(0, start)}${variable}${whatsappReminderMessage.slice(end)}`;
+    setWhatsappReminderMessage(nextMessage);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + variable.length, start + variable.length);
+    });
+  }
+
+  function restoreDefaultReminderMessage() {
+    setWhatsappReminderMessage(DEFAULT_WHATSAPP_REMINDER_MESSAGE);
+    showToast("Mensagem padrao restaurada. Salve para aplicar.");
+  }
+
+  function testWhatsappReminder() {
+    if (!whatsappReminderTestPhone.trim()) {
+      showToast("Informe um telefone de teste para abrir o WhatsApp.", "error");
+      return;
+    }
+
+    if (!isValidWhatsappPhone(whatsappReminderTestPhone)) {
+      showToast("Telefone de teste invalido. Use DDD + numero.", "error");
+      return;
+    }
+
+    window.open(buildWhatsappUrl(whatsappReminderTestPhone, reminderPreview), "_blank", "noopener,noreferrer");
+    showToast("Teste preparado no WhatsApp.");
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
@@ -220,7 +309,11 @@ export default function Settings() {
       await updateUserSettings({
         businessName: businessName.trim(),
         businessLogo,
-        businessType
+        businessType,
+        whatsappReminderEnabled,
+        whatsappReminderOffsetMinutes: Number(whatsappReminderOffsetMinutes),
+        whatsappReminderMessage: whatsappReminderMessage.trim() || DEFAULT_WHATSAPP_REMINDER_MESSAGE,
+        whatsappReminderTestPhone: normalizeWhatsappPhone(whatsappReminderTestPhone)
       });
 
       if (syncSuggestedServices && hasTypeChanged) {
@@ -447,6 +540,127 @@ export default function Settings() {
               )}
             </div>
           </section>
+
+          <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
+            <SectionHeader
+              eyebrow="WhatsApp"
+              title="Lembretes por WhatsApp"
+              description="Configure uma mensagem padrao para preparar o envio manual pelo WhatsApp. O AgenSync nao envia automaticamente nesta etapa."
+              icon="message"
+            />
+
+            <div className="grid gap-5 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-5">
+                <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-ink">Enviar lembrete por WhatsApp</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">
+                      Ativa a preparacao do lembrete manual nos agendamentos.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={whatsappReminderEnabled}
+                    onChange={(event) => setWhatsappReminderEnabled(event.target.checked)}
+                    className="h-5 w-5 shrink-0 accent-brand"
+                  />
+                </label>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-black text-ink" htmlFor="whatsappReminderOffsetMinutes">
+                      Enviar lembrete quanto tempo antes?
+                    </label>
+                    <select
+                      id="whatsappReminderOffsetMinutes"
+                      value={whatsappReminderOffsetMinutes}
+                      onChange={(event) => setWhatsappReminderOffsetMinutes(Number(event.target.value))}
+                      className={`${inputClass} mt-2`}
+                    >
+                      {whatsappReminderOffsets.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-black text-ink" htmlFor="whatsappReminderTestPhone">
+                      Telefone para teste
+                    </label>
+                    <input
+                      id="whatsappReminderTestPhone"
+                      value={whatsappReminderTestPhone}
+                      onChange={(event) => setWhatsappReminderTestPhone(event.target.value)}
+                      className={`${inputClass} mt-2`}
+                      placeholder="(00) 00000-0000"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="text-sm font-black text-ink" htmlFor="whatsappReminderMessage">
+                      Mensagem padrao
+                    </label>
+                    <Button variant="secondary" size="sm" onClick={restoreDefaultReminderMessage}>
+                      Restaurar padrao
+                    </Button>
+                  </div>
+                  <textarea
+                    ref={reminderTextareaRef}
+                    id="whatsappReminderMessage"
+                    value={whatsappReminderMessage}
+                    onChange={(event) => setWhatsappReminderMessage(event.target.value)}
+                    className={`${inputClass} mt-2 min-h-44 resize-none leading-6`}
+                    maxLength={1200}
+                  />
+                  <p className="mt-2 text-xs font-bold text-muted">
+                    Use variaveis para personalizar cada atendimento. Os campos continuam editaveis antes do envio.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Variaveis disponiveis</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {whatsappReminderVariables.map((variable) => (
+                      <button
+                        key={variable}
+                        type="button"
+                        onClick={() => insertReminderVariable(variable)}
+                        className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-black text-brand transition hover:border-brand/40 hover:bg-white"
+                      >
+                        {variable}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <aside className="space-y-4">
+                <section className="rounded-lg border border-[#DDE6F0] bg-[#F8FAFC] p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">Pre-visualizacao</p>
+                  <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-white p-4 shadow-sm">
+                    <p className="whitespace-pre-wrap text-sm font-semibold leading-6 text-ink">{reminderPreview}</p>
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+                  <p className="text-sm font-black text-ink">Envio manual e seguro</p>
+                  <p className="mt-2 text-xs leading-5 text-muted">
+                    O botao abre o WhatsApp com a mensagem pronta. O envio final ainda depende da confirmacao do profissional.
+                  </p>
+                  <Button className="mt-4 w-full rounded-lg" variant="secondary" onClick={testWhatsappReminder}>
+                    <Icon name="message" className="h-4 w-4" />
+                    Testar no WhatsApp
+                  </Button>
+                </section>
+              </aside>
+            </div>
+          </section>
+
+          <ClientImportSection />
         </div>
 
         <aside className="space-y-5 xl:sticky xl:top-24 xl:self-start">
@@ -482,6 +696,12 @@ export default function Settings() {
               <div className="flex items-center justify-between gap-3 rounded-lg bg-[#F8FAFC] px-3 py-3">
                 <span className="text-sm font-bold text-muted">Serviços sugeridos</span>
                 <span className="text-sm font-black text-ink">{syncSuggestedServices ? "Adicionar" : "Manter"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-[#F8FAFC] px-3 py-3">
+                <span className="text-sm font-bold text-muted">Lembrete WhatsApp</span>
+                <span className={`text-sm font-black ${whatsappReminderEnabled ? "text-success" : "text-muted"}`}>
+                  {whatsappReminderEnabled ? "Ativo" : "Inativo"}
+                </span>
               </div>
             </div>
 

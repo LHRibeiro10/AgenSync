@@ -1,0 +1,8 @@
+{
+  "appId": "br.com.agensync.app",
+  "appName": "AgenSync",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

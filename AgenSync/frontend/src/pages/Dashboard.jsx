@@ -4,8 +4,10 @@ import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import FilterBar, { periodLabel, rangeForPeriod } from "../components/FilterBar.jsx";
+import InstallAppCard from "../components/InstallAppCard.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
+import FirstStepsCard from "../components/onboarding/FirstStepsCard.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -391,6 +393,9 @@ export default function Dashboard() {
         onClear={resetFilters}
         resultLabel={periodLabel(appliedFilters)}
       />
+
+      <FirstStepsCard />
+      <InstallAppCard />
 
       {data ? (
         <>

@@ -159,6 +159,26 @@ export default function ProntuaryFormsTab({ client, care, onCareChange, showToas
     setPendingFormDelete(null);
   }, [client.id]);
 
+  useEffect(() => {
+    function refreshFromStorage(event) {
+      if (event.type === "storage" && event.key !== "agensync_form_templates_v1") return;
+      const nextTemplates = listFormTemplates();
+      setTemplates(nextTemplates);
+      setTemplateForm((current) => {
+        const selected = nextTemplates.find((template) => template.id === current.id) || nextTemplates[0];
+        return templateToForm(selected);
+      });
+    }
+
+    window.addEventListener("storage", refreshFromStorage);
+    window.addEventListener("agensync:form-templates-updated", refreshFromStorage);
+
+    return () => {
+      window.removeEventListener("storage", refreshFromStorage);
+      window.removeEventListener("agensync:form-templates-updated", refreshFromStorage);
+    };
+  }, []);
+
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateForm.id) || templates[0],
     [templateForm.id, templates]

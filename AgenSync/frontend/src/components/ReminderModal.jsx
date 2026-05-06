@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { buildReminderMessage, buildWhatsappUrl, formatReminderDate } from "../services/reminders.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
+import { buildReminderMessage, buildWhatsappUrl, formatReminderDate, isValidWhatsappPhone, reminderSettingsFromUser } from "../services/reminders.js";
 import Button from "./Button.jsx";
 import { inputClass } from "./Field.jsx";
 import Icon from "./Icon.jsx";
@@ -16,14 +17,16 @@ function InfoItem({ label, value }) {
 
 export default function ReminderModal({ appointment, onClose }) {
   const [message, setMessage] = useState("");
+  const { user } = useAuth();
   const { showToast } = useToast();
   const open = Boolean(appointment);
   const phone = appointment?.client?.phone || "";
   const whatsappUrl = buildWhatsappUrl(phone, message);
+  const reminderSettings = reminderSettingsFromUser(user);
 
   useEffect(() => {
-    if (appointment) setMessage(buildReminderMessage(appointment));
-  }, [appointment]);
+    if (appointment) setMessage(buildReminderMessage(appointment, user));
+  }, [appointment, user]);
 
   if (!open) return null;
 
@@ -49,13 +52,18 @@ export default function ReminderModal({ appointment, onClose }) {
   }
 
   function openWhatsapp() {
-    if (!whatsappUrl) {
+    if (!phone) {
       showToast("Cadastre um telefone para abrir o WhatsApp.", "error");
       return;
     }
 
+    if (!isValidWhatsappPhone(phone)) {
+      showToast("Telefone do cliente invalido. Revise o cadastro antes de enviar.", "error");
+      return;
+    }
+
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-    showToast("WhatsApp aberto com a mensagem pronta.");
+    showToast("Lembrete preparado para envio no WhatsApp.");
   }
 
   return (
@@ -70,7 +78,7 @@ export default function ReminderModal({ appointment, onClose }) {
             </span>
             <h2 className="mt-3 text-xl font-black tracking-tight text-ink">Enviar lembrete ao cliente</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-muted">
-              Revise a mensagem antes de copiar ou abrir no WhatsApp.
+              Revise a mensagem configurada antes de copiar ou abrir no WhatsApp.
             </p>
           </div>
           <button
@@ -96,6 +104,12 @@ export default function ReminderModal({ appointment, onClose }) {
         {!phone ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800">
             Este cliente ainda não tem telefone cadastrado. Você ainda pode copiar a mensagem.
+          </div>
+        ) : null}
+
+        {!reminderSettings.enabled ? (
+          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold leading-6 text-brand">
+            Os lembretes por WhatsApp estao desativados nas configuracoes, mas voce ainda pode preparar um envio manual.
           </div>
         ) : null}
 

@@ -28,6 +28,7 @@ export const api = {
 
   listClients: (params) => clientService.listClients(params),
   createClient: (payload) => clientService.createClient(payload),
+  importClients: (payload) => clientService.importClients(payload),
   updateClient: (id, payload) => clientService.updateClient(id, payload),
   deleteClient: (id) => clientService.deleteClient(id),
 

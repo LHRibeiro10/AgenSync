@@ -2,7 +2,9 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt.jsx";
 import { AuthProvider } from "./contexts/AuthContext.jsx";
+import { OnboardingProvider } from "./contexts/OnboardingContext.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import "./styles.css";
 
@@ -16,6 +18,7 @@ const LEGACY_MOCK_KEYS = [
   "agensync_cleanup_legacy_mock_data_v1"
 ];
 const CARE_STORAGE_KEY = "agensync_client_care_v1";
+const FORM_TEMPLATES_KEY = "agensync_form_templates_v1";
 const LEGACY_STORAGE_PREFIX = "agensync_local_";
 const LEGACY_SUPABASE_AUTH_TOKEN_SUFFIX = "-auth-token";
 
@@ -40,6 +43,10 @@ function cleanupLegacyMockStorage() {
     try {
       const parsed = JSON.parse(rawCareStorage);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && "__formTemplates" in parsed) {
+        const templates = Array.isArray(parsed.__formTemplates) ? parsed.__formTemplates : [];
+        if (templates.length && !window.localStorage.getItem(FORM_TEMPLATES_KEY)) {
+          window.localStorage.setItem(FORM_TEMPLATES_KEY, JSON.stringify(templates));
+        }
         delete parsed.__formTemplates;
         window.localStorage.setItem(CARE_STORAGE_KEY, JSON.stringify(parsed));
       }
@@ -56,7 +63,10 @@ createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-          <App />
+          <OnboardingProvider>
+            <App />
+            <PwaUpdatePrompt />
+          </OnboardingProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

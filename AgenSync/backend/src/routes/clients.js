@@ -23,6 +23,53 @@ function jsonArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function cleanString(value, maxLength = 500) {
+  const text = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+  if (!text) return null;
+  return text.slice(0, maxLength);
+}
+
+function cleanDigits(value, maxLength = 32) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits ? digits.slice(0, maxLength) : null;
+}
+
+function parseImportDate(value) {
+  const text = cleanString(value, 16);
+  if (!text) return null;
+  const date = new Date(`${text}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function normalizeImportedClient(row, index) {
+  const name = cleanString(row.name, 160);
+  if (!name || name.length < 2) {
+    return { error: { index, message: "Nome do cliente e obrigatorio." } };
+  }
+
+  return {
+    client: {
+      name,
+      phone: cleanDigits(row.phone, 20) || "",
+      notes: cleanString(row.notes, 3000),
+      cpf: cleanDigits(row.cpf, 14),
+      cnpj: cleanDigits(row.cnpj, 18),
+      rg: cleanString(row.rg, 40),
+      birthDate: parseImportDate(row.birthDate),
+      zipCode: cleanDigits(row.zipCode, 12),
+      address: cleanString(row.address, 200),
+      addressNumber: cleanString(row.addressNumber, 40),
+      addressComplement: cleanString(row.addressComplement, 120),
+      district: cleanString(row.district, 120),
+      state: cleanString(row.state, 2)?.toUpperCase() || null,
+      city: cleanString(row.city, 120),
+      tags: cleanString(row.tags, 500),
+      source: cleanString(row.source, 120),
+      externalId: cleanString(row.externalId, 80)
+    }
+  };
+}
+
 router.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -53,6 +100,86 @@ router.post(
     });
 
     res.status(201).json({ client: publicClient(client) });
+  })
+);
+
+router.post(
+  "/import",
+  asyncHandler(async (req, res) => {
+    const rows = Array.isArray(req.body.clients) ? req.body.clients : [];
+    const skipDuplicates = req.body.skipDuplicates !== false;
+
+    if (!rows.length) {
+      throw new ApiError(400, "Nenhum cliente valido para importar.");
+    }
+
+    if (rows.length > 1000) {
+      throw new ApiError(400, "Importe no maximo 1000 clientes por arquivo.");
+    }
+
+    const normalized = rows.map((row, index) => normalizeImportedClient(row, index));
+    const errors = normalized
+      .filter((item) => item.error)
+      .map((item) => item.error);
+    const candidates = normalized
+      .filter((item) => item.client)
+      .map((item) => item.client);
+
+    const existingClients = await prisma.client.findMany({
+      where: { userId: req.user.id },
+      select: { id: true, name: true, phone: true, cpf: true, externalId: true }
+    });
+
+    const existingKeys = new Set(existingClients.flatMap((client) => [
+      cleanDigits(client.phone) ? `phone:${cleanDigits(client.phone)}` : "",
+      cleanDigits(client.cpf) ? `cpf:${cleanDigits(client.cpf)}` : "",
+      client.externalId ? `external:${client.externalId}` : "",
+      cleanDigits(client.phone) ? `name_phone:${client.name.toLowerCase()}_${cleanDigits(client.phone)}` : ""
+    ].filter(Boolean)));
+
+    const seenKeys = new Set();
+    const duplicates = [];
+    const toCreate = [];
+
+    candidates.forEach((client, index) => {
+      const keys = [
+        client.phone ? `phone:${client.phone}` : "",
+        client.cpf ? `cpf:${client.cpf}` : "",
+        client.externalId ? `external:${client.externalId}` : "",
+        client.phone ? `name_phone:${client.name.toLowerCase()}_${client.phone}` : ""
+      ].filter(Boolean);
+
+      const isDuplicate = keys.some((key) => existingKeys.has(key) || seenKeys.has(key));
+      keys.forEach((key) => seenKeys.add(key));
+
+      if (isDuplicate) {
+        duplicates.push({ index, name: client.name, phone: client.phone, cpf: client.cpf });
+        if (skipDuplicates) return;
+      }
+
+      toCreate.push({
+        userId: req.user.id,
+        ...client
+      });
+    });
+
+    let imported = 0;
+    if (toCreate.length) {
+      const created = await prisma.client.createMany({ data: toCreate });
+      imported = created.count;
+    }
+
+    res.status(201).json({
+      summary: {
+        totalRows: rows.length,
+        imported,
+        duplicatesIgnored: skipDuplicates ? duplicates.length : 0,
+        duplicatesFound: duplicates.length,
+        errors: errors.length
+      },
+      duplicates,
+      errors
+    });
   })
 );
 

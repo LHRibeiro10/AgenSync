@@ -1,6 +1,7 @@
 import {
   createClientApi,
   deleteClientApi,
+  importClientsApi,
   listClientsApi,
   updateClientApi
 } from "../api/modules/clientsApi.js";
@@ -17,6 +18,13 @@ export function createClient(payload) {
   return executeDataSource({
     feature: "clients.create",
     remote: () => createClientApi(payload)
+  });
+}
+
+export function importClients(payload) {
+  return executeDataSource({
+    feature: "clients.import",
+    remote: () => importClientsApi(payload)
   });
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
+import Button from "../components/Button.jsx";
 import AgendaStatusDrawer from "../components/agenda/AgendaStatusDrawer.jsx";
 import CalendarGrid from "../components/agenda/CalendarGrid.jsx";
 import DayCard from "../components/agenda/DayCard.jsx";
@@ -9,15 +10,23 @@ import HeaderAgenda from "../components/agenda/HeaderAgenda.jsx";
 import WeekOverview from "../components/agenda/WeekOverview.jsx";
 import WorkingHoursDrawer from "../components/agenda/WorkingHoursDrawer.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import EmptyState from "../components/EmptyState.jsx";
+import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { addDays, buildWeekDays, formatDateKey, formatWeekLabel, parseDateKey, startOfWeek } from "../components/agenda/agendaDate.js";
 import { appointmentsForDate, buildTimeRows, minutesToTime, timeToMinutes } from "../components/agenda/agendaTime.js";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
+import ReminderModal from "../components/ReminderModal.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { agendaSchedule, defaultWorkingHours } from "../data/agendaConfig.js";
 import { todayInputValue } from "../utils.js";
 
 const workingHoursStorageKey = "agensync_working_hours_v1";
+const demoAgendaAppointments = [
+  { id: "demo-apt-1", time: "09:00", client: "Maria Souza", service: "Corte feminino" },
+  { id: "demo-apt-2", time: "11:00", client: "Lucas Lima", service: "Escova" },
+  { id: "demo-apt-3", time: "15:30", client: "Ana Rocha", service: "Hidratacao" }
+];
 
 const revenueFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -101,6 +110,7 @@ function getBreaksForWeek(days) {
 export default function Agenda() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
   const initialSelectedDate = todayInputValue();
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches ? "day" : "week"
@@ -108,6 +118,7 @@ export default function Agenda() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(parseDateKey(initialSelectedDate)));
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [reminderAppointment, setReminderAppointment] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +164,12 @@ export default function Agenda() {
           endDate: formatDateKey(weekEnd)
         });
 
-        if (active) setAppointments(data.appointments);
+        if (active) {
+          setAppointments(data.appointments);
+          if (data.appointments.length) {
+            markStepComplete("appointment", { toast: false });
+          }
+        }
       } catch (err) {
         if (active) {
           setAppointments([]);
@@ -169,7 +185,7 @@ export default function Agenda() {
     return () => {
       active = false;
     };
-  }, [weekStart, weekEnd, reloadKey]);
+  }, [weekStart, weekEnd, reloadKey, markStepComplete]);
 
   const metrics = useMemo(() => {
     const revenue = appointments
@@ -211,6 +227,10 @@ export default function Agenda() {
     navigate(`/agendamentos?editar=${appointment.id}&acao=reagendar`, {
       state: { appointmentId: appointment.id, intent: "reschedule" }
     });
+  }
+
+  function openReminder(appointment) {
+    setReminderAppointment(appointment);
   }
 
   function createAppointment(date, startTime) {
@@ -307,6 +327,38 @@ export default function Agenda() {
                 <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-line bg-white shadow-sm">
                   <Loading label="Carregando agenda..." />
                 </div>
+              ) : !appointments.length ? (
+                <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+                  <EmptyState
+                    title="Sua agenda esta vazia."
+                    description="Crie seu primeiro atendimento."
+                    action={
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button size="lg" onClick={openCreateForSelectedDay}>
+                          Criar primeiro atendimento
+                        </Button>
+                        <Button size="lg" variant="secondary" onClick={toggleDemoMode}>
+                          {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
+                        </Button>
+                      </div>
+                    }
+                  />
+                  {progress.demoEnabled ? (
+                    <div className="mt-4 border-t border-[#E2E8F0] pt-4">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
+                        Exemplo de agenda preenchida
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {demoAgendaAppointments.map((item) => (
+                          <article key={item.id} className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                            <p className="text-sm font-black text-ink">{item.time} · {item.client}</p>
+                            <p className="mt-1 text-sm text-muted">{item.service}</p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
               ) : (
                 <CalendarGrid
                   days={weekDays}
@@ -365,8 +417,31 @@ export default function Agenda() {
                       />
                     ))
                   ) : (
-                    <div className="flex min-h-24 w-full items-center justify-center rounded-2xl border border-dashed border-line bg-slate-50 px-5 text-sm font-black text-muted">
-                      Nenhum agendamento para este dia
+                    <div>
+                      <EmptyState
+                        title="Sua agenda esta vazia."
+                        description="Crie seu primeiro atendimento."
+                        action={
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button size="md" onClick={openCreateForSelectedDay}>
+                              Criar primeiro atendimento
+                            </Button>
+                            <Button size="md" variant="secondary" onClick={toggleDemoMode}>
+                              {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
+                            </Button>
+                          </div>
+                        }
+                      />
+                      {progress.demoEnabled ? (
+                        <div className="mt-3 space-y-2">
+                          {demoAgendaAppointments.map((item) => (
+                            <article key={item.id} className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                              <p className="text-sm font-black text-ink">{item.time} · {item.client}</p>
+                              <p className="mt-1 text-sm text-muted">{item.service}</p>
+                            </article>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -383,9 +458,12 @@ export default function Agenda() {
         onClose={() => setSelectedAppointment(null)}
         onEdit={editAppointment}
         onReschedule={rescheduleAppointment}
+        onReminder={openReminder}
         onSaveStatus={saveAppointmentStatus}
         onDelete={setPendingDelete}
       />
+
+      <ReminderModal appointment={reminderAppointment} onClose={() => setReminderAppointment(null)} />
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}

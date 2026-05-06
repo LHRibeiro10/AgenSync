@@ -7,6 +7,12 @@ export const endpoints = Object.freeze({
     forgotPassword: "/auth/forgot-password",
     resetPassword: "/auth/reset-password"
   },
+  notificationTokens: "/notification-tokens",
+  notifications: {
+    list: "/notifications",
+    read: (id) => `/notifications/${id}/read`,
+    readAll: "/notifications/read-all"
+  },
   admin: {
     summary: "/admin/summary",
     users: "/admin/users",
@@ -15,6 +21,7 @@ export const endpoints = Object.freeze({
   },
   clients: {
     list: "/clients",
+    import: "/clients/import",
     byId: (id) => `/clients/${id}`
   },
   professionals: {

@@ -9,6 +9,10 @@ export function createClientApi(payload) {
   return httpClient.post(endpoints.clients.list, { body: payload });
 }
 
+export function importClientsApi(payload) {
+  return httpClient.post(endpoints.clients.import, { body: payload });
+}
+
 export function updateClientApi(clientId, payload) {
   return httpClient.put(endpoints.clients.byId(clientId), { body: payload });
 }

@@ -8,12 +8,22 @@ import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
 import ClientCarePanel from "../components/client-care/ClientCarePanel.jsx";
 import { getClientCare, loadClientCare } from "../services/clientCare.js";
+import {
+  importSingleContact,
+  normalizeContactPhone,
+  supportsContactPicker
+} from "../services/contactImportService.js";
 import { listProducts } from "../services/products.js";
 
 const emptyForm = { name: "", phone: "", notes: "" };
+const demoClients = [
+  { id: "demo-client-1", name: "Maria Souza", phone: "(11) 99999-1010", notes: "Prefere atendimento as 9h." },
+  { id: "demo-client-2", name: "Lucas Lima", phone: "(11) 98888-2020", notes: "Cliente recorrente de sexta-feira." }
+];
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -29,14 +39,19 @@ export default function Clients() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [contactImportSupported, setContactImportSupported] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
+  const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
   const selectedClient = clients.find((client) => client.id === selectedClientId);
   const isDocumentsLayout = Boolean(selectedClient && activeTab === "documents");
 
   async function loadClients() {
     const clientsData = await api.listClients();
     setClients(clientsData.clients);
+    if (clientsData.clients.length) {
+      markStepComplete("client", { toast: false });
+    }
   }
 
   async function retryLoadClients() {
@@ -50,6 +65,10 @@ export default function Clients() {
   }
 
   useEffect(() => {
+    setContactImportSupported(supportsContactPicker());
+  }, []);
+
+  useEffect(() => {
     let active = true;
     setLoading(true);
     setError("");
@@ -58,6 +77,9 @@ export default function Clients() {
       .then(([clientsData, servicesData, activeProducts]) => {
         if (!active) return;
         setClients(clientsData.clients);
+        if (clientsData.clients.length) {
+          markStepComplete("client", { toast: false });
+        }
         setServices(servicesData.services);
         setProducts(activeProducts);
       })
@@ -72,7 +94,7 @@ export default function Clients() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [markStepComplete]);
 
   useEffect(() => {
     if (!selectedClientId) return;
@@ -112,6 +134,15 @@ export default function Clients() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function focusCreateForm() {
+    const element = window.document.getElementById("clients-create-form");
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => {
+      const firstInput = element?.querySelector("input");
+      firstInput?.focus();
+    }, 220);
+  }
+
   function openClient(client, tab = "data") {
     setSelectedClientId(client.id);
     setActiveTab(tab);
@@ -130,17 +161,61 @@ export default function Clients() {
     setForm(emptyForm);
   }
 
+  async function importContact() {
+    const result = await importSingleContact();
+
+    if (result.reason === "unsupported") {
+      showToast("Importacao de contatos nao disponivel neste dispositivo.", "error");
+      return;
+    }
+
+    if (result.reason === "cancelled") return;
+
+    if (result.reason === "error") {
+      showToast("Nao foi possivel importar o contato.", "error");
+      return;
+    }
+
+    if (!result.contact?.phone) {
+      showToast("O contato selecionado nao tem telefone.", "error");
+      if (result.contact?.name) {
+        setForm((current) => ({ ...current, name: result.contact.name }));
+      }
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      name: result.contact.name || current.name,
+      phone: result.contact.phone
+    }));
+    showToast("Contato importado. Revise os dados antes de salvar.");
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSaving(true);
     setError("");
+    const payload = {
+      ...form,
+      phone: normalizeContactPhone(form.phone)
+    };
+
+    if (payload.phone.length < 8) {
+      const message = "Informe um telefone valido.";
+      setError(message);
+      showToast(message, "error");
+      setSaving(false);
+      return;
+    }
 
     try {
       if (editing) {
-        await api.updateClient(editing, form);
+        await api.updateClient(editing, payload);
         showToast("Cliente atualizado.");
       } else {
-        await api.createClient(form);
+        await api.createClient(payload);
+        markStepComplete("client", { toast: false });
         showToast("Cliente cadastrado.");
       }
       resetForm();
@@ -217,7 +292,36 @@ export default function Clients() {
                     </article>
                   ))
                 ) : (
-                  <EmptyState title="Nenhum cliente cadastrado" description="Cadastre o primeiro cliente para criar agendamentos." />
+                  <div>
+                    <EmptyState
+                      title="Voce ainda nao cadastrou clientes."
+                      description="Comece adicionando seu primeiro cliente."
+                      action={
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Button onClick={focusCreateForm}>Adicionar primeiro cliente</Button>
+                          <Button variant="secondary" onClick={toggleDemoMode}>
+                            {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
+                          </Button>
+                        </div>
+                      }
+                    />
+                    {progress.demoEnabled ? (
+                      <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
+                          Exemplo de clientes (somente visualizacao)
+                        </p>
+                        <div className="mt-3 space-y-3">
+                          {demoClients.map((client) => (
+                            <article key={client.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-3">
+                              <p className="text-sm font-black text-ink">{client.name}</p>
+                              <p className="mt-1 text-sm text-muted">{client.phone}</p>
+                              <p className="mt-1 text-xs font-medium text-muted">{client.notes}</p>
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 )}
               </div>
             )}
@@ -243,10 +347,26 @@ export default function Clients() {
           </div>
         ) : null}
 
-        <Card as="form" onSubmit={handleSubmit} className="order-2 space-y-4 p-4 sm:p-5 xl:sticky xl:top-24 xl:col-start-1 xl:row-start-1 xl:self-start">
-          <div>
-            <h2 className="text-lg font-black text-ink">{editing ? "Editar cliente" : "Novo cliente"}</h2>
-            <p className="mt-1 text-sm text-muted">Telefone e observações ficam disponíveis nos agendamentos.</p>
+        <Card
+          as="form"
+          id="clients-create-form"
+          onSubmit={handleSubmit}
+          className="order-2 space-y-4 p-4 sm:p-5 xl:sticky xl:top-24 xl:col-start-1 xl:row-start-1 xl:self-start"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-lg font-black text-ink">{editing ? "Editar cliente" : "Novo cliente"}</h2>
+              <p className="mt-1 text-sm text-muted">Telefone e observações ficam disponíveis nos agendamentos.</p>
+            </div>
+            {contactImportSupported ? (
+              <Button variant="secondary" size="sm" onClick={importContact}>
+                Importar contato
+              </Button>
+            ) : (
+              <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-muted">
+                Importacao de contatos nao disponivel neste dispositivo.
+              </p>
+            )}
           </div>
 
           <Field label="Nome">
