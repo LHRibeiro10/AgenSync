@@ -16,7 +16,6 @@ import { addDays, buildWeekDays, formatDateKey, formatWeekLabel, parseDateKey, s
 import { appointmentsForDate, buildTimeRows, minutesToTime, timeToMinutes } from "../components/agenda/agendaTime.js";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
-import ReminderModal from "../components/ReminderModal.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { agendaSchedule, defaultWorkingHours } from "../data/agendaConfig.js";
 import { todayInputValue } from "../utils.js";
@@ -118,7 +117,6 @@ export default function Agenda() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(parseDateKey(initialSelectedDate)));
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [reminderAppointment, setReminderAppointment] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -227,10 +225,6 @@ export default function Agenda() {
     navigate(`/agendamentos?editar=${appointment.id}&acao=reagendar`, {
       state: { appointmentId: appointment.id, intent: "reschedule" }
     });
-  }
-
-  function openReminder(appointment) {
-    setReminderAppointment(appointment);
   }
 
   function createAppointment(date, startTime) {
@@ -458,12 +452,9 @@ export default function Agenda() {
         onClose={() => setSelectedAppointment(null)}
         onEdit={editAppointment}
         onReschedule={rescheduleAppointment}
-        onReminder={openReminder}
         onSaveStatus={saveAppointmentStatus}
         onDelete={setPendingDelete}
       />
-
-      <ReminderModal appointment={reminderAppointment} onClose={() => setReminderAppointment(null)} />
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}

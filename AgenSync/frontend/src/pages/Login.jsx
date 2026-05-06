@@ -321,7 +321,7 @@ export default function Login() {
             <div className="relative z-10 page-transition">
               <div className="flex w-full justify-center">
                 <BrandLogo
-                  className="h-32 w-32 sm:h-40 sm:w-40"
+                  className="login-brand-logo h-32 w-32 sm:h-40 sm:w-40"
                   imageClassName="opacity-100"
                 />
               </div>

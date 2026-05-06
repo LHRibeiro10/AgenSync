@@ -5,7 +5,6 @@ import BrandLogo from "./BrandLogo.jsx";
 import Button from "./Button.jsx";
 import Icon from "./Icon.jsx";
 import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
-import NotificationBell from "./NotificationBell.jsx";
 import PageTransition from "./PageTransition.jsx";
 import WelcomeOnboardingModal from "./onboarding/WelcomeOnboardingModal.jsx";
 
@@ -76,8 +75,9 @@ function AccountMark({ user, size = "sm" }) {
 
 function SidebarBrand() {
   return (
-    <div className="flex items-center justify-center pb-4 pt-2">
-      <BrandLogo className="h-20 w-20 shrink-0" />
+    <div className="flex items-center justify-center gap-3 pb-3 pt-1">
+      <BrandLogo className="h-14 w-14 shrink-0" />
+      <span className="text-xl font-black tracking-tight text-white">AgenSync</span>
     </div>
   );
 }
@@ -148,7 +148,7 @@ export default function Layout() {
             Novo agendamento
           </button>
 
-          <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
+          <nav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
             {visibleNavigation.map((item) => (
               <NavLink
                 key={item.to}
@@ -163,10 +163,7 @@ export default function Layout() {
             ))}
           </nav>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
-            <div className="mb-3 flex justify-end">
-              <NotificationBell />
-            </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
             <div className="flex items-center gap-3">
               <AccountMark user={user} />
               <div className="min-w-0">
@@ -211,7 +208,6 @@ export default function Layout() {
               {mobileAction.label}
             </button>
           ) : null}
-          <NotificationBell />
         </div>
       </header>
 
@@ -223,10 +219,11 @@ export default function Layout() {
             onClick={closeDrawer}
             aria-label="Fechar menu"
           />
-          <aside className="agensync-drawer-panel relative flex w-[86vw] max-w-[340px] flex-col rounded-r-[32px] border-r border-white/10 bg-gradient-to-b from-[#111827] via-[#0F172A] to-[#020617] p-4 shadow-[24px_0_70px_rgba(15,23,42,0.42)]">
+          <aside className="agensync-drawer-panel relative flex h-full w-[86vw] max-w-[320px] flex-col rounded-r-[30px] border-r border-white/10 bg-gradient-to-b from-[#111827] via-[#0F172A] to-[#020617] p-4 shadow-[24px_0_70px_rgba(15,23,42,0.42)]">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-1 justify-center pt-1">
-                <BrandLogo className="h-20 w-20 shrink-0" />
+              <div className="flex flex-1 items-center justify-center gap-3 pt-1">
+                <BrandLogo className="h-12 w-12 shrink-0" />
+                <span className="text-lg font-black tracking-tight text-white">AgenSync</span>
               </div>
               <button
                 type="button"
@@ -250,7 +247,7 @@ export default function Layout() {
               Novo agendamento
             </button>
 
-            <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
+            <nav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
               {visibleMobileNavigation.map((item) => (
                 <NavLink
                   key={item.to}

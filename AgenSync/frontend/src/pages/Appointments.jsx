@@ -10,7 +10,6 @@ import Icon from "../components/Icon.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
-import ReminderModal from "../components/ReminderModal.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -115,7 +114,6 @@ function AppointmentManager({
   onClose,
   onEdit,
   onDelete,
-  onReminder,
   onComplete
 }) {
   return (
@@ -161,10 +159,6 @@ function AppointmentManager({
                   <div className="flex flex-wrap gap-2 lg:justify-end">
                     <Button variant="success" onClick={() => onComplete(appointment)}>
                       Concluir
-                    </Button>
-                    <Button variant="secondary" onClick={() => onReminder(appointment)}>
-                      <Icon name="message" className="h-4 w-4" />
-                      Lembrete
                     </Button>
                     <Button variant="secondary" onClick={() => onEdit(appointment)}>
                       Editar
@@ -225,7 +219,6 @@ export default function Appointments() {
   const [editing, setEditing] = useState(null);
   const [editIntent, setEditIntent] = useState("");
   const [managerOpen, setManagerOpen] = useState(false);
-  const [reminderAppointment, setReminderAppointment] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingConflict, setPendingConflict] = useState(null);
   const [quickClientOpen, setQuickClientOpen] = useState(false);
@@ -571,10 +564,6 @@ export default function Appointments() {
     }
   }
 
-  function openReminder(appointment) {
-    setReminderAppointment(appointment);
-  }
-
   const formProfessionals = activeProfessionalsForForm();
   const formServices = activeServicesForForm();
   const isRescheduling = editing && editIntent === "reschedule";
@@ -800,7 +789,6 @@ export default function Appointments() {
           onClose={() => setManagerOpen(false)}
           onEdit={startEdit}
           onDelete={setPendingDelete}
-          onReminder={openReminder}
           onComplete={(appointment) => updateStatus(appointment, "concluido")}
         />
       ) : null}
@@ -943,8 +931,6 @@ export default function Appointments() {
           </Field>
         </div>
       </QuickCreateModal>
-
-      <ReminderModal appointment={reminderAppointment} onClose={() => setReminderAppointment(null)} />
     </div>
   );
 }

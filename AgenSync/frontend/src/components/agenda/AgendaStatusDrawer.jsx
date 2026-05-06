@@ -22,7 +22,6 @@ export default function AgendaStatusDrawer({
   onClose,
   onEdit,
   onReschedule,
-  onReminder,
   onSaveStatus,
   onDelete
 }) {
@@ -159,9 +158,6 @@ export default function AgendaStatusDrawer({
               Reagendar
             </Button>
           </div>
-          <Button variant="secondary" onClick={() => onReminder?.(appointment)}>
-            Enviar lembrete
-          </Button>
           <Button variant="danger" onClick={() => onDelete(appointment)} disabled={saving}>
             Excluir agendamento
           </Button>
