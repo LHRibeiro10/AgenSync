@@ -12,6 +12,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { listExpenses, sumExpenses } from "../services/expenses.js";
 import { listProductSales, sumProductSales } from "../services/products.js";
 import { listSubscriptionCycles, subscriptionSummary, sumPaidSubscriptionCycles } from "../services/subscriptions.js";
@@ -179,6 +180,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { showToast } = useToast();
+  const { progress } = useOnboarding();
 
   async function load(nextFilters = appliedFilters) {
     setLoading(true);
@@ -394,7 +396,7 @@ export default function Dashboard() {
         resultLabel={periodLabel(appliedFilters)}
       />
 
-      <FirstStepsCard />
+      {!progress.hasSeenWelcome ? <FirstStepsCard /> : null}
       <InstallAppCard />
 
       {data ? (

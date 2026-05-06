@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["AgenSync.png", "AgenSync_sidebar.png", "pwa-192.png", "pwa-512.png", "maskable-icon-512.png"],
+      includeAssets: ["app-logo.png", "AgenSync.png", "AgenSync_sidebar.png", "pwa-192.png", "pwa-512.png", "maskable-icon-512.png"],
       manifest: {
         name: "AgenSync",
         short_name: "AgenSync",

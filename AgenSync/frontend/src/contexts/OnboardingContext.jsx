@@ -152,9 +152,12 @@ export function OnboardingProvider({ children }) {
         client: Array.isArray(clientsData?.clients) && clientsData.clients.length > 0,
         appointment: Array.isArray(appointmentsData?.appointments) && appointmentsData.appointments.length > 0
       };
+      const hasExistingSetup = Object.values(nextSteps).some(Boolean);
 
       setProgress((current) => ({
         ...current,
+        hasSeenWelcome: current.hasSeenWelcome || hasExistingSetup,
+        skippedTour: current.skippedTour || (!current.hasSeenWelcome && hasExistingSetup),
         steps: {
           service: current.steps.service || nextSteps.service,
           client: current.steps.client || nextSteps.client,

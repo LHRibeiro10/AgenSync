@@ -72,6 +72,68 @@ function isEmptyRow(row) {
   return Object.values(row || {}).every((value) => !String(value ?? "").trim());
 }
 
+function rowsFromMatrix(matrix) {
+  const [headers = [], ...body] = matrix;
+  return body.map((values) =>
+    Object.fromEntries(headers.map((header, index) => [String(header || "").trim(), values[index] ?? ""]))
+  );
+}
+
+function detectCsvDelimiter(text) {
+  const firstLine = String(text || "").split(/\r?\n/).find((line) => line.trim()) || "";
+  const candidates = [",", ";", "\t"];
+  return candidates.reduce((best, current) => {
+    const bestCount = firstLine.split(best).length;
+    const currentCount = firstLine.split(current).length;
+    return currentCount > bestCount ? current : best;
+  }, ",");
+}
+
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  const delimiter = detectCsvDelimiter(text);
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (char === delimiter && !quoted) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell);
+  rows.push(row);
+  return rowsFromMatrix(rows.filter((item) => item.some((value) => String(value || "").trim())));
+}
+
 export function normalizeImportedClient(rawRow, lineNumber = 0) {
   const row = {};
 
@@ -115,18 +177,17 @@ export async function parseSimpleAgendaClientsFile(file) {
   if (!file) throw new Error("Selecione uma planilha para importar.");
 
   const extension = file.name.split(".").pop()?.toLowerCase();
-  if (!["csv", "xlsx", "xls"].includes(extension || "")) {
-    throw new Error("Arquivo invalido. Use CSV, XLS ou XLSX.");
+  if (!["csv", "xlsx"].includes(extension || "")) {
+    throw new Error("Arquivo invalido. Use CSV ou XLSX.");
   }
 
-  const buffer = await file.arrayBuffer();
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) throw new Error("A planilha esta vazia.");
-
-  const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+  let rows = [];
+  if (extension === "csv") {
+    rows = parseCsvText(await file.text());
+  } else {
+    const { default: readXlsxFile } = await import("read-excel-file/browser");
+    rows = rowsFromMatrix(await readXlsxFile(file));
+  }
   const nonEmptyRows = rows.filter((row) => !isEmptyRow(row));
   const headers = Object.keys(nonEmptyRows[0] || {});
   const normalizedHeaders = new Set(headers.map(normalizeHeader));
