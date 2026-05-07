@@ -5,6 +5,7 @@ import Button from "../components/Button.jsx";
 import ClientImportSection from "../components/ClientImportSection.jsx";
 import Icon from "../components/Icon.jsx";
 import Message from "../components/Message.jsx";
+import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { businessTypes, getSuggestedServices } from "../data/businessOnboarding.js";
 import { money } from "../utils.js";
@@ -84,7 +85,7 @@ function LogoPreview({ logo, name, className = "" }) {
     <img
       src={logo}
       alt={`Logo ${name || "do negócio"}`}
-      className={`h-full w-full rounded-lg object-contain ${className}`}
+      className={`h-full w-full rounded-lg object-cover ${className}`}
     />
   ) : (
     <Icon name="building" className={`h-8 w-8 ${className}`} />
@@ -123,6 +124,7 @@ function InfoField({ label, value, icon }) {
 export default function Settings() {
   const { user, updateUserSettings } = useAuth();
   const { showToast } = useToast();
+  const { startTour } = useOnboarding();
   const [businessName, setBusinessName] = useState(user?.businessName || "");
   const [businessLogo, setBusinessLogo] = useState(user?.businessLogo || "");
   const [businessType, setBusinessType] = useState(user?.businessType || "Manicure");
@@ -280,7 +282,7 @@ export default function Settings() {
 
             <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[210px_minmax(0,1fr)]">
               <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-brand/30 bg-brand/5 p-4 text-center">
-                <span className="flex h-20 w-20 items-center justify-center rounded-lg bg-white p-2 text-brand shadow-sm">
+                <span className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-white text-brand shadow-sm">
                   <LogoPreview logo={businessLogo} name={businessName} />
                 </span>
                 <p className="mt-4 text-sm font-black text-ink">Logo do negócio</p>
@@ -333,7 +335,7 @@ export default function Settings() {
                 <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-muted">Prévia no sistema</p>
                   <div className="mt-3 flex items-center gap-3 rounded-lg bg-white p-3 shadow-sm">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand p-1.5 text-white">
+                    <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-brand text-white">
                       <LogoPreview logo={businessLogo} name={businessName} className={businessLogo ? "bg-white" : "h-5 w-5"} />
                     </span>
                     <div className="min-w-0">
@@ -495,6 +497,15 @@ export default function Settings() {
           </section>
         </aside>
       </section>
+      <button
+        type="button"
+        onClick={startTour}
+        className="fixed bottom-5 left-5 z-[54] inline-flex min-h-12 max-w-[calc(100vw-6rem)] items-center justify-center gap-2 rounded-full border border-blue-200 bg-white px-4 text-sm font-black text-brand shadow-[0_16px_34px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 active:translate-y-0 active:scale-95 sm:bottom-6 sm:left-6"
+        aria-label="Assistir tutorial"
+      >
+        <Icon name="appointments" className="h-4 w-4" />
+        Assistir tutorial
+      </button>
     </form>
   );
 }

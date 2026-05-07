@@ -34,6 +34,15 @@ function cleanDigits(value, maxLength = 32) {
   return digits ? digits.slice(0, maxLength) : null;
 }
 
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "sim", "yes"].includes(normalized)) return true;
+  if (["false", "0", "nao", "no"].includes(normalized)) return false;
+  return fallback;
+}
+
 function parseImportDate(value) {
   const text = cleanString(value, 16);
   if (!text) return null;
@@ -78,10 +87,14 @@ router.get(
       maxPageSize: 300
     });
 
+    const includeInactive = parseBoolean(req.query.includeInactive);
     const clients = await prisma.client.findMany({
-      where: { userId: req.user.id },
+      where: {
+        userId: req.user.id,
+        ...(includeInactive ? {} : { isActive: true })
+      },
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
-      orderBy: [{ name: "asc" }]
+      orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 
     res.json({ clients: clients.map(publicClient) });
@@ -242,7 +255,12 @@ router.put(
 
     const client = await prisma.client.update({
       where: { id: req.params.id },
-      data: { name, phone, notes }
+      data: {
+        name,
+        phone,
+        notes,
+        ...(req.body.isActive === undefined ? {} : { isActive: parseBoolean(req.body.isActive, true) })
+      }
     });
 
     res.json({ client: publicClient(client) });

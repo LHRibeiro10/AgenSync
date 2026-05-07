@@ -39,15 +39,18 @@ export default function Clients() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState("");
   const [contactImportSupported, setContactImportSupported] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
   const selectedClient = clients.find((client) => client.id === selectedClientId);
   const isDocumentsLayout = Boolean(selectedClient && activeTab === "documents");
+  const activeClientsCount = clients.filter((client) => client.isActive !== false).length;
+  const inactiveClientsCount = clients.length - activeClientsCount;
 
   async function loadClients() {
-    const clientsData = await api.listClients();
+    const clientsData = await api.listClients({ includeInactive: true });
     setClients(clientsData.clients);
     if (clientsData.clients.length) {
       markStepComplete("client", { toast: false });
@@ -73,7 +76,7 @@ export default function Clients() {
     setLoading(true);
     setError("");
 
-    Promise.all([api.listClients(), api.listServices({ active: true }), listProducts({ activeOnly: true })])
+    Promise.all([api.listClients({ includeInactive: true }), api.listServices({ active: true }), listProducts({ activeOnly: true })])
       .then(([clientsData, servicesData, activeProducts]) => {
         if (!active) return;
         setClients(clientsData.clients);
@@ -249,6 +252,28 @@ export default function Clients() {
     }
   }
 
+  async function toggleClientStatus(client) {
+    const nextIsActive = client.isActive === false;
+    setStatusUpdatingId(client.id);
+    setError("");
+
+    try {
+      await api.updateClient(client.id, {
+        name: client.name,
+        phone: client.phone,
+        notes: client.notes || "",
+        isActive: nextIsActive
+      });
+      showToast(nextIsActive ? "Cliente reativado." : "Cliente inativado.");
+      await loadClients();
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setStatusUpdatingId("");
+    }
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader title="Clientes" description="Dados, histórico, fichas personalizadas, evolução, fotos, documentos, orçamentos e assinatura em um só lugar." />
@@ -263,7 +288,10 @@ export default function Clients() {
       >
         <div className="order-3 min-w-0 xl:col-start-2">
           <Card className="overflow-hidden">
-            <CardHeader title="Clientes cadastrados" description={`${clients.length} registro(s) no app local`} />
+            <CardHeader
+              title="Clientes cadastrados"
+              description={`${activeClientsCount} ativo(s)${inactiveClientsCount ? `, ${inactiveClientsCount} inativo(s)` : ""}`}
+            />
             {loading ? (
               <Loading label="Carregando clientes..." />
             ) : (
@@ -277,16 +305,33 @@ export default function Clients() {
                       }`}
                     >
                       <div className="min-w-0">
-                        <p className="text-base font-black text-ink">{client.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-base font-black text-ink">{client.name}</p>
+                          {client.isActive === false ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">
+                              Inativo
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="text-sm font-medium text-muted">{client.phone}</p>
                         {client.notes ? <p className="mt-2 text-sm text-muted">{client.notes}</p> : null}
                       </div>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 md:min-w-[260px]">
+                      <div className="grid grid-cols-2 gap-2 md:min-w-[360px]">
                         <Button variant="secondary" onClick={() => openClient(client)}>
                           Atendimento
                         </Button>
                         <Button variant="secondary" onClick={() => startEdit(client)}>
                           Editar
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          loading={statusUpdatingId === client.id}
+                          onClick={() => toggleClientStatus(client)}
+                        >
+                          {client.isActive === false ? "Reativar" : "Inativar"}
+                        </Button>
+                        <Button variant="danger" onClick={() => setPendingDelete(client)}>
+                          Excluir
                         </Button>
                       </div>
                     </article>

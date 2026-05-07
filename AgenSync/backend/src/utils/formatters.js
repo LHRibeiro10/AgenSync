@@ -70,6 +70,7 @@ export function publicClient(client) {
     source: client.source || "",
     externalId: client.externalId || "",
     notes: client.notes || "",
+    isActive: client.isActive !== false,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt
   };

@@ -22,11 +22,16 @@ function deviceInfo() {
     /iPad|iPhone|iPod/.test(userAgent) ||
     (platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
   const isAndroid = /Android/i.test(userAgent);
+  const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(userAgent);
+  const isChromium = /Chrome|CriOS|Edg|OPR/i.test(userAgent);
 
   return {
     isAndroid,
     isIOS,
-    isDesktop: !isAndroid && !isIOS
+    isDesktop: !isAndroid && !isIOS,
+    isSafari,
+    isChromium,
+    platform: isIOS ? "ios" : isAndroid ? "android" : "desktop"
   };
 }
 

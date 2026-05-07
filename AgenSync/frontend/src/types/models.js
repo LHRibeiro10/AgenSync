@@ -15,6 +15,7 @@
  * @property {string} name
  * @property {string} phone
  * @property {string} [notes]
+ * @property {boolean} isActive
  * @property {string} createdAt
  * @property {string} updatedAt
  */

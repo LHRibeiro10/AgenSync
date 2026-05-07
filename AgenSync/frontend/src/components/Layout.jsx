@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import BrandLogo from "./BrandLogo.jsx";
 import Button from "./Button.jsx";
+import ContextHelpWidget from "./ContextHelpWidget.jsx";
 import Icon from "./Icon.jsx";
 import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
 import PageTransition from "./PageTransition.jsx";
@@ -65,9 +66,9 @@ function AccountMark({ user, size = "sm" }) {
       className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden bg-white/10 text-sm font-extrabold text-white ring-1 ring-white/10`}
     >
       {user?.businessLogo ? (
-        <img src={user.businessLogo} alt={`Logo ${user.businessName || "do negócio"}`} className="h-full w-full bg-white object-contain p-1" />
+        <img src={user.businessLogo} alt={`Logo ${user.businessName || "do negócio"}`} className="h-full w-full object-cover" />
       ) : (
-        user?.name?.slice(0, 1) || "A"
+        (user?.businessName || user?.name)?.slice(0, 1) || "A"
       )}
     </div>
   );
@@ -118,6 +119,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const accountName = user?.businessName || user?.name || "Seu negócio";
   const mobileTitle = titleFromPath(location.pathname);
   const mobileAction = mobileActionFor(location.pathname, navigate);
   const visibleNavigation = navigation.filter((item) => !item.adminOnly || isAdmin);
@@ -166,7 +168,7 @@ export default function Layout() {
             <div className="flex items-center gap-3">
               <AccountMark user={user} />
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-white">{user?.name}</p>
+                <p className="truncate text-sm font-bold text-white">{accountName}</p>
                 <p className="truncate text-xs text-slate-400">{user?.email}</p>
               </div>
             </div>
@@ -265,7 +267,7 @@ export default function Layout() {
               <div className="flex items-center gap-3">
                 <AccountMark user={user} size="lg" />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-white">{user?.name}</p>
+                  <p className="truncate text-sm font-black text-white">{accountName}</p>
                   <p className="truncate text-xs font-medium text-slate-400">{user?.email}</p>
                 </div>
               </div>
@@ -287,6 +289,7 @@ export default function Layout() {
 
       <WelcomeOnboardingModal />
       <GuidedTourPopover />
+      <ContextHelpWidget />
     </div>
   );
 }

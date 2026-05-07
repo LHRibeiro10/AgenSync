@@ -118,6 +118,7 @@ model Client {
   source       String?
   externalId   String?
   notes        String?
+  isActive     Boolean           @default(true)
   appointments Appointment[]
   productSales ProductSale[]
   monthlyPlans MonthlyPlan[]
@@ -128,6 +129,7 @@ model Client {
   @@index([userId])
   @@index([userId, name])
   @@index([userId, phone])
+  @@index([userId, isActive])
   @@index([userId, cpf])
   @@index([userId, externalId])
   @@index([userId, createdAt])
