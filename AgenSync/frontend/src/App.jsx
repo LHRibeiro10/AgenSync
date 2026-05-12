@@ -102,16 +102,16 @@ export default function App() {
           <Route path="agenda/diaria" element={<Agenda initialView="day" />} />
           <Route path="agenda/horarios" element={<Agenda focus="workingHours" />} />
           <Route path="agendamentos" element={<Appointments />} />
-          <Route path="clientes" element={<Clients />} />
-          <Route path="clientes/atendimento" element={<Clients />} />
-          <Route path="clientes/fichas" element={<Clients />} />
-          <Route path="clientes/evolucao" element={<Clients />} />
-          <Route path="clientes/documentos" element={<Clients />} />
-          <Route path="clientes/linha-do-tempo" element={<Clients />} />
+          <Route path="clientes" element={<Clients section="clients" />} />
+          <Route path="clientes/atendimento" element={<Clients section="attendance" />} />
+          <Route path="clientes/fichas" element={<Clients section="forms" />} />
+          <Route path="clientes/evolucao" element={<Clients section="evolution" />} />
+          <Route path="clientes/documentos" element={<Clients section="documents" />} />
+          <Route path="clientes/linha-do-tempo" element={<Clients section="timeline" />} />
           <Route path="profissionais" element={<Professionals />} />
           <Route path="servicos" element={<Services />} />
-          <Route path="produtos" element={<Products />} />
-          <Route path="produtos/estoque" element={<Products />} />
+          <Route path="produtos" element={<Products mode="catalog" />} />
+          <Route path="produtos/estoque" element={<Products mode="stock" />} />
           <Route
             path="produtos/movimentacoes"
             element={<ModulePlaceholder title="Movimentacoes de estoque" description="Base para entradas, saidas, ajustes, perdas e historico de estoque." items={["Entrada", "Saida", "Ajuste manual", "Perda", "Validade", "Fornecedor"]} />}
@@ -124,14 +124,14 @@ export default function App() {
             path="produtos/categorias"
             element={<ModulePlaceholder title="Categorias" description="Preparado para organizar catalogo, estoque e relatorios por familia de produtos." items={["Categorias", "Margem por grupo", "Alertas por grupo"]} />}
           />
-          <Route path="vendas" element={<ProductSales />} />
-          <Route path="vendas/nova" element={<ProductSales />} />
-          <Route path="vendas/historico" element={<ProductSales />} />
+          <Route path="vendas" element={<ProductSales mode="new" />} />
+          <Route path="vendas/nova" element={<ProductSales mode="new" />} />
+          <Route path="vendas/historico" element={<ProductSales mode="history" />} />
           <Route
             path="vendas/comissoes"
             element={<ModulePlaceholder title="Comissoes" description="Base para regras de comissao por profissional, produto, servico e periodo." items={["Profissional", "Percentual", "Venda", "Pagamento", "Periodo"]} />}
           />
-          <Route path="vendas/relatorios" element={<Finance />} />
+          <Route path="vendas/relatorios" element={<ProductSales mode="reports" />} />
           <Route path="mensalidades" element={<Subscriptions />} />
           <Route path="historico" element={<History />} />
           <Route path="financeiro" element={<Finance />} />

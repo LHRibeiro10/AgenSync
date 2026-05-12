@@ -26,6 +26,36 @@ const emptyForm = {
   notes: ""
 };
 
+const salesViews = {
+  new: {
+    title: "Nova venda",
+    description: "Venda produtos com baixa automatica de estoque.",
+    eyebrow: "Venda rapida",
+    panelTitle: "Vender produto",
+    panelDescription: "Ao salvar, o estoque baixa automaticamente.",
+    listTitle: "Vendas recentes",
+    showForm: true
+  },
+  history: {
+    title: "Historico de vendas",
+    description: "Consulte vendas por periodo, produto, cliente e busca livre.",
+    eyebrow: "Consulta",
+    panelTitle: "Filtros avancados",
+    panelDescription: "Use periodo, produto, cliente e busca para localizar vendas.",
+    listTitle: "Historico filtrado",
+    showForm: false
+  },
+  reports: {
+    title: "Relatorios de vendas",
+    description: "Acompanhe total vendido, margem estimada, ticket medio e alertas de estoque.",
+    eyebrow: "Analise",
+    panelTitle: "Indicadores",
+    panelDescription: "Resumo operacional das vendas de produtos.",
+    listTitle: "Base do relatorio",
+    showForm: false
+  }
+};
+
 function QuickCreateModal({ open, title, description, children, saving, onSubmit, onClose }) {
   if (!open) return null;
 
@@ -55,7 +85,8 @@ function QuickCreateModal({ open, title, description, children, saving, onSubmit
   );
 }
 
-export default function ProductSales() {
+export default function ProductSales({ mode = "new" }) {
+  const view = salesViews[mode] || salesViews.new;
   const initialRange = rangeForPeriod("thisMonth");
   const [filters, setFilters] = useState({
     period: "thisMonth",
@@ -215,19 +246,17 @@ export default function ProductSales() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader
-        title="Vendas"
-        description="Registre vendas avulsas de produtos e acompanhe o impacto no financeiro."
-      />
+      <PageHeader title={view.title} description={view.description} />
       <Message type="error">{error}</Message>
 
-      <section className="grid gap-5 xl:grid-cols-[390px_1fr]">
+      <section className={`grid gap-5 ${view.showForm ? "xl:grid-cols-[390px_1fr]" : ""}`}>
+        {view.showForm ? (
         <Card as="form" onSubmit={handleSubmit} className="space-y-4 p-5 xl:sticky xl:top-8 xl:self-start">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">Nova venda</p>
-            <h2 className="mt-2 text-xl font-black tracking-tight text-ink">Vender produto</h2>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">{view.eyebrow}</p>
+            <h2 className="mt-2 text-xl font-black tracking-tight text-ink">{view.panelTitle}</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-muted">
-              Ao salvar, o estoque baixa automaticamente.
+              {view.panelDescription}
             </p>
           </div>
 
@@ -326,8 +355,16 @@ export default function ProductSales() {
             Registrar venda
           </Button>
         </Card>
+        ) : null}
 
         <div className="space-y-5">
+          {!view.showForm ? (
+            <Card className="p-4 sm:p-5">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">{view.eyebrow}</p>
+              <p className="mt-2 text-sm font-bold leading-6 text-muted">{view.panelDescription}</p>
+            </Card>
+          ) : null}
+
           <section className="grid gap-4 sm:grid-cols-3">
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Vendas</p>
@@ -367,7 +404,7 @@ export default function ProductSales() {
           />
 
           <Card className="overflow-hidden">
-            <CardHeader title="Vendas registradas" description={`${sales.length} venda(s) encontradas`} />
+            <CardHeader title={view.listTitle} description={`${sales.length} venda(s) encontradas`} />
             <div className="compact-scroll-list divide-y divide-[#E2E8F0]">
               {loading ? (
                 <Loading label="Carregando vendas..." />

@@ -25,7 +25,17 @@ const demoClients = [
   { id: "demo-client-2", name: "Lucas Lima", phone: "(11) 98888-2020", notes: "Cliente recorrente de sexta-feira." }
 ];
 
-export default function Clients() {
+const clientSections = {
+  clients: ["Clientes", "Cadastro, status e dados principais dos clientes.", "data", "Cadastro", "Atendimento", "Cadastre, edite e inative clientes sem misturar prontuario e documentos."],
+  attendance: ["Atendimento", "Abra o atendimento completo do cliente com historico, dados e registros vinculados.", "history", "Operacao", "Abrir atendimento", "Selecione um cliente para iniciar o atendimento contextual."],
+  forms: ["Fichas", "Fichas personalizadas e anamnese ficam conectadas ao cliente.", "forms", "Prontuario", "Ver fichas", "Escolha um cliente para preencher ou revisar fichas."],
+  evolution: ["Evolucao", "Registre evolucao, observacoes tecnicas e fotos do processo.", "evolution", "Acompanhamento", "Ver evolucao", "Escolha um cliente para registrar uma nova evolucao."],
+  documents: ["Documentos", "Documentos, termos e assinatura ficam organizados por cliente.", "documents", "Arquivos", "Ver documentos", "Escolha um cliente para gerenciar documentos e assinaturas."],
+  timeline: ["Linha do tempo", "Uma visao cronologica do relacionamento, fichas, evolucoes e atendimentos.", "timeline", "Historico completo", "Ver linha do tempo", "Escolha um cliente para acompanhar toda a jornada."]
+};
+
+export default function Clients({ section = "clients" }) {
+  const [sectionTitle, sectionDescription, sectionTab, sectionEyebrow, sectionAction, sectionFocus] = clientSections[section] || clientSections.clients;
   const [clients, setClients] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
@@ -70,6 +80,10 @@ export default function Clients() {
   useEffect(() => {
     setContactImportSupported(supportsContactPicker());
   }, []);
+
+  useEffect(() => {
+    setActiveTab(sectionTab);
+  }, [sectionTab]);
 
   useEffect(() => {
     let active = true;
@@ -276,10 +290,15 @@ export default function Clients() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Clientes" description="Dados, histórico, fichas personalizadas, evolução, fotos, documentos, orçamentos e assinatura em um só lugar." />
+      <PageHeader title={sectionTitle} description={sectionDescription} />
       <Message type="error" actionLabel="Tentar novamente" onAction={retryLoadClients}>
         {error}
       </Message>
+
+      <Card className="p-4 sm:p-5">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">{sectionEyebrow}</p>
+        <p className="mt-2 text-sm font-bold leading-6 text-muted">{sectionFocus}</p>
+      </Card>
 
       <section
         className={`grid xl:items-start ${
@@ -317,8 +336,8 @@ export default function Clients() {
                         {client.notes ? <p className="mt-2 text-sm text-muted">{client.notes}</p> : null}
                       </div>
                       <div className="grid grid-cols-2 gap-2 md:min-w-[360px]">
-                        <Button variant="secondary" onClick={() => openClient(client)}>
-                          Atendimento
+                        <Button variant="secondary" onClick={() => openClient(client, sectionTab)}>
+                          {sectionAction}
                         </Button>
                         <Button variant="secondary" onClick={() => startEdit(client)}>
                           Editar

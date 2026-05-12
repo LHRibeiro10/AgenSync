@@ -73,5 +73,7 @@ export function canAccessPermission(user, permission) {
 }
 
 export function canAccessAdmin(user) {
-  return getWorkspaceRole(user) === workspaceRoles.OWNER || normalizeRole(user?.role) === "admin";
+  const legacyRole = normalizeRole(user?.role);
+  const workspaceRole = getWorkspaceRole(user);
+  return legacyRole === "admin" || workspaceRole === workspaceRoles.ADMIN;
 }

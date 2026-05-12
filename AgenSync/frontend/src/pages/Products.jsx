@@ -38,6 +38,27 @@ const stockFilters = [
   { value: "out", label: "Sem estoque" }
 ];
 
+const productViews = {
+  catalog: {
+    title: "Produtos",
+    description: "Cadastro de produtos, precos, categorias e status de venda.",
+    eyebrow: "Cadastro",
+    formTitle: "Cadastrar produto",
+    formDescription: "Mantenha o catalogo limpo, com preco, margem e status.",
+    listTitle: "Produtos cadastrados",
+    highlight: "Tela focada no cadastro; estoque e reposicao ficam em submodulos proprios."
+  },
+  stock: {
+    title: "Estoque",
+    description: "Controle quantidades, alertas e entrada rapida de estoque.",
+    eyebrow: "Operacao de estoque",
+    formTitle: "Produto com estoque",
+    formDescription: "Use os filtros e o botao de entrada para atualizar quantidades.",
+    listTitle: "Itens em estoque",
+    highlight: "Visao operacional para estoque baixo, sem estoque e reposicao."
+  }
+};
+
 function StockBadge({ product }) {
   const status = stockStatus(product);
   const classes = {
@@ -118,8 +139,9 @@ function AddStockModal({ product, amount, error, onAmountChange, onConfirm, onCl
   );
 }
 
-export default function Products() {
-  const [filters, setFilters] = useState({ search: "", category: "", stock: "" });
+export default function Products({ mode = "catalog" }) {
+  const view = productViews[mode] || productViews.catalog;
+  const [filters, setFilters] = useState({ search: "", category: "", stock: mode === "stock" ? "attention" : "" });
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -135,6 +157,10 @@ export default function Products() {
 
   const lowStock = allProducts.filter((product) => stockStatus(product) === "low").length;
   const outStock = allProducts.filter((product) => stockStatus(product) === "out").length;
+
+  useEffect(() => {
+    setFilters((current) => ({ ...current, stock: mode === "stock" ? "attention" : "" }));
+  }, [mode]);
 
   useEffect(() => {
     let active = true;
@@ -295,13 +321,15 @@ export default function Products() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader
-        title="Produtos"
-        description="Controle itens vendidos separadamente dos serviços, com estoque simples e alertas de reposição."
-      />
+      <PageHeader title={view.title} description={view.description} />
       <Message type="error" actionLabel="Tentar novamente" onAction={refresh}>
         {error}
       </Message>
+
+      <Card className="p-4 sm:p-5">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">{view.eyebrow}</p>
+        <p className="mt-2 text-sm font-bold leading-6 text-muted">{view.highlight}</p>
+      </Card>
 
       <section className="grid gap-4 sm:grid-cols-3">
         <article className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-soft">
@@ -325,10 +353,10 @@ export default function Products() {
               {editing ? "Editar produto" : "Novo produto"}
             </p>
             <h2 className="mt-2 text-xl font-black tracking-tight text-ink">
-              {editing ? "Atualizar estoque" : "Cadastrar produto"}
+              {editing ? "Atualizar produto" : view.formTitle}
             </h2>
             <p className="mt-1 text-sm font-medium leading-6 text-muted">
-              Mantenha produtos simples, com preço, margem e quantidade atual.
+              {view.formDescription}
             </p>
           </div>
 
@@ -466,7 +494,7 @@ export default function Products() {
           </Card>
 
           <Card className="overflow-hidden">
-            <CardHeader title="Produtos cadastrados" description={`${products.length} produto(s) encontrados`} />
+            <CardHeader title={view.listTitle} description={`${products.length} produto(s) encontrados`} />
             <div className="compact-scroll-list divide-y divide-[#E2E8F0]">
               {loading ? (
                 <Loading label="Carregando produtos..." />
