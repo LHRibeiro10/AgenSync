@@ -1,0 +1,73 @@
+export const workspaceNavigation = [
+  { to: "/", label: "Dashboard", icon: "dashboard", tourId: "dashboard", permission: "dashboard" },
+  {
+    id: "agenda",
+    label: "Agenda",
+    icon: "agenda",
+    tourId: "agenda",
+    permission: "agenda",
+    children: [
+      { to: "/agenda/semanal", label: "Agenda semanal", permission: "agenda" },
+      { to: "/agenda/diaria", label: "Agenda diaria", permission: "agenda" },
+      { to: "/agenda/horarios", label: "Horarios de trabalho", permission: "agenda" }
+    ]
+  },
+  {
+    id: "clientes",
+    label: "Clientes",
+    icon: "clients",
+    tourId: "clients",
+    permission: "clients",
+    children: [
+      { to: "/clientes", label: "Clientes", permission: "clients" },
+      { to: "/clientes/atendimento", label: "Atendimento", permission: "clients" },
+      { to: "/clientes/fichas", label: "Fichas", permission: "clients" },
+      { to: "/clientes/evolucao", label: "Evolucao", permission: "clients" },
+      { to: "/clientes/documentos", label: "Documentos", permission: "clients" },
+      { to: "/clientes/linha-do-tempo", label: "Linha do tempo", permission: "clients" }
+    ]
+  },
+  { to: "/profissionais", label: "Profissionais", icon: "professionals", permission: "professionals" },
+  { to: "/servicos", label: "Servicos", icon: "services", tourId: "services", permission: "services" },
+  {
+    id: "produtos",
+    label: "Produtos",
+    icon: "products",
+    tourId: "products",
+    permission: "products",
+    children: [
+      { to: "/produtos", label: "Produtos", permission: "products" },
+      { to: "/produtos/estoque", label: "Estoque", permission: "stock" },
+      { to: "/produtos/movimentacoes", label: "Movimentacoes", permission: "stock" },
+      { to: "/produtos/reposicao", label: "Reposicao", permission: "stock" },
+      { to: "/produtos/categorias", label: "Categorias", permission: "products" }
+    ]
+  },
+  {
+    id: "vendas",
+    label: "Vendas",
+    icon: "sales",
+    tourId: "sales",
+    permission: "sales",
+    children: [
+      { to: "/vendas/nova", label: "Nova venda", permission: "sales" },
+      { to: "/vendas/historico", label: "Historico de vendas", permission: "sales" },
+      { to: "/vendas/comissoes", label: "Comissoes", permission: "sales" },
+      { to: "/vendas/relatorios", label: "Relatorios", permission: "reports" }
+    ]
+  },
+  { to: "/mensalidades", label: "Mensalidades", icon: "finance", permission: "subscriptions" },
+  { to: "/historico", label: "Historico", icon: "history", permission: "clients" },
+  { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance", permission: "finance" },
+  { to: "/despesas", label: "Despesas", icon: "expenses", permission: "expenses" },
+  { to: "/admin", label: "Admin", icon: "settings", adminOnly: true, permission: "admin" },
+  { to: "/configuracoes", label: "Configuracoes", icon: "settings", permission: "settings" }
+];
+
+export const platformNavigation = [
+  { to: "/plataforma", label: "Painel da plataforma", icon: "dashboard" },
+  { to: "/plataforma/contas", label: "Contas", icon: "clients" },
+  { to: "/plataforma/planos", label: "Planos", icon: "finance" },
+  { to: "/plataforma/auditoria", label: "Auditoria", icon: "history" },
+  { to: "/plataforma/suporte", label: "Modo GOD", icon: "settings" }
+];

@@ -1,5 +1,6 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { platformNavigation, workspaceNavigation } from "../config/navigation.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import BrandLogo from "./BrandLogo.jsx";
 import Button from "./Button.jsx";
@@ -9,36 +10,7 @@ import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
 import PageTransition from "./PageTransition.jsx";
 import WelcomeOnboardingModal from "./onboarding/WelcomeOnboardingModal.jsx";
 
-const navigation = [
-  { to: "/", label: "Dashboard", icon: "dashboard", tourId: "dashboard" },
-  { to: "/admin", label: "Admin", icon: "settings", adminOnly: true },
-  { to: "/agenda", label: "Agenda", icon: "agenda", tourId: "agenda" },
-  { to: "/clientes", label: "Clientes", icon: "clients", tourId: "clients" },
-  { to: "/profissionais", label: "Profissionais", icon: "professionals" },
-  { to: "/servicos", label: "Serviços", icon: "services", tourId: "services" },
-  { to: "/produtos", label: "Produtos", icon: "products" },
-  { to: "/vendas", label: "Vendas", icon: "sales" },
-  { to: "/mensalidades", label: "Mensalidades", icon: "finance" },
-  { to: "/historico", label: "Histórico", icon: "history" },
-  { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance" },
-  { to: "/despesas", label: "Despesas", icon: "expenses" },
-  { to: "/configuracoes", label: "Configurações", icon: "settings" }
-];
-
-const mobileNavigation = [
-  { to: "/", label: "Dashboard", icon: "dashboard", tourId: "dashboard" },
-  { to: "/admin", label: "Admin", icon: "settings", adminOnly: true },
-  { to: "/agenda", label: "Agenda", icon: "agenda", tourId: "agenda" },
-  { to: "/clientes", label: "Clientes", icon: "clients", tourId: "clients" },
-  { to: "/profissionais", label: "Profissionais", icon: "professionals" },
-  { to: "/servicos", label: "Serviços", icon: "services", tourId: "services" },
-  { to: "/produtos", label: "Produtos", icon: "products" },
-  { to: "/vendas", label: "Vendas", icon: "sales" },
-  { to: "/mensalidades", label: "Mensalidades", icon: "finance" },
-  { to: "/despesas", label: "Despesas", icon: "expenses" },
-  { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance" },
-  { to: "/configuracoes", label: "Configurações", icon: "settings" }
-];
+const OPEN_MODULES_KEY = "agensync_sidebar_open_modules";
 
 function desktopLinkClass({ isActive }) {
   return [
@@ -74,6 +46,41 @@ function AccountMark({ user, size = "sm" }) {
   );
 }
 
+function childLinkClass({ isActive }) {
+  return [
+    "group ml-8 flex min-h-9 items-center rounded-xl px-3 text-xs font-bold transition duration-200 active:scale-[0.99]",
+    isActive ? "bg-white/[0.09] text-white" : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
+  ].join(" ");
+}
+
+function isItemActive(item, pathname) {
+  if (item.to) return item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+  return item.children?.some((child) => child.to === "/" ? pathname === "/" : pathname.startsWith(child.to));
+}
+
+function flattenNavigation(items) {
+  return items.flatMap((item) => [item, ...(item.children || [])]);
+}
+
+function filterNavigation(items, { isAdmin, canAccess }) {
+  return items
+    .filter((item) => (!item.adminOnly || isAdmin) && canAccess(item.permission))
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter((child) => canAccess(child.permission)) || []
+    }))
+    .filter((item) => item.to || item.children.length);
+}
+
+function readOpenModules() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(OPEN_MODULES_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
 function SidebarBrand() {
   return (
     <div className="flex items-center justify-center pb-4 pt-2">
@@ -82,12 +89,73 @@ function SidebarBrand() {
   );
 }
 
+function SidebarNavigation({ items, openModules, onToggleModule, onNavigate, pathname, linkClass = desktopLinkClass }) {
+  return (
+    <>
+      {items.map((item) => {
+        const hasChildren = item.children?.length > 0;
+        const open = Boolean(openModules[item.id]) || isItemActive(item, pathname);
+
+        if (!hasChildren) {
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={linkClass}
+              end={item.to === "/"}
+              onClick={onNavigate}
+              data-tour-id={item.tourId || undefined}
+            >
+              <Icon name={item.icon} className="h-5 w-5 opacity-90 transition group-hover:opacity-100" />
+              {item.label}
+            </NavLink>
+          );
+        }
+
+        return (
+          <div key={item.id} className="space-y-1">
+            <button
+              type="button"
+              onClick={() => onToggleModule(item.id)}
+              className={[
+                "group flex min-h-10 w-full items-center gap-3 rounded-xl border-l-2 px-3 text-left text-sm font-bold transition duration-200 active:scale-[0.99]",
+                open
+                  ? "border-l-[#60A5FA] bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  : "border-l-transparent text-slate-400 hover:bg-white/[0.06] hover:text-white"
+              ].join(" ")}
+              data-tour-id={item.tourId || undefined}
+              aria-expanded={open}
+            >
+              <Icon name={item.icon} className="h-5 w-5 opacity-90 transition group-hover:opacity-100" />
+              <span className="min-w-0 flex-1">{item.label}</span>
+              <span className={`text-xs transition duration-200 ${open ? "rotate-90" : ""}`}>›</span>
+            </button>
+            <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="min-h-0 overflow-hidden">
+                <div className="space-y-1 py-1">
+                  {item.children.map((child) => (
+                    <NavLink key={child.to} to={child.to} className={childLinkClass} onClick={onNavigate}>
+                      {child.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function titleFromPath(pathname) {
   if (pathname.startsWith("/admin")) return "Painel Admin";
+  if (pathname.startsWith("/plataforma")) return "Plataforma";
   if (pathname.startsWith("/agendamentos")) return "Agendar";
   if (pathname.startsWith("/relatorios")) return "Relatórios";
 
-  const found = navigation.find((item) =>
+  const allNavigationItems = flattenNavigation([...workspaceNavigation, ...platformNavigation]);
+  const found = allNavigationItems.find((item) =>
     item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
   );
 
@@ -115,15 +183,35 @@ function mobileActionFor(pathname, navigate) {
 }
 
 export default function Layout() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, canAccess, hasPlatformAccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [openModules, setOpenModules] = useState(readOpenModules);
   const accountName = user?.businessName || user?.name || "Seu negócio";
   const mobileTitle = titleFromPath(location.pathname);
   const mobileAction = mobileActionFor(location.pathname, navigate);
-  const visibleNavigation = navigation.filter((item) => !item.adminOnly || isAdmin);
-  const visibleMobileNavigation = mobileNavigation.filter((item) => !item.adminOnly || isAdmin);
+  const baseNavigation = hasPlatformAccess ? platformNavigation : workspaceNavigation;
+  const visibleNavigation = useMemo(
+    () => (hasPlatformAccess ? baseNavigation : filterNavigation(baseNavigation, { isAdmin, canAccess })),
+    [baseNavigation, canAccess, hasPlatformAccess, isAdmin]
+  );
+
+  useEffect(() => {
+    const activeModules = {};
+    visibleNavigation.forEach((item) => {
+      if (item.id && isItemActive(item, location.pathname)) activeModules[item.id] = true;
+    });
+
+    if (Object.keys(activeModules).length) {
+      setOpenModules((current) => ({ ...current, ...activeModules }));
+    }
+  }, [location.pathname, visibleNavigation]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(OPEN_MODULES_KEY, JSON.stringify(openModules));
+  }, [openModules]);
 
   function handleLogout() {
     logout();
@@ -134,34 +222,34 @@ export default function Layout() {
     setDrawerOpen(false);
   }
 
+  function toggleModule(moduleId) {
+    setOpenModules((current) => ({ ...current, [moduleId]: !current[moduleId] }));
+  }
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#F1F5F9] text-ink">
       <aside className="fixed inset-y-0 left-0 hidden w-72 rounded-r-[30px] border border-white/10 bg-gradient-to-b from-[#111827] via-[#0F172A] to-[#020617] p-4 shadow-[0_28px_70px_rgba(15,23,42,0.34)] lg:block">
         <div className="flex h-full flex-col">
           <SidebarBrand />
 
-          <button
-            type="button"
-            onClick={() => navigate("/agendamentos")}
-            className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-blue-400/20 bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] px-4 text-sm font-black text-white shadow-[0_16px_32px_rgba(37,99,235,0.28)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_38px_rgba(37,99,235,0.34)] active:translate-y-0 active:scale-[0.98]"
-          >
-            <Icon name="appointments" className="h-5 w-5" />
-            Novo agendamento
-          </button>
+          {!hasPlatformAccess ? (
+            <button
+              type="button"
+              onClick={() => navigate("/agendamentos")}
+              className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-blue-400/20 bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] px-4 text-sm font-black text-white shadow-[0_16px_32px_rgba(37,99,235,0.28)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_38px_rgba(37,99,235,0.34)] active:translate-y-0 active:scale-[0.98]"
+            >
+              <Icon name="appointments" className="h-5 w-5" />
+              Novo agendamento
+            </button>
+          ) : null}
 
           <nav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-            {visibleNavigation.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={desktopLinkClass}
-                end={item.to === "/"}
-                data-tour-id={item.tourId || undefined}
-              >
-                <Icon name={item.icon} className="h-5 w-5 opacity-90 transition group-hover:opacity-100" />
-                {item.label}
-              </NavLink>
-            ))}
+            <SidebarNavigation
+              items={visibleNavigation}
+              openModules={openModules}
+              onToggleModule={toggleModule}
+              pathname={location.pathname}
+            />
           </nav>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
@@ -235,32 +323,29 @@ export default function Layout() {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                closeDrawer();
-                navigate("/agendamentos");
-              }}
-              className="mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-blue-400/20 bg-gradient-to-r from-[#3225eb] to-[#1D4ED8] px-4 py-3 text-sm font-black text-white shadow-[0_16px_32px_rgba(37,99,235,0.28)] transition active:scale-[0.98]"
-            >
-              <Icon name="appointments" className="h-5 w-5" />
-              Novo agendamento
-            </button>
+            {!hasPlatformAccess ? (
+              <button
+                type="button"
+                onClick={() => {
+                  closeDrawer();
+                  navigate("/agendamentos");
+                }}
+                className="mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-blue-400/20 bg-gradient-to-r from-[#3225eb] to-[#1D4ED8] px-4 py-3 text-sm font-black text-white shadow-[0_16px_32px_rgba(37,99,235,0.28)] transition active:scale-[0.98]"
+              >
+                <Icon name="appointments" className="h-5 w-5" />
+                Novo agendamento
+              </button>
+            ) : null}
 
             <nav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-              {visibleMobileNavigation.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={mobileLinkClass}
-                  end={item.to === "/"}
-                  onClick={closeDrawer}
-                  data-tour-id={item.tourId || undefined}
-                >
-                  <Icon name={item.icon} className="h-5 w-5 opacity-90" />
-                  {item.label}
-                </NavLink>
-              ))}
+              <SidebarNavigation
+                items={visibleNavigation}
+                openModules={openModules}
+                onToggleModule={toggleModule}
+                onNavigate={closeDrawer}
+                pathname={location.pathname}
+                linkClass={mobileLinkClass}
+              />
             </nav>
 
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">

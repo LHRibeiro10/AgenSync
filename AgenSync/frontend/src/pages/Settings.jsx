@@ -494,13 +494,17 @@ export default function Settings() {
               <Icon name="check" className="h-5 w-5" />
               Salvar configurações
             </Button>
+            <Button type="button" variant="secondary" size="lg" className="mt-3 hidden w-full rounded-lg lg:inline-flex" onClick={startTour}>
+              <Icon name="appointments" className="h-5 w-5" />
+              Assistir tutorial
+            </Button>
           </section>
         </aside>
       </section>
       <button
         type="button"
         onClick={startTour}
-        className="fixed bottom-5 left-5 z-[54] inline-flex min-h-12 max-w-[calc(100vw-6rem)] items-center justify-center gap-2 rounded-full border border-blue-200 bg-white px-4 text-sm font-black text-brand shadow-[0_16px_34px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 active:translate-y-0 active:scale-95 sm:bottom-6 sm:left-6"
+        className="fixed bottom-5 left-5 z-[54] inline-flex min-h-12 max-w-[calc(100vw-6rem)] items-center justify-center gap-2 rounded-full border border-blue-200 bg-white px-4 text-sm font-black text-brand shadow-[0_16px_34px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 active:translate-y-0 active:scale-95 sm:bottom-6 sm:left-6 lg:hidden"
         aria-label="Assistir tutorial"
       >
         <Icon name="appointments" className="h-4 w-4" />

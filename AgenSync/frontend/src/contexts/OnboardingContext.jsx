@@ -13,31 +13,43 @@ const TOUR_STEPS = [
     id: "dashboard",
     path: "/",
     title: "Dashboard",
-    description: "Aqui voce acompanha o resumo do seu negocio."
+    description: "Aqui voce acompanha a visao geral do negocio, filtra por periodo e profissional e compara resultados sem trocar de tela."
   },
   {
-    id: "services",
-    path: "/servicos",
-    title: "Servicos",
-    description: "Cadastre os servicos que voce oferece."
+    id: "agenda",
+    path: "/agenda/semanal",
+    title: "Agenda",
+    description: "O modulo de agenda agora separa a visao semanal, diaria e os horarios de trabalho para manter a operacao mais leve."
   },
   {
     id: "clients",
     path: "/clientes",
     title: "Clientes",
-    description: "Adicione seus clientes para agendar atendimentos."
+    description: "Clientes funciona como um mini CRM: cadastro, atendimento, fichas, evolucao, documentos e linha do tempo ficam conectados ao cliente."
   },
   {
-    id: "agenda",
-    path: "/agenda",
-    title: "Agenda",
-    description: "Aqui voce controla seus horarios."
+    id: "services",
+    path: "/servicos",
+    title: "Servicos",
+    description: "Cadastre os servicos que voce oferece e use esses dados nos agendamentos e no financeiro."
+  },
+  {
+    id: "products",
+    path: "/produtos",
+    title: "Produtos e estoque",
+    description: "Produtos agora fica preparado para catalogo, estoque, movimentacoes, reposicao e categorias em submodulos separados."
+  },
+  {
+    id: "sales",
+    path: "/vendas/nova",
+    title: "Vendas",
+    description: "Use vendas para registrar rapidamente uma nova venda, consultar historico e futuramente acompanhar comissoes e relatorios."
   },
   {
     id: "finance",
     path: "/financeiro",
     title: "Financeiro",
-    description: "Veja entradas, despesas e lucro liquido."
+    description: "Veja entradas, despesas, mensalidades, lucro liquido e relatorios com filtros reutilizaveis."
   }
 ];
 
@@ -91,10 +103,12 @@ function storageKeyFor(user) {
 
 function stepFromPath(pathname) {
   if (pathname === "/" || pathname.startsWith("/dashboard")) return 0;
-  if (pathname.startsWith("/servicos")) return 1;
+  if (pathname.startsWith("/agenda")) return 1;
   if (pathname.startsWith("/clientes")) return 2;
-  if (pathname.startsWith("/agenda")) return 3;
-  if (pathname.startsWith("/financeiro")) return 4;
+  if (pathname.startsWith("/servicos")) return 3;
+  if (pathname.startsWith("/produtos")) return 4;
+  if (pathname.startsWith("/vendas")) return 5;
+  if (pathname.startsWith("/financeiro")) return 6;
   return -1;
 }
 

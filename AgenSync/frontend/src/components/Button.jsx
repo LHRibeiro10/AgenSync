@@ -34,7 +34,7 @@ export default function Button({
       type={type}
       disabled={disabled || loading}
       className={[
-        "inline-flex max-w-full items-center justify-center gap-2 rounded-xl font-bold transition duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:translate-y-0 disabled:scale-100 disabled:opacity-60",
+        "inline-flex min-w-0 max-w-full items-center justify-center gap-2 whitespace-normal rounded-xl text-center font-bold leading-tight transition duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:translate-y-0 disabled:scale-100 disabled:opacity-60",
         variants[variant],
         sizes[size],
         className

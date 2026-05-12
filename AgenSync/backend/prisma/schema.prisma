@@ -34,6 +34,25 @@ enum UserRole {
   USER
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  PROFESSIONAL
+}
+
+enum PlatformRole {
+  SUPPORT
+  DEVELOPER
+  PLATFORM_OWNER
+}
+
+enum AccountSubscriptionStatus {
+  PAID
+  TRIAL
+  PAST_DUE
+  CANCELED
+}
+
 enum ReminderType {
   ONE_DAY_BEFORE
   TWO_HOURS_BEFORE
@@ -53,6 +72,11 @@ model User {
   email         String         @unique
   passwordHash  String
   role          UserRole       @default(USER)
+  workspaceRole WorkspaceRole  @default(OWNER)
+  platformRole  PlatformRole?
+  subscriptionStatus AccountSubscriptionStatus @default(PAID)
+  subscriptionPaidUntil DateTime?
+  billingEnabled Boolean @default(false)
   businessName  String
   businessLogo  String?
   businessType  String
@@ -76,6 +100,9 @@ model User {
   updatedAt     DateTime       @updatedAt
 
   @@index([role])
+  @@index([workspaceRole])
+  @@index([platformRole])
+  @@index([subscriptionStatus])
   @@index([createdAt])
 }
 

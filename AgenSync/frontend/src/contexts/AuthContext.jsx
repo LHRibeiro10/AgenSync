@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as authService from "../services/authService.js";
 import { httpClient, setUnauthorizedHandler } from "../api/httpClient.js";
 import { clearUserDataCache } from "../lib/userDataCache.js";
+import { canAccessAdmin, canAccessPermission, getPlatformRole, getWorkspaceRole, isPlatformUser } from "../lib/permissions.js";
 
 const AuthContext = createContext(null);
 
@@ -112,8 +113,11 @@ export function AuthProvider({ children }) {
     setSession(null);
   }, []);
 
-  const normalizedRole = String(user?.role || "").trim().toLowerCase();
-  const isAdmin = normalizedRole === "admin";
+  const workspaceRole = getWorkspaceRole(user);
+  const platformRole = getPlatformRole(user);
+  const isAdmin = canAccessAdmin(user);
+  const hasPlatformAccess = isPlatformUser(user);
+  const canAccess = useCallback((permission) => canAccessPermission(user, permission), [user]);
 
   const value = useMemo(
     () => ({
@@ -124,6 +128,10 @@ export function AuthProvider({ children }) {
       authConfigurationError,
       isAuthenticated: Boolean(token),
       isAdmin,
+      workspaceRole,
+      platformRole,
+      hasPlatformAccess,
+      canAccess,
       refreshSession,
       login,
       register,
@@ -142,6 +150,10 @@ export function AuthProvider({ children }) {
       loading,
       authConfigurationError,
       isAdmin,
+      workspaceRole,
+      platformRole,
+      hasPlatformAccess,
+      canAccess,
       refreshSession,
       login,
       register,

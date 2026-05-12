@@ -5,6 +5,7 @@ import App from "./App.jsx";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.jsx";
 import { AuthProvider } from "./contexts/AuthContext.jsx";
 import { OnboardingProvider } from "./contexts/OnboardingContext.jsx";
+import { WorkspaceViewProvider } from "./contexts/WorkspaceViewContext.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import "./styles.css";
 
@@ -63,10 +64,12 @@ createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-          <OnboardingProvider>
-            <App />
-            <PwaUpdatePrompt />
-          </OnboardingProvider>
+          <WorkspaceViewProvider>
+            <OnboardingProvider>
+              <App />
+              <PwaUpdatePrompt />
+            </OnboardingProvider>
+          </WorkspaceViewProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

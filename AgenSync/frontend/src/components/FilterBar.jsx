@@ -108,6 +108,11 @@ export default function FilterBar({
   productValue,
   onProductChange,
   productOptions = [],
+  professionalValue,
+  onProfessionalChange,
+  professionalOptions = [],
+  professionalDisabled = false,
+  professionalAllLabel = "Todos",
   onSubmit,
   onClear,
   resultLabel
@@ -183,6 +188,24 @@ export default function FilterBar({
             />
           </Field>
         </div>
+
+        {onProfessionalChange ? (
+          <Field label="Visao" className={mobile ? "" : "lg:col-span-3"}>
+            <select
+              value={professionalValue}
+              onChange={(event) => onProfessionalChange(event.target.value)}
+              disabled={professionalDisabled}
+              className={`${inputClass} disabled:bg-[#F8FAFC] disabled:text-slate-500`}
+            >
+              <option value="">{professionalAllLabel}</option>
+              {professionalOptions.map((professional) => (
+                <option key={professional.id} value={professional.id}>
+                  {professional.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
 
         {onSearchChange ? (
           <Field label="Busca" className={mobile ? "" : "lg:col-span-3"}>

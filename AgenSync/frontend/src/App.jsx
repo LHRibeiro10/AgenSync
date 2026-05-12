@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import Loading from "./components/Loading.jsx";
 import PageTransition from "./components/PageTransition.jsx";
@@ -14,6 +14,8 @@ const Expenses = lazy(() => import("./pages/Expenses.jsx"));
 const Finance = lazy(() => import("./pages/Finance.jsx"));
 const History = lazy(() => import("./pages/History.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
+const ModulePlaceholder = lazy(() => import("./pages/ModulePlaceholder.jsx"));
+const PlatformDashboard = lazy(() => import("./pages/PlatformDashboard.jsx"));
 const Products = lazy(() => import("./pages/Products.jsx"));
 const ProductSales = lazy(() => import("./pages/ProductSales.jsx"));
 const Professionals = lazy(() => import("./pages/Professionals.jsx"));
@@ -23,10 +25,17 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions.jsx"));
 
 function ProtectedRoute() {
-  const { loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated, hasPlatformAccess } = useAuth();
+  const location = useLocation();
 
   if (loading) return <Loading label="Abrindo sua agenda..." />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (hasPlatformAccess && !location.pathname.startsWith("/plataforma")) {
+    return <Navigate to="/plataforma" replace />;
+  }
+  if (!hasPlatformAccess && location.pathname.startsWith("/plataforma")) {
+    return <Navigate to="/" replace />;
+  }
   return <Layout />;
 }
 
@@ -43,6 +52,14 @@ function AdminRoute({ children }) {
 
   if (loading) return <Loading label="Validando acesso admin..." />;
   if (!isAdmin) return <Navigate to="/" replace />;
+  return children;
+}
+
+function PlatformRoute({ children }) {
+  const { loading, hasPlatformAccess } = useAuth();
+
+  if (loading) return <Loading label="Validando acesso da plataforma..." />;
+  if (!hasPlatformAccess) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -78,13 +95,43 @@ export default function App() {
               </AdminRoute>
             }
           />
+          <Route path="plataforma" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
+          <Route path="plataforma/:section" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
           <Route path="agenda" element={<Agenda />} />
+          <Route path="agenda/semanal" element={<Agenda initialView="week" />} />
+          <Route path="agenda/diaria" element={<Agenda initialView="day" />} />
+          <Route path="agenda/horarios" element={<Agenda focus="workingHours" />} />
           <Route path="agendamentos" element={<Appointments />} />
           <Route path="clientes" element={<Clients />} />
+          <Route path="clientes/atendimento" element={<Clients />} />
+          <Route path="clientes/fichas" element={<Clients />} />
+          <Route path="clientes/evolucao" element={<Clients />} />
+          <Route path="clientes/documentos" element={<Clients />} />
+          <Route path="clientes/linha-do-tempo" element={<Clients />} />
           <Route path="profissionais" element={<Professionals />} />
           <Route path="servicos" element={<Services />} />
           <Route path="produtos" element={<Products />} />
+          <Route path="produtos/estoque" element={<Products />} />
+          <Route
+            path="produtos/movimentacoes"
+            element={<ModulePlaceholder title="Movimentacoes de estoque" description="Base para entradas, saidas, ajustes, perdas e historico de estoque." items={["Entrada", "Saida", "Ajuste manual", "Perda", "Validade", "Fornecedor"]} />}
+          />
+          <Route
+            path="produtos/reposicao"
+            element={<ModulePlaceholder title="Reposicao" description="Estrutura para alertas inteligentes, ponto de reposicao e compras futuras." items={["Estoque baixo", "Sem estoque", "Sugestao de compra", "Custo medio"]} />}
+          />
+          <Route
+            path="produtos/categorias"
+            element={<ModulePlaceholder title="Categorias" description="Preparado para organizar catalogo, estoque e relatorios por familia de produtos." items={["Categorias", "Margem por grupo", "Alertas por grupo"]} />}
+          />
           <Route path="vendas" element={<ProductSales />} />
+          <Route path="vendas/nova" element={<ProductSales />} />
+          <Route path="vendas/historico" element={<ProductSales />} />
+          <Route
+            path="vendas/comissoes"
+            element={<ModulePlaceholder title="Comissoes" description="Base para regras de comissao por profissional, produto, servico e periodo." items={["Profissional", "Percentual", "Venda", "Pagamento", "Periodo"]} />}
+          />
+          <Route path="vendas/relatorios" element={<Finance />} />
           <Route path="mensalidades" element={<Subscriptions />} />
           <Route path="historico" element={<History />} />
           <Route path="financeiro" element={<Finance />} />

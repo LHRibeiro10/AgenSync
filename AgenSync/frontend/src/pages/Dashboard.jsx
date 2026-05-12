@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
@@ -13,8 +13,10 @@ import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
+import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import { listExpenses, sumExpenses } from "../services/expenses.js";
 import { listProductSales, sumProductSales } from "../services/products.js";
+import { listProfessionals } from "../services/professionalService.js";
 import { listSubscriptionCycles, subscriptionSummary, sumPaidSubscriptionCycles } from "../services/subscriptions.js";
 import { money } from "../utils.js";
 
@@ -67,6 +69,79 @@ function earnedCompleted(appointments) {
   return appointments
     .filter((appointment) => appointment.status === "concluido")
     .reduce((total, appointment) => total + Number(appointment.price || 0), 0);
+}
+
+function selectedProfessionalLabel(professionalId, professionals) {
+  if (!professionalId) return "Todos os profissionais";
+  return professionals.find((professional) => professional.id === professionalId)?.name || "Profissional";
+}
+
+function resultLabelFor(filters, professionals) {
+  return `Visao: ${selectedProfessionalLabel(filters.professionalId, professionals)} | Periodo: ${periodLabel(filters)}`;
+}
+
+function filterKey(filters) {
+  return [filters.period, filters.startDate, filters.endDate, filters.professionalId || ""].join("|");
+}
+
+function buildTeamComparison(appointments, professionals, monthlyGoal) {
+  const activeProfessionals = professionals.filter((professional) => professional.isActive !== false);
+  const rows = new Map();
+  const goalBase = Math.max(activeProfessionals.length || 1, 1);
+  const professionalGoal = monthlyGoal / goalBase;
+
+  activeProfessionals.forEach((professional) => {
+    rows.set(professional.id, {
+      id: professional.id,
+      name: professional.name,
+      role: professional.role || "Profissional",
+      revenue: 0,
+      appointments: 0,
+      completed: 0,
+      cancellations: 0,
+      clients: new Set(),
+      goal: professionalGoal
+    });
+  });
+
+  appointments.forEach((appointment) => {
+    const id = appointment.professionalId || "unassigned";
+    if (!rows.has(id)) {
+      rows.set(id, {
+        id,
+        name: appointment.professional?.name || "Sem profissional",
+        role: "Sem vinculo",
+        revenue: 0,
+        appointments: 0,
+        completed: 0,
+        cancellations: 0,
+        clients: new Set(),
+        goal: professionalGoal
+      });
+    }
+
+    const row = rows.get(id);
+    row.appointments += 1;
+
+    if (appointment.status === "concluido") {
+      row.completed += 1;
+      row.revenue += Number(appointment.price || 0);
+      if (appointment.clientId) row.clients.add(appointment.clientId);
+    }
+
+    if (appointment.status === "cancelado") {
+      row.cancellations += 1;
+    }
+  });
+
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      clientsCount: row.clients.size,
+      averageTicket: row.completed > 0 ? row.revenue / row.completed : 0,
+      goalProgress: row.goal > 0 ? Math.round((row.revenue / row.goal) * 100) : 0
+    }))
+    .sort((first, second) => second.revenue - first.revenue);
 }
 
 function readMonthlyGoal() {
@@ -162,14 +237,25 @@ function InsightCard({ label, value, detail, tone = "blue" }) {
 }
 
 export default function Dashboard() {
-  const initialRange = rangeForPeriod("today");
+  const {
+    selectedProfessionalId,
+    setSelectedProfessionalId,
+    period: workspacePeriod,
+    setPeriod: setWorkspacePeriod,
+    canManageWorkspace,
+    isProfessional
+  } = useWorkspaceView();
+  const initialRange = rangeForPeriod(workspacePeriod || "today");
   const [filters, setFilters] = useState({
-    period: "today",
+    period: workspacePeriod || "today",
     startDate: initialRange.startDate,
-    endDate: initialRange.endDate
+    endDate: initialRange.endDate,
+    professionalId: selectedProfessionalId || ""
   });
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [data, setData] = useState(null);
+  const [professionals, setProfessionals] = useState([]);
+  const [teamAppointments, setTeamAppointments] = useState([]);
   const [previousAppointments, setPreviousAppointments] = useState([]);
   const [previousSales, setPreviousSales] = useState([]);
   const [previousExpenses, setPreviousExpenses] = useState([]);
@@ -179,29 +265,41 @@ export default function Dashboard() {
   const [goalDraft, setGoalDraft] = useState(() => String(readMonthlyGoal()));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const lastLoadedFiltersKey = useRef("");
   const { showToast } = useToast();
   const { progress } = useOnboarding();
 
   async function load(nextFilters = appliedFilters) {
+    lastLoadedFiltersKey.current = filterKey(nextFilters);
     setLoading(true);
     setError("");
 
     try {
       const comparisonRange = previousRange(nextFilters);
       const tomorrow = formatInputDate(addDays(parseDate(rangeForPeriod("today").endDate), 1));
+      const effectiveProfessionalId = nextFilters.professionalId || "";
+      const scopedParams = effectiveProfessionalId ? { professionalId: effectiveProfessionalId } : {};
 
-      const [dashboardData, appointmentsData, previousData, tomorrowData] = await Promise.all([
-        api.dashboard({ date: nextFilters.endDate }),
+      const [dashboardData, appointmentsData, previousData, tomorrowData, teamData] = await Promise.all([
+        api.dashboard({ date: nextFilters.endDate, ...scopedParams }),
         api.listAppointments({
           startDate: nextFilters.startDate,
-          endDate: nextFilters.endDate
+          endDate: nextFilters.endDate,
+          ...scopedParams
         }),
         api.listAppointments({
           startDate: comparisonRange.startDate,
           endDate: comparisonRange.endDate,
-          status: "concluido"
+          status: "concluido",
+          ...scopedParams
         }),
-        api.listAppointments({ date: tomorrow })
+        api.listAppointments({ date: tomorrow, ...scopedParams }),
+        canManageWorkspace && effectiveProfessionalId
+          ? api.listAppointments({
+              startDate: nextFilters.startDate,
+              endDate: nextFilters.endDate
+            })
+          : Promise.resolve(null)
       ]);
 
       const monthRange = monthRangeUntil(nextFilters.endDate);
@@ -248,53 +346,64 @@ export default function Dashboard() {
       const servicesPeriod = earnedCompleted(appointmentsData.appointments);
       const productsPeriod = sumProductSales(periodSales);
       const subscriptionsPeriod = sumPaidSubscriptionCycles(periodSubscriptions);
-      const grossPeriod = servicesPeriod + productsPeriod + subscriptionsPeriod;
-      const totalExpensesPeriod = sumExpenses(periodExpenses);
+      const isProfessionalScope = Boolean(effectiveProfessionalId);
+      const visibleProductsPeriod = isProfessionalScope ? 0 : productsPeriod;
+      const visibleSubscriptionsPeriod = isProfessionalScope ? 0 : subscriptionsPeriod;
+      const grossPeriod = servicesPeriod + visibleProductsPeriod + visibleSubscriptionsPeriod;
+      const totalExpensesPeriod = isProfessionalScope ? 0 : sumExpenses(periodExpenses);
       const servicesDay = dashboardData.earnedToday;
       const productsDay = sumProductSales(daySales);
       const subscriptionsDay = sumPaidSubscriptionCycles(daySubscriptions);
-      const grossDay = servicesDay + productsDay + subscriptionsDay;
-      const totalExpensesDay = sumExpenses(dayExpenses);
+      const visibleProductsDay = isProfessionalScope ? 0 : productsDay;
+      const visibleSubscriptionsDay = isProfessionalScope ? 0 : subscriptionsDay;
+      const grossDay = servicesDay + visibleProductsDay + visibleSubscriptionsDay;
+      const totalExpensesDay = isProfessionalScope ? 0 : sumExpenses(dayExpenses);
       const servicesMonth = dashboardData.earnedMonth;
       const productsMonth = sumProductSales(monthSales);
       const subscriptionsMonth = sumPaidSubscriptionCycles(monthSubscriptions);
-      const grossMonth = servicesMonth + productsMonth + subscriptionsMonth;
-      const totalExpensesMonth = sumExpenses(monthExpenses);
+      const visibleProductsMonth = isProfessionalScope ? 0 : productsMonth;
+      const visibleSubscriptionsMonth = isProfessionalScope ? 0 : subscriptionsMonth;
+      const grossMonth = servicesMonth + visibleProductsMonth + visibleSubscriptionsMonth;
+      const totalExpensesMonth = isProfessionalScope ? 0 : sumExpenses(monthExpenses);
 
       setData({
         ...dashboardData,
         appointmentsToday: appointmentsData.appointments.length,
         earnedToday: grossPeriod,
         servicesPeriod,
-        productsPeriod,
-        subscriptionsPeriod,
+        productsPeriod: visibleProductsPeriod,
+        subscriptionsPeriod: visibleSubscriptionsPeriod,
         grossPeriod,
         expensesPeriod: totalExpensesPeriod,
         netPeriod: grossPeriod - totalExpensesPeriod,
         servicesDay,
-        productsDay,
-        subscriptionsDay,
+        productsDay: visibleProductsDay,
+        subscriptionsDay: visibleSubscriptionsDay,
         grossDay,
         expensesDay: totalExpensesDay,
         netDay: grossDay - totalExpensesDay,
         servicesMonth,
-        productsMonth,
-        subscriptionsMonth,
+        productsMonth: visibleProductsMonth,
+        subscriptionsMonth: visibleSubscriptionsMonth,
         grossMonth,
         expensesMonth: totalExpensesMonth,
         netMonth: grossMonth - totalExpensesMonth,
         todayAppointments: appointmentsData.appointments,
-        productSales: periodSales,
-        subscriptionCycles: periodSubscriptions,
-        subscriptionSummary: currentSubscriptionSummary
+        productSales: isProfessionalScope ? [] : periodSales,
+        subscriptionCycles: isProfessionalScope ? [] : periodSubscriptions,
+        subscriptionSummary: isProfessionalScope
+          ? { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 }
+          : currentSubscriptionSummary
       });
       setPreviousAppointments(previousData.appointments);
-      setPreviousSales(comparisonSales);
-      setPreviousExpenses(comparisonExpenses);
-      setPreviousSubscriptions(comparisonSubscriptions);
+      setTeamAppointments(teamData?.appointments || appointmentsData.appointments);
+      setPreviousSales(isProfessionalScope ? [] : comparisonSales);
+      setPreviousExpenses(isProfessionalScope ? [] : comparisonExpenses);
+      setPreviousSubscriptions(isProfessionalScope ? [] : comparisonSubscriptions);
       setTomorrowAppointments(tomorrowData.appointments);
     } catch (err) {
       setData(null);
+      setTeamAppointments([]);
       setPreviousAppointments([]);
       setPreviousSales([]);
       setPreviousExpenses([]);
@@ -310,11 +419,52 @@ export default function Dashboard() {
     load(appliedFilters);
   }, []);
 
+  useEffect(() => {
+    const nextPeriod = workspacePeriod || "today";
+    const range = nextPeriod === "custom" ? filters : rangeForPeriod(nextPeriod);
+    const next = {
+      period: nextPeriod,
+      startDate: range.startDate,
+      endDate: range.endDate,
+      professionalId: selectedProfessionalId || ""
+    };
+    const nextKey = filterKey(next);
+
+    if (nextKey === filterKey(filters) || nextKey === lastLoadedFiltersKey.current) {
+      return;
+    }
+
+    setFilters(next);
+    setAppliedFilters(next);
+    load(next);
+  }, [selectedProfessionalId, workspacePeriod]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadProfessionals() {
+      try {
+        const result = await listProfessionals({ active: true });
+        if (!ignore) setProfessionals(result.professionals || []);
+      } catch {
+        if (!ignore) setProfessionals([]);
+      }
+    }
+
+    loadProfessionals();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));
   }
 
   function applyFilters() {
+    setWorkspacePeriod(filters.period);
+    setSelectedProfessionalId(filters.professionalId);
     setAppliedFilters(filters);
     load(filters);
   }
@@ -324,8 +474,11 @@ export default function Dashboard() {
     const next = {
       period: "today",
       startDate: range.startDate,
-      endDate: range.endDate
+      endDate: range.endDate,
+      professionalId: isProfessional ? selectedProfessionalId || "" : ""
     };
+    setWorkspacePeriod(next.period);
+    setSelectedProfessionalId(next.professionalId);
     setFilters(next);
     setAppliedFilters(next);
     load(next);
@@ -346,6 +499,8 @@ export default function Dashboard() {
   const periodAppointments = data?.todayAppointments || [];
   const periodSales = data?.productSales || [];
   const periodSubscriptions = data?.subscriptionCycles || [];
+  const isScopedView = Boolean(appliedFilters.professionalId);
+  const viewLabel = selectedProfessionalLabel(appliedFilters.professionalId, professionals);
   const recurring = data?.subscriptionSummary || { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 };
   const previousEarned = earnedCompleted(previousAppointments);
   const previousNet =
@@ -368,6 +523,18 @@ export default function Dashboard() {
   const goalProgress = data ? Math.min((data.netMonth / monthlyGoal) * 100, 100) : 0;
   const goalRemaining = data ? Math.max(monthlyGoal - data.netMonth, 0) : monthlyGoal;
   const netMargin = data && data.grossPeriod > 0 ? Math.round((data.netPeriod / data.grossPeriod) * 100) : 0;
+  const teamComparison = useMemo(
+    () => buildTeamComparison(teamAppointments, professionals, monthlyGoal),
+    [monthlyGoal, professionals, teamAppointments]
+  );
+  const selectedProfessionalStats = isScopedView
+    ? teamComparison.find((row) => row.id === appliedFilters.professionalId)
+    : null;
+  const topProfessional = teamComparison[0] || null;
+  const scopedTicket = selectedProfessionalStats?.averageTicket || 0;
+  const contextualGoalProgress = selectedProfessionalStats
+    ? Math.min(selectedProfessionalStats.goalProgress, 100)
+    : goalProgress;
 
   if (loading && !data && !error) return <Loading label="Carregando dashboard..." />;
 
@@ -388,12 +555,17 @@ export default function Dashboard() {
         period={filters.period}
         startDate={filters.startDate}
         endDate={filters.endDate}
+        professionalValue={filters.professionalId}
+        professionalOptions={professionals}
+        professionalDisabled={!canManageWorkspace}
+        professionalAllLabel="Todos os profissionais"
+        onProfessionalChange={(value) => updateFilter("professionalId", value)}
         onPeriodChange={(value) => updateFilter("period", value)}
         onStartDateChange={(value) => updateFilter("startDate", value)}
         onEndDateChange={(value) => updateFilter("endDate", value)}
         onSubmit={applyFilters}
         onClear={resetFilters}
-        resultLabel={periodLabel(appliedFilters)}
+        resultLabel={resultLabelFor(appliedFilters, professionals)}
       />
 
       {!progress.hasSeenWelcome ? <FirstStepsCard /> : null}
@@ -479,16 +651,42 @@ export default function Dashboard() {
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard to="/agenda" label="Serviços" value={money(data.servicesPeriod)} detail={`${data.appointmentsToday} atendimento(s)`} icon="agenda" tone="blue" />
-            <StatCard to="/vendas" label="Produtos" value={money(data.productsPeriod)} detail={`${periodSales.length} venda(s)`} icon="products" tone="leaf" />
-            <StatCard to="/mensalidades" label="Mensalidades" value={money(data.subscriptionsPeriod)} detail={`${recurring.activeCount} ativa(s)`} icon="finance" tone="blue" />
-            <StatCard to="/despesas" label="Despesas no período" value={money(data.expensesPeriod)} tone="expense" />
             <StatCard
-              to="/financeiro"
-              label="Líquido no período"
-              value={money(data.netPeriod)}
-              detail={`Margem ${netMargin}% do período`}
+              to="/agenda"
+              label={isScopedView ? `Faturamento de ${viewLabel}` : "Faturamento geral"}
+              value={money(data.servicesPeriod)}
+              detail={`${data.appointmentsToday} atendimento(s) no recorte`}
+              icon="agenda"
+              tone="blue"
+            />
+            <StatCard
+              to="/agenda"
+              label="Atendimentos"
+              value={data.appointmentsToday}
+              detail={isScopedView ? `Agenda de ${viewLabel}` : "Todos os profissionais"}
+              icon="dashboard"
+              tone="default"
+            />
+            <StatCard
+              label={isScopedView ? "Ticket medio" : "Top profissional"}
+              value={isScopedView ? money(scopedTicket) : topProfessional?.name || "Sem ranking"}
+              detail={isScopedView ? "Media dos atendimentos concluidos" : topProfessional ? money(topProfessional.revenue) : "Conclua atendimentos para medir"}
+              icon="finance"
               tone="leaf"
+            />
+            <StatCard
+              label={isScopedView ? "Meta do profissional" : "Meta da equipe"}
+              value={`${Math.round(contextualGoalProgress)}%`}
+              detail={isScopedView ? `Base: ${money(selectedProfessionalStats?.goal || 0)}` : `Base mensal: ${money(monthlyGoal)}`}
+              icon="finance"
+              tone="blue"
+            />
+            <StatCard
+              to={isScopedView ? "/agenda" : "/financeiro"}
+              label={isScopedView ? "Cancelamentos" : "Liquido no periodo"}
+              value={isScopedView ? cancellations : money(data.netPeriod)}
+              detail={isScopedView ? "No periodo selecionado" : `Margem ${netMargin}% do periodo`}
+              tone={isScopedView && cancellations ? "expense" : "leaf"}
             />
           </section>
 
@@ -542,6 +740,66 @@ export default function Dashboard() {
               </div>
             </article>
           </section>
+
+          {canManageWorkspace && !isProfessional && teamComparison.length > 1 ? (
+            <Card className="overflow-hidden">
+              <CardHeader
+                title="Comparativo da equipe"
+                description="Ranking por profissional no periodo selecionado."
+                action={
+                  <span className="rounded-full bg-[#DBEAFE] px-3 py-1.5 text-xs font-black text-brand">
+                    {viewLabel}
+                  </span>
+                }
+              />
+              <div className="overflow-x-auto">
+                <table className="min-w-[760px] w-full border-collapse text-left">
+                  <thead className="bg-[#F8FAFC] text-xs font-black uppercase tracking-[0.14em] text-muted">
+                    <tr>
+                      <th className="px-4 py-3">#</th>
+                      <th className="px-4 py-3">Profissional</th>
+                      <th className="px-4 py-3">Faturamento</th>
+                      <th className="px-4 py-3">Atendimentos</th>
+                      <th className="px-4 py-3">Ticket medio</th>
+                      <th className="px-4 py-3">Meta</th>
+                      <th className="px-4 py-3">Cancelamentos</th>
+                      <th className="px-4 py-3">Clientes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2E8F0]">
+                    {teamComparison.map((professional, index) => (
+                      <tr key={professional.id} className="transition hover:bg-[#F8FAFC]">
+                        <td className="px-4 py-4 text-sm font-black text-brand">{index + 1}</td>
+                        <td className="px-4 py-4">
+                          <p className="text-sm font-black text-ink">{professional.name}</p>
+                          <p className="text-xs font-bold text-muted">{professional.role}</p>
+                        </td>
+                        <td className="px-4 py-4 text-sm font-black text-success">{money(professional.revenue)}</td>
+                        <td className="px-4 py-4 text-sm font-bold text-ink">{professional.appointments}</td>
+                        <td className="px-4 py-4 text-sm font-bold text-ink">{money(professional.averageTicket)}</td>
+                        <td className="px-4 py-4">
+                          <div className="min-w-[120px]">
+                            <div className="flex items-center justify-between gap-2 text-xs font-black text-brand">
+                              <span>{professional.goalProgress}%</span>
+                              <span>{money(professional.goal)}</span>
+                            </div>
+                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
+                              <div
+                                className="h-full rounded-full bg-success"
+                                style={{ width: `${Math.min(professional.goalProgress, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm font-bold text-red-600">{professional.cancellations}</td>
+                        <td className="px-4 py-4 text-sm font-bold text-ink">{professional.clientsCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : null}
 
           <section className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]">
             <Card>

@@ -106,13 +106,17 @@ function getBreaksForWeek(days) {
   });
 }
 
-export default function Agenda() {
+export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
   const initialSelectedDate = todayInputValue();
   const [viewMode, setViewMode] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches ? "day" : "week"
+    initialView !== "auto"
+      ? initialView
+      : typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches
+        ? "day"
+        : "week"
   );
   const [weekStart, setWeekStart] = useState(() => startOfWeek(parseDateKey(initialSelectedDate)));
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
@@ -124,7 +128,7 @@ export default function Agenda() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [workingHours, setWorkingHours] = useState(loadWorkingHours);
-  const [workingHoursOpen, setWorkingHoursOpen] = useState(false);
+  const [workingHoursOpen, setWorkingHoursOpen] = useState(focus === "workingHours");
 
   const weekDays = useMemo(() => buildWeekDays(weekStart, workingHours), [weekStart, workingHours]);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
@@ -137,6 +141,7 @@ export default function Agenda() {
   const weekBreaks = useMemo(() => getBreaksForWeek(weekDays), [weekDays]);
 
   useEffect(() => {
+    if (initialView !== "auto") return undefined;
     if (typeof window === "undefined") return undefined;
 
     const media = window.matchMedia("(max-width: 1023px)");
@@ -147,7 +152,11 @@ export default function Agenda() {
     syncMobileView();
     media.addEventListener("change", syncMobileView);
     return () => media.removeEventListener("change", syncMobileView);
-  }, []);
+  }, [initialView]);
+
+  useEffect(() => {
+    setWorkingHoursOpen(focus === "workingHours");
+  }, [focus]);
 
   useEffect(() => {
     let active = true;
@@ -292,7 +301,13 @@ export default function Agenda() {
         <WorkingHoursDrawer
           open={workingHoursOpen}
           workingHours={workingHours}
-          onClose={() => setWorkingHoursOpen(false)}
+          onClose={() => {
+            if (focus === "workingHours") {
+              navigate("/agenda");
+              return;
+            }
+            setWorkingHoursOpen(false);
+          }}
           onSave={saveWorkingHours}
         />
       ) : (

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
-import { asyncHandler } from "../middleware/error.js";
+import { ApiError, asyncHandler } from "../middleware/error.js";
 import {
   endOfDay,
   endOfMonth,
@@ -44,6 +44,17 @@ const appointmentSelect = {
   }
 };
 
+async function resolveProfessionalFilter(userId, professionalId) {
+  if (!professionalId) return "";
+
+  const professional = await prisma.professional.findFirst({
+    where: { id: String(professionalId), userId },
+    select: { id: true }
+  });
+
+  return professional ? professional.id : "__invalid__";
+}
+
 function getCachedDashboard(key) {
   const cached = dashboardCache.get(key);
   if (!cached || cached.expiresAt <= Date.now()) {
@@ -69,7 +80,8 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     const dateParam = req.query.date || todayString();
-    const cacheKey = `${req.user.id}:${dateParam}`;
+    const professionalId = await resolveProfessionalFilter(req.user.id, req.query.professionalId);
+    const cacheKey = `${req.user.id}:${dateParam}:${professionalId || "all"}`;
     const cached = getCachedDashboard(cacheKey);
     if (cached) return res.json(cached);
 
@@ -78,11 +90,17 @@ router.get(
     const dayEnd = endOfDay(selectedDate);
     const monthStart = startOfMonth(selectedDate);
     const monthEnd = endOfMonth(selectedDate);
+    const professionalWhere = professionalId && professionalId !== "__invalid__" ? { professionalId } : {};
+
+    if (professionalId === "__invalid__") {
+      throw new ApiError(400, "Profissional invalido para este usuario.");
+    }
 
     const [todayAppointments, todayRevenue, monthRevenue, nextAppointment] = await Promise.all([
       prisma.appointment.findMany({
         where: {
           userId: req.user.id,
+          ...professionalWhere,
           startsAt: { gte: dayStart, lt: dayEnd }
         },
         select: appointmentSelect,
@@ -91,6 +109,7 @@ router.get(
       prisma.appointment.aggregate({
         where: {
           userId: req.user.id,
+          ...professionalWhere,
           status: "COMPLETED",
           startsAt: { gte: dayStart, lt: dayEnd }
         },
@@ -99,6 +118,7 @@ router.get(
       prisma.appointment.aggregate({
         where: {
           userId: req.user.id,
+          ...professionalWhere,
           status: "COMPLETED",
           startsAt: { gte: monthStart, lt: monthEnd }
         },
@@ -107,6 +127,7 @@ router.get(
       prisma.appointment.findFirst({
         where: {
           userId: req.user.id,
+          ...professionalWhere,
           status: "SCHEDULED",
           startsAt: { gte: new Date() }
         },

@@ -12,6 +12,11 @@ const userSelect = {
   name: true,
   email: true,
   role: true,
+  workspaceRole: true,
+  platformRole: true,
+  subscriptionStatus: true,
+  subscriptionPaidUntil: true,
+  billingEnabled: true,
   businessName: true,
   businessType: true,
   createdAt: true,
@@ -60,6 +65,11 @@ function publicAdminUser(user) {
     name: user.name,
     email: user.email,
     role: String(user.role || "USER").toLowerCase(),
+    workspaceRole: String(user.workspaceRole || "OWNER").toLowerCase(),
+    platformRole: user.platformRole ? String(user.platformRole).toLowerCase() : "",
+    subscriptionStatus: String(user.subscriptionStatus || "PAID").toLowerCase(),
+    subscriptionPaidUntil: user.subscriptionPaidUntil || null,
+    billingEnabled: Boolean(user.billingEnabled),
     businessName: user.businessName,
     businessType: user.businessType,
     counts: user.counts || {
@@ -74,6 +84,13 @@ function publicAdminUser(user) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
+}
+
+function normalizeUserRoleFilter(value) {
+  const role = String(value || "user").trim().toLowerCase();
+  if (role === "all" || role === "todos") return null;
+  if (role === "admin") return "ADMIN";
+  return "USER";
 }
 
 function normalizeRole(value) {
@@ -112,8 +129,11 @@ router.get(
       loginFailures7Days,
       adminAccess7Days,
       auditEvents7Days,
+      activeUsers30Days,
+      businesses,
       clients,
       appointments,
+      services,
       productSales,
       monthlyPlans,
       expenses,
@@ -138,8 +158,19 @@ router.get(
         where: { createdAt: { gte: last7Days }, user: { is: { role: "USER" } } },
         _count: { eventType: true }
       }),
+      prisma.auditLog.groupBy({
+        by: ["userId"],
+        where: { createdAt: { gte: last30Days }, userId: { not: null }, user: { is: { role: "USER" } } },
+        _count: { userId: true }
+      }),
+      prisma.user.findMany({
+        where: { role: "USER" },
+        distinct: ["businessName"],
+        select: { businessName: true }
+      }),
       prisma.client.count(),
       prisma.appointment.count(),
+      prisma.service.count(),
       prisma.productSale.count(),
       prisma.monthlyPlan.count(),
       prisma.expense.count(),
@@ -152,6 +183,8 @@ router.get(
         commonUsers,
         newUsers7Days,
         newUsers30Days,
+        activeUsers30Days: activeUsers30Days.length,
+        businesses: businesses.filter((item) => item.businessName).length,
         admins,
         logins7Days,
         loginFailures7Days,
@@ -159,6 +192,7 @@ router.get(
         records: {
           clients,
           appointments,
+          services,
           productSales,
           monthlyPlans,
           expenses,
@@ -181,9 +215,10 @@ router.get(
     });
 
     const search = String(req.query.search || "").trim();
+    const roleFilter = normalizeUserRoleFilter(req.query.role);
     const where = {
-      role: "USER",
       id: { not: req.user.id },
+      ...(roleFilter ? { role: roleFilter } : {}),
       ...(search
         ? {
             OR: [

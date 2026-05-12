@@ -132,7 +132,18 @@ router.post(
     const initialServices = normalizeInitialServices(req.body, businessType);
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
-        data: { name, email, passwordHash, role: roleForEmail(email), businessName, businessLogo, businessType }
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: roleForEmail(email),
+          workspaceRole: "OWNER",
+          subscriptionStatus: "PAID",
+          billingEnabled: false,
+          businessName,
+          businessLogo,
+          businessType
+        }
       });
 
       if (initialServices.length) {

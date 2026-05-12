@@ -160,13 +160,17 @@ export default function ContextHelpWidget() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const help = useMemo(() => helpForPath(location.pathname), [location.pathname]);
+  const useLeftSideOnMobile = !location.pathname.startsWith("/configuracoes");
+  const containerPosition = useLeftSideOnMobile
+    ? "left-5 items-start sm:left-auto sm:right-6 sm:items-end"
+    : "right-5 items-end sm:right-6";
 
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
 
   return (
-    <div className="fixed bottom-5 right-5 z-[55] flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
+    <div className={`fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-[55] flex flex-col gap-3 sm:bottom-6 ${containerPosition}`}>
       {open ? (
         <section className="w-[calc(100vw-2.5rem)] max-w-sm rounded-2xl border border-[#DDE6F0] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
           <div className="flex items-start justify-between gap-3">
