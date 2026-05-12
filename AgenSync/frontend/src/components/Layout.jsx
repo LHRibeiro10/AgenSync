@@ -54,8 +54,8 @@ function childLinkClass({ isActive }) {
 }
 
 function isItemActive(item, pathname) {
-  if (item.to) return item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-  return item.children?.some((child) => child.to === "/" ? pathname === "/" : pathname.startsWith(child.to));
+  if (item.to) return item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`);
+  return item.children?.some((child) => child.to === "/" ? pathname === "/" : pathname === child.to || pathname.startsWith(`${child.to}/`));
 }
 
 function flattenNavigation(items) {
@@ -102,7 +102,7 @@ function SidebarNavigation({ items, openModules, onToggleModule, onNavigate, pat
               key={item.to}
               to={item.to}
               className={linkClass}
-              end={item.to === "/"}
+              end={item.to === "/" || item.to === "/plataforma"}
               onClick={onNavigate}
               data-tour-id={item.tourId || undefined}
             >
@@ -150,14 +150,13 @@ function SidebarNavigation({ items, openModules, onToggleModule, onNavigate, pat
 
 function titleFromPath(pathname) {
   if (pathname.startsWith("/admin")) return "Painel Admin";
-  if (pathname.startsWith("/plataforma")) return "Plataforma";
   if (pathname.startsWith("/agendamentos")) return "Agendar";
   if (pathname.startsWith("/relatorios")) return "Relatórios";
 
   const allNavigationItems = flattenNavigation([...workspaceNavigation, ...platformNavigation]);
-  const found = allNavigationItems.find((item) =>
-    item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
-  );
+  const found = allNavigationItems
+    .filter((item) => item.to && (item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`)))
+    .sort((a, b) => b.to.length - a.to.length)[0];
 
   return found?.label || "AgenSync";
 }
