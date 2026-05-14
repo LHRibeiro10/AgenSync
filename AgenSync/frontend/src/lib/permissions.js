@@ -5,6 +5,7 @@ export const workspaceRoles = {
 };
 
 export const platformRoles = {
+  USER: "user",
   SUPPORT: "support",
   DEVELOPER: "developer",
   PLATFORM_OWNER: "platform_owner"
@@ -61,9 +62,14 @@ export function isPlatformUser(user) {
   return Object.values(platformRoles).includes(getPlatformRole(user));
 }
 
+export function isPlatformOwner(user) {
+  const role = getPlatformRole(user);
+  return role === platformRoles.DEVELOPER || role === platformRoles.PLATFORM_OWNER;
+}
+
 export function canAccessPermission(user, permission) {
   if (!permission) return true;
-  if (isPlatformUser(user)) return false;
+  if (isPlatformOwner(user)) return false;
 
   const role = getWorkspaceRole(user);
   const customPermissions = user?.permissions && typeof user.permissions === "object" ? user.permissions : {};

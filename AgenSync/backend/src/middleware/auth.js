@@ -217,6 +217,23 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+export function isPlatformOwner(user) {
+  const role = String(user?.platformRole || "").toUpperCase();
+  return role === "DEVELOPER" || role === "PLATFORM_OWNER";
+}
+
+export function requirePlatformRole(allowedRoles = ["DEVELOPER", "PLATFORM_OWNER"]) {
+  const allowed = new Set(allowedRoles.map((role) => String(role || "").toUpperCase()));
+
+  return (req, res, next) => {
+    const role = String(req.user?.platformRole || "").toUpperCase();
+    if (!allowed.has(role)) {
+      throw new ApiError(403, "Acesso restrito ao painel da plataforma.");
+    }
+    next();
+  };
+}
+
 function supabaseMetadataKey({ email, name, businessType, businessName }) {
   return JSON.stringify([email, name, businessType, businessName]);
 }
@@ -228,8 +245,12 @@ const userSelect = {
   role: true,
   workspaceRole: true,
   platformRole: true,
+  platformPlan: true,
+  accountStatus: true,
+  userStatus: true,
   subscriptionStatus: true,
   subscriptionPaidUntil: true,
+  temporaryAccessUntil: true,
   billingEnabled: true,
   businessName: true,
   businessLogo: true,
@@ -281,6 +302,11 @@ async function authenticateWithLegacyJwt(token) {
 }
 
 async function ensureSupabaseBootstrap(user) {
+  if (isPlatformOwner(user)) {
+    markSupabaseBootstrapChecked(user.id);
+    return;
+  }
+
   if (!shouldCheckSupabaseBootstrap(user.id)) {
     return;
   }

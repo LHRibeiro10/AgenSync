@@ -19,6 +19,15 @@ export const endpoints = Object.freeze({
     userRole: (id) => `/admin/users/${id}/role`,
     auditLogs: "/admin/audit-logs"
   },
+  platform: {
+    overview: "/platform/overview",
+    metrics: "/platform/metrics",
+    workspaces: "/platform/workspaces",
+    workspaceById: (id) => `/platform/workspaces/${id}`,
+    workspaceStatus: (id) => `/platform/workspaces/${id}/status`,
+    workspacePlan: (id) => `/platform/workspaces/${id}/plan`,
+    userStatus: (id) => `/platform/users/${id}/status`
+  },
   clients: {
     list: "/clients",
     import: "/clients/import",

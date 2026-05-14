@@ -115,7 +115,7 @@ function stepFromPath(pathname) {
 export function OnboardingProvider({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, hasPlatformAccess } = useAuth();
   const { showToast } = useToast();
   const [progress, setProgress] = useState(createDefaultProgress);
   const [hydrated, setHydrated] = useState(false);
@@ -124,7 +124,7 @@ export function OnboardingProvider({ children }) {
   const [tourIndex, setTourIndex] = useState(0);
 
   useEffect(() => {
-    if (!isAuthenticated || !user) {
+    if (!isAuthenticated || !user || hasPlatformAccess) {
       setProgress(createDefaultProgress());
       setTourActive(false);
       setTourIndex(0);
@@ -142,16 +142,16 @@ export function OnboardingProvider({ children }) {
     } finally {
       setHydrated(true);
     }
-  }, [isAuthenticated, user?.id, user?.email]);
+  }, [hasPlatformAccess, isAuthenticated, user?.id, user?.email]);
 
   useEffect(() => {
-    if (!hydrated || !isAuthenticated || !user) return;
+    if (!hydrated || !isAuthenticated || !user || hasPlatformAccess) return;
     const key = storageKeyFor(user);
     window.localStorage.setItem(key, JSON.stringify(progress));
-  }, [progress, hydrated, isAuthenticated, user?.id, user?.email]);
+  }, [progress, hydrated, hasPlatformAccess, isAuthenticated, user?.id, user?.email]);
 
   const refreshChecklist = useCallback(async () => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !user || hasPlatformAccess) return;
 
     setChecklistLoading(true);
     try {
@@ -183,12 +183,12 @@ export function OnboardingProvider({ children }) {
     } finally {
       setChecklistLoading(false);
     }
-  }, [isAuthenticated, user?.id]);
+  }, [hasPlatformAccess, isAuthenticated, user?.id]);
 
   useEffect(() => {
-    if (!hydrated || !isAuthenticated || !user) return;
+    if (!hydrated || !isAuthenticated || !user || hasPlatformAccess) return;
     refreshChecklist();
-  }, [hydrated, isAuthenticated, user?.id, refreshChecklist]);
+  }, [hydrated, hasPlatformAccess, isAuthenticated, user?.id, refreshChecklist]);
 
   useEffect(() => {
     if (!tourActive) return;
@@ -368,7 +368,7 @@ export function OnboardingProvider({ children }) {
     return { items, completed, total, ratio, done: completed === total };
   }, [progress.steps]);
 
-  const welcomeOpen = hydrated && isAuthenticated && !progress.hasSeenWelcome;
+  const welcomeOpen = hydrated && isAuthenticated && !hasPlatformAccess && !progress.hasSeenWelcome;
   const currentTourStep = tourActive ? TOUR_STEPS[tourIndex] : null;
 
   const value = useMemo(

@@ -65,9 +65,9 @@ export const workspaceNavigation = [
 ];
 
 export const platformNavigation = [
-  { to: "/plataforma", label: "Painel da plataforma", icon: "dashboard" },
-  { to: "/plataforma/contas", label: "Contas", icon: "clients" },
-  { to: "/plataforma/planos", label: "Planos", icon: "finance" },
-  { to: "/plataforma/auditoria", label: "Auditoria", icon: "history" },
-  { to: "/plataforma/suporte", label: "Modo GOD", icon: "settings" }
+  { to: "/platform", label: "Painel da plataforma", icon: "dashboard" },
+  { to: "/platform/contas", label: "Contas", icon: "clients" },
+  { to: "/platform/planos", label: "Planos", icon: "finance" },
+  { to: "/platform/auditoria", label: "Auditoria", icon: "history" },
+  { to: "/platform/suporte", label: "Modo GOD", icon: "settings" }
 ];

@@ -6,6 +6,7 @@
   dashboardService,
   financeService,
   professionalService,
+  platformService,
   serviceCatalogService
 } from "../services/index.js";
 
@@ -52,5 +53,12 @@ export const api = {
   adminSummary: () => adminService.getAdminSummary(),
   listAdminUsers: (params) => adminService.listAdminUsers(params),
   updateAdminUserRole: (id, role) => adminService.updateAdminUserRole(id, role),
-  listAdminAuditLogs: (params) => adminService.listAdminAuditLogs(params)
+  listAdminAuditLogs: (params) => adminService.listAdminAuditLogs(params),
+
+  platformOverview: (params) => platformService.getPlatformOverview(params),
+  listPlatformWorkspaces: (params) => platformService.listPlatformWorkspaces(params),
+  getPlatformWorkspace: (id, params) => platformService.getPlatformWorkspace(id, params),
+  updatePlatformWorkspaceStatus: (id, payload) => platformService.updatePlatformWorkspaceStatus(id, payload),
+  updatePlatformWorkspacePlan: (id, payload) => platformService.updatePlatformWorkspacePlan(id, payload),
+  updatePlatformUserStatus: (id, payload) => platformService.updatePlatformUserStatus(id, payload)
 };

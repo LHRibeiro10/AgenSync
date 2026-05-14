@@ -41,6 +41,7 @@ enum WorkspaceRole {
 }
 
 enum PlatformRole {
+  USER
   SUPPORT
   DEVELOPER
   PLATFORM_OWNER
@@ -51,6 +52,17 @@ enum AccountSubscriptionStatus {
   TRIAL
   PAST_DUE
   CANCELED
+}
+
+enum AccountOperationalStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum UserAccountStatus {
+  ACTIVE
+  INACTIVE
 }
 
 enum ReminderType {
@@ -73,9 +85,13 @@ model User {
   passwordHash  String
   role          UserRole       @default(USER)
   workspaceRole WorkspaceRole  @default(OWNER)
-  platformRole  PlatformRole?
+  platformRole  PlatformRole? @default(USER)
+  platformPlan  String?
+  accountStatus AccountOperationalStatus @default(ACTIVE)
+  userStatus    UserAccountStatus @default(ACTIVE)
   subscriptionStatus AccountSubscriptionStatus @default(PAID)
   subscriptionPaidUntil DateTime?
+  temporaryAccessUntil DateTime?
   billingEnabled Boolean @default(false)
   businessName  String
   businessLogo  String?
@@ -102,6 +118,9 @@ model User {
   @@index([role])
   @@index([workspaceRole])
   @@index([platformRole])
+  @@index([platformPlan])
+  @@index([accountStatus])
+  @@index([userStatus])
   @@index([subscriptionStatus])
   @@index([createdAt])
 }

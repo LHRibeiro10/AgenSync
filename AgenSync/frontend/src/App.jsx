@@ -27,13 +27,17 @@ const Subscriptions = lazy(() => import("./pages/Subscriptions.jsx"));
 function ProtectedRoute() {
   const { loading, isAuthenticated, hasPlatformAccess } = useAuth();
   const location = useLocation();
+  const isPlatformPath =
+    location.pathname.startsWith("/platform") ||
+    location.pathname.startsWith("/plataforma") ||
+    location.pathname.startsWith("/admin/platform");
 
   if (loading) return <Loading label="Abrindo sua agenda..." />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (hasPlatformAccess && !location.pathname.startsWith("/plataforma")) {
-    return <Navigate to="/plataforma" replace />;
+  if (hasPlatformAccess && !isPlatformPath) {
+    return <Navigate to="/platform" replace />;
   }
-  if (!hasPlatformAccess && location.pathname.startsWith("/plataforma")) {
+  if (!hasPlatformAccess && isPlatformPath) {
     return <Navigate to="/" replace />;
   }
   return <Layout />;
@@ -95,6 +99,10 @@ export default function App() {
               </AdminRoute>
             }
           />
+          <Route path="platform" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
+          <Route path="platform/:section" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
+          <Route path="admin/platform" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
+          <Route path="admin/platform/:section" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
           <Route path="plataforma" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
           <Route path="plataforma/:section" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
           <Route path="agenda" element={<Agenda />} />

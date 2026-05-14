@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as authService from "../services/authService.js";
 import { httpClient, setUnauthorizedHandler } from "../api/httpClient.js";
 import { clearUserDataCache } from "../lib/userDataCache.js";
-import { canAccessAdmin, canAccessPermission, getPlatformRole, getWorkspaceRole, isPlatformUser } from "../lib/permissions.js";
+import { canAccessAdmin, canAccessPermission, getPlatformRole, getWorkspaceRole, isPlatformOwner } from "../lib/permissions.js";
 
 const AuthContext = createContext(null);
 
@@ -116,7 +116,7 @@ export function AuthProvider({ children }) {
   const workspaceRole = getWorkspaceRole(user);
   const platformRole = getPlatformRole(user);
   const isAdmin = canAccessAdmin(user);
-  const hasPlatformAccess = isPlatformUser(user);
+  const hasPlatformAccess = isPlatformOwner(user);
   const canAccess = useCallback((permission) => canAccessPermission(user, permission), [user]);
 
   const value = useMemo(

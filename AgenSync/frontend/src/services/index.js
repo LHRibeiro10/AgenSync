@@ -1,6 +1,7 @@
 export * as authService from "./authService.js";
 export * as clientService from "./clientService.js";
 export * as professionalService from "./professionalService.js";
+export * as platformService from "./platformService.js";
 export * as serviceCatalogService from "./serviceCatalogService.js";
 export * as appointmentService from "./appointmentService.js";
 export * as dashboardService from "./dashboardService.js";
