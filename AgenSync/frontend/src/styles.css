@@ -3,11 +3,74 @@
 @tailwind utilities;
 
 :root {
-  color: #111827;
-  background: #f1f5f9;
+  --color-canvas: 241 245 249;
+  --color-surface: 248 250 252;
+  --color-panel: 255 255 255;
+  --color-panel-muted: 248 250 252;
+  --color-ink: 17 24 39;
+  --color-muted: 100 116 139;
+  --color-line: 226 232 240;
+  --color-soft: 241 245 249;
+  --color-brand: 37 99 235;
+  --color-brand-dark: 29 78 216;
+  --color-accent: 124 58 237;
+  --color-success: 22 163 74;
+  --color-danger: 220 38 38;
+  --color-warning: 217 119 6;
+  --theme-bg: rgb(var(--color-canvas));
+  --theme-surface: rgb(var(--color-surface));
+  --theme-card: rgb(var(--color-panel));
+  --theme-card-muted: rgb(var(--color-panel-muted));
+  --theme-border: rgb(var(--color-line));
+  --theme-text: rgb(var(--color-ink));
+  --theme-muted: rgb(var(--color-muted));
+  --theme-input: rgb(var(--color-panel));
+  --theme-hover: rgba(37, 99, 235, 0.08);
+  --theme-active: rgba(37, 99, 235, 0.14);
+  --theme-modal: rgb(var(--color-panel));
+  --theme-sidebar: linear-gradient(180deg, #111827 0%, #0f172a 48%, #020617 100%);
+  --theme-calendar-slot: rgba(248, 250, 252, 0.72);
+  --shadow-panel: 0 18px 50px rgba(15, 23, 42, 0.10);
+  --shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.07);
+  color: var(--theme-text);
+  background: var(--theme-bg);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  color-scheme: light;
+}
+
+:root.dark {
+  --color-canvas: 8 11 24;
+  --color-surface: 12 17 32;
+  --color-panel: 18 24 42;
+  --color-panel-muted: 24 32 52;
+  --color-ink: 226 232 240;
+  --color-muted: 148 163 184;
+  --color-line: 51 65 85;
+  --color-soft: 15 23 42;
+  --color-brand: 167 139 250;
+  --color-brand-dark: 139 92 246;
+  --color-accent: 196 181 253;
+  --color-success: 74 222 128;
+  --color-danger: 248 113 113;
+  --color-warning: 251 191 36;
+  --theme-bg: #080b18;
+  --theme-surface: #0c1120;
+  --theme-card: #12182a;
+  --theme-card-muted: #182034;
+  --theme-border: rgba(148, 163, 184, 0.22);
+  --theme-text: rgb(var(--color-ink));
+  --theme-muted: rgb(var(--color-muted));
+  --theme-input: #11182a;
+  --theme-hover: rgba(167, 139, 250, 0.12);
+  --theme-active: rgba(167, 139, 250, 0.18);
+  --theme-modal: #101729;
+  --theme-sidebar: linear-gradient(180deg, #131729 0%, #0c1020 48%, #070914 100%);
+  --theme-calendar-slot: rgba(24, 32, 52, 0.78);
+  --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.36);
+  --shadow-soft: 0 14px 36px rgba(0, 0, 0, 0.26);
+  color-scheme: dark;
 }
 
 * {
@@ -19,6 +82,8 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
+  background: var(--theme-bg);
+  color: var(--theme-text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-weight: 500;
@@ -26,6 +91,12 @@ body {
 
 html {
   overflow-x: hidden;
+  background: var(--theme-bg);
+}
+
+#root {
+  min-height: 100vh;
+  background: var(--theme-bg);
 }
 
 img,
@@ -79,7 +150,7 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 4px rgba(var(--color-brand), 0.14);
 }
 
 button:focus-visible,
@@ -87,8 +158,177 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.22);
+  outline: 3px solid rgba(var(--color-brand), 0.28);
   outline-offset: 2px;
+}
+
+:root.dark input:not([type="checkbox"]):not([type="radio"]):not(.bg-transparent),
+:root.dark select,
+:root.dark textarea:not(.bg-transparent) {
+  background-color: var(--theme-input);
+  border-color: var(--theme-border);
+  color: var(--theme-text);
+}
+
+:root.dark input::placeholder,
+:root.dark textarea::placeholder {
+  color: rgba(var(--color-muted), 0.74);
+}
+
+:root.dark :is(
+  .bg-white,
+  .bg-white\/95,
+  .bg-white\/90,
+  .bg-white\/80,
+  .bg-white\/70,
+  .bg-white\/50,
+  .bg-white\/45,
+  .bg-white\/35
+) {
+  background-color: rgba(18, 24, 42, 0.96) !important;
+}
+
+:root.dark :is(
+  .bg-\[\#F8FAFC\],
+  .bg-\[\#F9FAFB\],
+  .bg-\[\#F3F4F6\],
+  .bg-\[\#EFF6FF\],
+  .bg-\[\#EEF4FB\],
+  .bg-\[\#E2E8F0\],
+  .bg-slate-50,
+  .bg-slate-50\/80,
+  .bg-slate-50\/45,
+  .bg-slate-100,
+  .bg-zinc-100
+) {
+  background-color: var(--theme-card-muted) !important;
+}
+
+:root.dark :is(.bg-soft, .bg-\[\#F1F5F9\]) {
+  background-color: var(--theme-bg) !important;
+}
+
+:root.dark :is(.bg-blue-50, .bg-blue-50\/95, .bg-blue-50\/80, .bg-blue-50\/70, .bg-\[\#DBEAFE\]) {
+  background-color: rgba(var(--color-brand), 0.15) !important;
+}
+
+:root.dark :is(.bg-green-50, .bg-emerald-50\/95, .bg-\[\#D1FAE5\]) {
+  background-color: rgba(34, 197, 94, 0.13) !important;
+}
+
+:root.dark :is(.bg-red-50, .bg-red-50\/95, .bg-red-50\/80, .bg-red-50\/70, .bg-red-50\/50, .bg-red-100) {
+  background-color: rgba(248, 113, 113, 0.13) !important;
+}
+
+:root.dark :is(.bg-amber-50, .bg-amber-50\/95, .bg-amber-100) {
+  background-color: rgba(251, 191, 36, 0.13) !important;
+}
+
+:root.dark :is(
+  .border-line,
+  .border-white\/80,
+  .border-white\/70,
+  .border-slate-100,
+  .border-slate-200,
+  .border-slate-200\/80,
+  .border-slate-300,
+  .border-zinc-200,
+  .border-blue-100,
+  .border-blue-200,
+  .border-blue-200\/70,
+  .border-green-200,
+  .border-emerald-200,
+  .border-red-100,
+  .border-red-200,
+  .border-amber-200,
+  .border-\[\#E2E8F0\],
+  .border-\[\#DDE6F0\],
+  .border-\[\#D8E0EA\],
+  .border-\[\#CBD5E1\],
+  .border-\[\#BFDBFE\],
+  .border-\[\#DBEAFE\]
+) {
+  border-color: var(--theme-border) !important;
+}
+
+:root.dark :is(
+  .divide-slate-100,
+  .divide-slate-200,
+  .divide-\[\#E2E8F0\]
+) > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--theme-border) !important;
+}
+
+:root.dark :is(
+  .text-slate-950,
+  .text-slate-900,
+  .text-slate-800,
+  .text-slate-700,
+  .text-zinc-700,
+  .text-zinc-600
+) {
+  color: var(--theme-text) !important;
+}
+
+:root.dark :is(
+  .text-slate-600,
+  .text-slate-500,
+  .text-slate-400,
+  .text-zinc-500,
+  .text-zinc-400
+) {
+  color: var(--theme-muted) !important;
+}
+
+:root.dark :is(.text-blue-700, .text-blue-900, .text-\[\#1E3A8A\]) {
+  color: rgb(var(--color-brand)) !important;
+}
+
+:root.dark :is(.text-emerald-950, .text-\[\#166534\]) {
+  color: #bbf7d0 !important;
+}
+
+:root.dark .text-red-900 {
+  color: #fecaca !important;
+}
+
+:root.dark .text-amber-950 {
+  color: #fde68a !important;
+}
+
+:root.dark :is(.ring-slate-200, .ring-blue-100, .ring-blue-200, .ring-green-200, .ring-red-200, .ring-amber-200) {
+  --tw-ring-color: var(--theme-border) !important;
+}
+
+:root.dark :is(
+  .hover\:bg-\[\#F8FAFC\]:hover,
+  .hover\:bg-\[\#F9FAFB\]:hover,
+  .hover\:bg-slate-50:hover,
+  .hover\:bg-zinc-100:hover,
+  .hover\:bg-blue-50:hover,
+  .hover\:bg-blue-50\/40:hover
+) {
+  background-color: var(--theme-hover) !important;
+}
+
+:root.dark .before\:bg-\[\#D8E0EA\]::before {
+  background-color: var(--theme-border) !important;
+}
+
+:root.dark :is(
+  .active\:bg-\[\#DBEAFE\]\/40:active,
+  .active\:bg-slate-50:active
+) {
+  background-color: var(--theme-active) !important;
+}
+
+:root.dark :is(thead, .bg-\[\#F8FAFC\]) {
+  color: var(--theme-muted);
+}
+
+:root.dark .shadow-soft,
+:root.dark .shadow-panel {
+  box-shadow: var(--shadow-soft);
 }
 
 .scrollbar-thin {
@@ -121,7 +361,7 @@ textarea:focus-visible {
 .skeleton-line {
   position: relative;
   overflow: hidden;
-  background: #e2e8f0;
+  background: rgba(var(--color-line), 0.78);
 }
 
 .skeleton-line::after {
@@ -131,6 +371,10 @@ textarea:focus-visible {
   transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
   animation: skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+:root.dark .skeleton-line::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
 }
 
 @keyframes page-enter {
@@ -238,7 +482,7 @@ textarea:focus-visible {
   margin: 0;
   padding: 0;
   border: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(2, 6, 23, 0.58);
   backdrop-filter: blur(8px);
   box-sizing: border-box;
 }
@@ -263,11 +507,11 @@ textarea:focus-visible {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--theme-border);
   border-bottom: 0;
   border-radius: 28px 28px 0 0;
-  background: #fff;
-  box-shadow: 0 -24px 60px rgba(15, 23, 42, 0.24);
+  background: var(--theme-modal);
+  box-shadow: var(--shadow-panel);
   box-sizing: border-box;
 }
 
@@ -277,7 +521,7 @@ textarea:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--theme-border);
   padding: 1rem;
   box-sizing: border-box;
 }
@@ -298,8 +542,8 @@ textarea:focus-visible {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   flex-shrink: 0;
   gap: 0.5rem;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-modal);
   padding: 0.75rem 1rem calc(env(safe-area-inset-bottom) + 0.75rem);
   box-sizing: border-box;
 }
@@ -386,6 +630,79 @@ textarea:focus-visible {
 
 .agensync-sidebar-scroll:hover::-webkit-scrollbar-thumb {
   background: rgba(191, 219, 254, 0.48);
+}
+
+:root:not(.dark) .login-page {
+  background: radial-gradient(circle at 16% 10%, rgba(124, 58, 237, 0.16), transparent 34%),
+    radial-gradient(circle at 86% 18%, rgba(37, 99, 235, 0.16), transparent 32%),
+    var(--theme-bg) !important;
+  color: var(--theme-text) !important;
+}
+
+:root:not(.dark) .login-bg-1 {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.66), rgba(241, 245, 249, 0.72)) !important;
+}
+
+:root:not(.dark) .login-frame {
+  border-color: rgba(226, 232, 240, 0.9) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: 0 32px 90px rgba(15, 23, 42, 0.16) !important;
+}
+
+:root:not(.dark) .login-form-card {
+  border-color: rgba(226, 232, 240, 0.92) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: var(--theme-text) !important;
+  box-shadow: var(--shadow-panel) !important;
+}
+
+:root:not(.dark) .login-theme-toggle {
+  border-color: var(--theme-border) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: var(--theme-text) !important;
+}
+
+:root:not(.dark) :is(.login-form-title, .login-form-card h2, .login-auth-label) {
+  color: var(--theme-text) !important;
+}
+
+:root:not(.dark) :is(.login-form-subtitle, .login-form-footer, .login-remember-row label) {
+  color: var(--theme-muted) !important;
+}
+
+:root:not(.dark) .login-form-kicker {
+  color: rgb(var(--color-brand)) !important;
+}
+
+:root:not(.dark) .login-auth-field {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-card-muted) !important;
+  color: var(--theme-text) !important;
+}
+
+:root:not(.dark) .login-auth-field::placeholder {
+  color: rgba(var(--color-muted), 0.74) !important;
+}
+
+:root:not(.dark) .login-tabs {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-card-muted) !important;
+}
+
+:root:not(.dark) .login-tabs button:not([class*="bg-gradient"]) {
+  color: var(--theme-muted);
+}
+
+:root:not(.dark) :is(.login-recovery-note, .login-resend-button) {
+  border-color: rgba(var(--color-brand), 0.28) !important;
+  background: rgba(var(--color-brand), 0.1) !important;
+  color: rgb(var(--color-brand-dark)) !important;
+}
+
+:root.dark .reset-bg {
+  background: radial-gradient(circle at 20% 18%, rgba(124, 58, 237, 0.25), transparent 30%),
+    radial-gradient(circle at 82% 28%, rgba(37, 99, 235, 0.2), transparent 30%),
+    linear-gradient(135deg, rgba(8, 11, 24, 0.92), rgba(14, 20, 38, 0.82)) !important;
 }
 
 @media (max-width: 640px) {

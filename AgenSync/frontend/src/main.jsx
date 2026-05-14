@@ -5,6 +5,7 @@ import App from "./App.jsx";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.jsx";
 import { AuthProvider } from "./contexts/AuthContext.jsx";
 import { OnboardingProvider } from "./contexts/OnboardingContext.jsx";
+import { ThemeProvider } from "./contexts/ThemeContext.jsx";
 import { WorkspaceViewProvider } from "./contexts/WorkspaceViewContext.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import "./styles.css";
@@ -62,16 +63,18 @@ cleanupLegacyMockStorage();
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
-          <WorkspaceViewProvider>
-            <OnboardingProvider>
-              <App />
-              <PwaUpdatePrompt />
-            </OnboardingProvider>
-          </WorkspaceViewProvider>
-        </ToastProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <WorkspaceViewProvider>
+              <OnboardingProvider>
+                <App />
+                <PwaUpdatePrompt />
+              </OnboardingProvider>
+            </WorkspaceViewProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

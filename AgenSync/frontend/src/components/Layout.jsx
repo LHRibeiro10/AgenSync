@@ -8,6 +8,7 @@ import ContextHelpWidget from "./ContextHelpWidget.jsx";
 import Icon from "./Icon.jsx";
 import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
 import PageTransition from "./PageTransition.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
 import WelcomeOnboardingModal from "./onboarding/WelcomeOnboardingModal.jsx";
 
 const OPEN_MODULES_KEY = "agensync_sidebar_open_modules";
@@ -226,8 +227,8 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#F1F5F9] text-ink">
-      <aside className="fixed inset-y-0 left-0 hidden w-72 rounded-r-[30px] border border-white/10 bg-gradient-to-b from-[#111827] via-[#0F172A] to-[#020617] p-4 shadow-[0_28px_70px_rgba(15,23,42,0.34)] lg:block">
+    <div className="min-h-screen overflow-x-hidden bg-canvas text-ink">
+      <aside className="fixed inset-y-0 left-0 hidden w-72 rounded-r-[30px] border border-white/10 bg-[image:var(--theme-sidebar)] p-4 shadow-[0_28px_70px_rgba(15,23,42,0.34)] lg:block">
         <div className="flex h-full flex-col">
           <SidebarBrand />
 
@@ -252,6 +253,7 @@ export default function Layout() {
           </nav>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+            <ThemeToggle className="mb-3 border-white/10 bg-white/[0.06] hover:bg-white/[0.1] [&_span]:text-white" />
             <div className="flex items-center gap-3">
               <AccountMark user={user} />
               <div className="min-w-0">
@@ -266,12 +268,12 @@ export default function Layout() {
         </div>
       </aside>
 
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-[#E2E8F0] bg-white/95 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-line bg-panel/95 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] shadow-soft backdrop-blur lg:hidden">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#E2E8F0] bg-white text-ink shadow-sm transition active:scale-95"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-line bg-panel text-ink shadow-sm transition active:scale-95"
             aria-label="Abrir menu"
           >
             <span className="space-y-1.5">
@@ -296,6 +298,8 @@ export default function Layout() {
               {mobileAction.label}
             </button>
           ) : null}
+
+          <ThemeToggle compact />
         </div>
       </header>
 
@@ -307,7 +311,7 @@ export default function Layout() {
             onClick={closeDrawer}
             aria-label="Fechar menu"
           />
-          <aside className="agensync-drawer-panel relative flex h-full w-[86vw] max-w-[320px] flex-col rounded-r-[30px] border-r border-white/10 bg-gradient-to-b from-[#111827] via-[#0F172A] to-[#020617] p-4 shadow-[24px_0_70px_rgba(15,23,42,0.42)]">
+          <aside className="agensync-drawer-panel relative flex h-full w-[86vw] max-w-[320px] flex-col rounded-r-[30px] border-r border-white/10 bg-[image:var(--theme-sidebar)] p-4 shadow-[24px_0_70px_rgba(15,23,42,0.42)]">
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-1 justify-center pt-1">
                 <BrandLogo src="/AgenSync_sidebar.png" className="h-14 w-56 shrink-0" />
@@ -348,6 +352,7 @@ export default function Layout() {
             </nav>
 
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+              <ThemeToggle className="mb-3 border-white/10 bg-white/[0.06] hover:bg-white/[0.1] [&_span]:text-white" />
               <div className="flex items-center gap-3">
                 <AccountMark user={user} size="lg" />
                 <div className="min-w-0">

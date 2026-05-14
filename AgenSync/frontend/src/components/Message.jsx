@@ -4,9 +4,9 @@ export default function Message({ type = "info", children, actionLabel = "", onA
   const styles =
     type === "error"
       ? "border-red-200 bg-red-50 text-danger"
-      : type === "success"
-        ? "border-green-200 bg-green-50 text-success"
-        : "border-line bg-white text-muted";
+    : type === "success"
+      ? "border-green-200 bg-green-50 text-success"
+      : "border-line bg-panel text-muted";
 
   return (
     <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${styles}`}>

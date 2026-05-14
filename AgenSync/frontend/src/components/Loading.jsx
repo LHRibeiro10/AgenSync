@@ -1,6 +1,6 @@
 export default function Loading({ label = "Carregando..." }) {
   return (
-    <div className="skeleton-panel min-h-32 rounded-2xl border border-[#E2E8F0] bg-white/80 p-4 sm:min-h-[240px] sm:p-5" role="status" aria-live="polite">
+    <div className="skeleton-panel min-h-32 rounded-2xl border border-line bg-panel/80 p-4 sm:min-h-[240px] sm:p-5" role="status" aria-live="polite">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="skeleton-line h-4 w-40 max-w-full rounded-full" />

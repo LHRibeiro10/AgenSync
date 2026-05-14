@@ -2,6 +2,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import BrandLogo from "../components/BrandLogo.jsx";
+import ThemeToggle from "../components/ThemeToggle.jsx";
 
 function Field({ label, type = "text", value, onChange, minLength = 1, autoComplete }) {
   return (
@@ -110,10 +111,11 @@ export default function ResetPassword() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#EEF4FB] px-4 py-5 text-slate-950 sm:px-6 lg:py-0">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(37,99,235,0.18),transparent_28%),radial-gradient(circle_at_82%_28%,rgba(99,102,241,0.16),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.82),rgba(219,234,254,0.52))]" />
+    <main className="reset-page relative min-h-screen overflow-x-hidden bg-[#EEF4FB] px-4 py-5 text-slate-950 sm:px-6 lg:py-0">
+      <div className="reset-bg absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(37,99,235,0.18),transparent_28%),radial-gradient(circle_at_82%_28%,rgba(99,102,241,0.16),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.82),rgba(219,234,254,0.52))]" />
       <div className="absolute left-[8%] top-[12%] h-40 w-72 rotate-[-18deg] rounded-[42px] bg-white/35 blur-2xl" />
       <div className="absolute bottom-[10%] right-[6%] h-44 w-80 rotate-[16deg] rounded-[48px] bg-blue-400/15 blur-2xl" />
+      <ThemeToggle compact className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6" />
 
       <section className="relative mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center lg:min-h-screen">
         <form

@@ -1,9 +1,23 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="light">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        try {
+          var theme = window.localStorage.getItem("agensync_theme");
+          var nextTheme = theme === "dark" ? "dark" : "light";
+          document.documentElement.dataset.theme = nextTheme;
+          document.documentElement.classList.toggle("dark", nextTheme === "dark");
+          document.documentElement.style.colorScheme = nextTheme;
+        } catch (error) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F1F5F9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B1020" />
     <meta name="description" content="Sistema de agendamento e financeiro para prestadores de serviço" />
     <link rel="icon" type="image/jpeg" href="/Logo.jpeg" />
     <link rel="apple-touch-icon" href="/pwa-192.png" />

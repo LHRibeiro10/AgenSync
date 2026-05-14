@@ -2,8 +2,8 @@ const variants = {
   primary:
     "border-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_16px_32px_rgba(37,99,235,0.24)] hover:shadow-[0_20px_40px_rgba(37,99,235,0.32)] hover:from-blue-700 hover:to-indigo-700 disabled:hover:from-blue-600 disabled:hover:to-indigo-600",
   secondary:
-    "border border-slate-200 bg-white text-ink shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-brand",
-  ghost: "text-muted hover:bg-zinc-100 hover:text-ink",
+    "border border-line bg-panel text-ink shadow-sm hover:border-brand/35 hover:bg-brand/10 hover:text-brand",
+  ghost: "text-muted hover:bg-panel-muted hover:text-ink",
   dark:
     "border border-white/10 bg-white/10 text-white shadow-sm hover:border-white/20 hover:bg-white/15",
   danger:

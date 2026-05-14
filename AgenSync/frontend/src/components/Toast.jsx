@@ -24,7 +24,7 @@ export function ToastProvider({ children }) {
             className={`toast-enter pointer-events-auto rounded-xl border px-4 py-3 text-sm font-semibold shadow-panel ${
               toast.type === "error"
                 ? "border-red-200 bg-red-50 text-danger"
-                : "border-green-200 bg-white text-success"
+                : "border-green-200 bg-panel text-success"
             }`}
           >
             {toast.message}

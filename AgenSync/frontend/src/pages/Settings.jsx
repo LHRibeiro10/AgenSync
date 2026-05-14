@@ -5,6 +5,7 @@ import Button from "../components/Button.jsx";
 import ClientImportSection from "../components/ClientImportSection.jsx";
 import Icon from "../components/Icon.jsx";
 import Message from "../components/Message.jsx";
+import ThemeToggle from "../components/ThemeToggle.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { businessTypes, getSuggestedServices } from "../data/businessOnboarding.js";
@@ -468,6 +469,15 @@ export default function Settings() {
               <InfoField label="Email" value={user?.email} icon="mail" />
               <InfoField label="Negócio" value={businessName || user?.businessName} icon="building" />
             </div>
+          </section>
+
+          <section className="rounded-lg border border-[#DDE6F0] bg-white p-4 shadow-soft sm:p-5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Aparência</p>
+            <h2 className="mt-2 text-xl font-black text-ink">Tema do sistema</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Escolha entre modo claro e modo noturno. O AgenSync mantém sua preferência neste navegador.
+            </p>
+            <ThemeToggle className="mt-4" />
           </section>
 
           <section className="rounded-lg border border-[#DDE6F0] bg-white p-4 shadow-soft sm:p-5">
