@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import BrandLogo from "../components/BrandLogo.jsx";
-import ThemeToggle from "../components/ThemeToggle.jsx";
 import { getSuggestedServices } from "../data/businessOnboarding.js";
 
 const initialForm = {
@@ -306,7 +305,6 @@ export default function Login() {
       <div className="login-bg-1 pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(55,18,112,0.58),transparent_38%),radial-gradient(circle_at_86%_12%,rgba(28,88,196,0.46),transparent_36%),linear-gradient(145deg,#04050C_0%,#080B18_48%,#050711_100%)]" />
       <div className="login-bg-2 pointer-events-none absolute -left-20 top-16 h-72 w-72 rounded-full bg-[#7E4FFF]/20 blur-3xl" />
       <div className="login-bg-3 pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-[#2563EB]/20 blur-3xl" />
-      <ThemeToggle compact className="login-theme-toggle absolute right-4 top-4 z-20 border-white/15 bg-white/10 text-white backdrop-blur hover:bg-white/15 sm:right-6 sm:top-6" />
 
       <section className="login-shell relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center">
         <div className="login-frame grid w-full gap-5 rounded-[28px] border border-white/10 bg-white/[0.03] p-3 shadow-[0_36px_100px_rgba(6,8,20,0.72)] backdrop-blur-xl lg:grid-cols-[1.08fr_0.92fr] lg:gap-0">

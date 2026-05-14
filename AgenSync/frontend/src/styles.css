@@ -632,77 +632,49 @@ textarea:focus-visible {
   background: rgba(191, 219, 254, 0.48);
 }
 
-:root:not(.dark) .login-page {
-  background: radial-gradient(circle at 16% 10%, rgba(124, 58, 237, 0.16), transparent 34%),
-    radial-gradient(circle at 86% 18%, rgba(37, 99, 235, 0.16), transparent 32%),
-    var(--theme-bg) !important;
-  color: var(--theme-text) !important;
-}
-
-:root:not(.dark) .login-bg-1 {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.66), rgba(241, 245, 249, 0.72)) !important;
-}
-
-:root:not(.dark) .login-frame {
-  border-color: rgba(226, 232, 240, 0.9) !important;
-  background: rgba(255, 255, 255, 0.78) !important;
-  box-shadow: 0 32px 90px rgba(15, 23, 42, 0.16) !important;
-}
-
-:root:not(.dark) .login-form-card {
-  border-color: rgba(226, 232, 240, 0.92) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  color: var(--theme-text) !important;
-  box-shadow: var(--shadow-panel) !important;
-}
-
-:root:not(.dark) .login-theme-toggle {
-  border-color: var(--theme-border) !important;
-  background: rgba(255, 255, 255, 0.82) !important;
-  color: var(--theme-text) !important;
-}
-
-:root:not(.dark) :is(.login-form-title, .login-form-card h2, .login-auth-label) {
-  color: var(--theme-text) !important;
-}
-
-:root:not(.dark) :is(.login-form-subtitle, .login-form-footer, .login-remember-row label) {
-  color: var(--theme-muted) !important;
-}
-
-:root:not(.dark) .login-form-kicker {
-  color: rgb(var(--color-brand)) !important;
-}
-
-:root:not(.dark) .login-auth-field {
-  border-color: var(--theme-border) !important;
-  background: var(--theme-card-muted) !important;
-  color: var(--theme-text) !important;
-}
-
-:root:not(.dark) .login-auth-field::placeholder {
-  color: rgba(var(--color-muted), 0.74) !important;
-}
-
-:root:not(.dark) .login-tabs {
-  border-color: var(--theme-border) !important;
-  background: var(--theme-card-muted) !important;
-}
-
-:root:not(.dark) .login-tabs button:not([class*="bg-gradient"]) {
-  color: var(--theme-muted);
-}
-
-:root:not(.dark) :is(.login-recovery-note, .login-resend-button) {
-  border-color: rgba(var(--color-brand), 0.28) !important;
-  background: rgba(var(--color-brand), 0.1) !important;
-  color: rgb(var(--color-brand-dark)) !important;
-}
-
 :root.dark .reset-bg {
   background: radial-gradient(circle at 20% 18%, rgba(124, 58, 237, 0.25), transparent 30%),
     radial-gradient(circle at 82% 28%, rgba(37, 99, 235, 0.2), transparent 30%),
     linear-gradient(135deg, rgba(8, 11, 24, 0.92), rgba(14, 20, 38, 0.82)) !important;
+}
+
+.login-page {
+  background: #050710 !important;
+  color: #f1f5f9 !important;
+}
+
+.login-page .login-auth-field {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: #0c122a !important;
+  color: #f1f5f9 !important;
+}
+
+.login-page .login-auth-field::placeholder {
+  color: #64748b !important;
+}
+
+.login-page :is(.text-white, .login-form-title) {
+  color: #ffffff !important;
+}
+
+.login-page .text-slate-100 {
+  color: #f1f5f9 !important;
+}
+
+.login-page .text-slate-200 {
+  color: #e2e8f0 !important;
+}
+
+.login-page .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+.login-page .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.login-page .text-slate-500 {
+  color: #64748b !important;
 }
 
 @media (max-width: 640px) {
