@@ -324,6 +324,12 @@ router.put(
     const whatsappReminderOffsetMinutes = optionalReminderOffset(req.body.whatsappReminderOffsetMinutes);
     const whatsappReminderMessage = optionalLongString(req.body.whatsappReminderMessage, "Mensagem do lembrete");
     const whatsappReminderTestPhone = optionalLongString(req.body.whatsappReminderTestPhone, "Telefone de teste", 32);
+    const whatsappConfirmationMessage = optionalLongString(
+      req.body.whatsappConfirmationMessage,
+      "Mensagem de confirmacao"
+    );
+    const appointmentNotificationsEnabled = optionalBoolean(req.body.appointmentNotificationsEnabled);
+    const appointmentNotificationOffsetMinutes = optionalReminderOffset(req.body.appointmentNotificationOffsetMinutes);
 
     const user = await prisma.user.update({
       where: { id: req.user.id },
@@ -334,7 +340,10 @@ router.put(
         ...(whatsappReminderEnabled === undefined ? {} : { whatsappReminderEnabled }),
         ...(whatsappReminderOffsetMinutes === undefined ? {} : { whatsappReminderOffsetMinutes }),
         ...(whatsappReminderMessage === undefined ? {} : { whatsappReminderMessage }),
-        ...(whatsappReminderTestPhone === undefined ? {} : { whatsappReminderTestPhone })
+        ...(whatsappReminderTestPhone === undefined ? {} : { whatsappReminderTestPhone }),
+        ...(whatsappConfirmationMessage === undefined ? {} : { whatsappConfirmationMessage }),
+        ...(appointmentNotificationsEnabled === undefined ? {} : { appointmentNotificationsEnabled }),
+        ...(appointmentNotificationOffsetMinutes === undefined ? {} : { appointmentNotificationOffsetMinutes })
       }
     });
 

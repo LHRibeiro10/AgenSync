@@ -9,6 +9,21 @@ import ThemeToggle from "../components/ThemeToggle.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { businessTypes, getSuggestedServices } from "../data/businessOnboarding.js";
+import {
+  DEFAULT_CONFIRMATION_MESSAGE,
+  DEFAULT_REMINDER_MESSAGE,
+  renderAppointmentMessage,
+  WHATSAPP_VARIABLES
+} from "../services/appointmentWhatsApp.js";
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  getNotificationSettings,
+  notificationOffsetOptions,
+  notificationSupport,
+  testNotification,
+  updateNotificationSettings
+} from "../services/notificationService.js";
 import { money } from "../utils.js";
 
 const normalizeName = (value) =>
@@ -122,8 +137,81 @@ function InfoField({ label, value, icon }) {
   );
 }
 
+const defaultNotificationSettings = {
+  appointmentNotificationsEnabled: true,
+  appointmentNotificationOffsetMinutes: 30,
+  appointmentNotificationChannels: ["internal", "push"],
+  whatsappReminderMessage: DEFAULT_REMINDER_MESSAGE,
+  whatsappConfirmationMessage: DEFAULT_CONFIRMATION_MESSAGE
+};
+
+const previewAppointment = {
+  client: { name: "Maria", phone: "(11) 99999-9999" },
+  service: { name: "Limpeza de pele" },
+  professional: { name: "Ana" },
+  date: "2026-05-21",
+  startTime: "14:00",
+  price: 120
+};
+
+function SwitchControl({ checked, onChange, label, description }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between gap-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-left transition hover:border-brand/40"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-black text-ink">{label}</span>
+        {description ? <span className="mt-1 block text-xs leading-5 text-muted">{description}</span> : null}
+      </span>
+      <span
+        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${
+          checked ? "justify-end bg-brand" : "justify-start bg-slate-300"
+        }`}
+      >
+        <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+      </span>
+    </button>
+  );
+}
+
+function MessageEditor({ title, value, onChange, onRestore, preview }) {
+  return (
+    <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-black text-ink">{title}</h3>
+          <p className="mt-1 text-xs font-bold leading-5 text-muted">Use variáveis para personalizar a mensagem.</p>
+        </div>
+        <Button type="button" variant="secondary" size="sm" onClick={onRestore}>
+          Restaurar padrão
+        </Button>
+      </div>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-3 min-h-32 w-full resize-y rounded-lg border border-[#D8E0EA] bg-white px-3 py-3 text-sm font-semibold leading-6 text-ink shadow-sm hover:border-brand/40 focus:border-brand focus:ring-4 focus:ring-brand/10"
+      />
+      <div className="mt-3 flex flex-wrap gap-2">
+        {WHATSAPP_VARIABLES.map((variable) => (
+          <span key={variable} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-black text-brand">
+            {variable}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">Preview</p>
+        <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-ink">{preview}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
-  const { user, updateUserSettings } = useAuth();
+  const { user, updateUserSettings, refreshSession } = useAuth();
   const { showToast } = useToast();
   const { startTour } = useOnboarding();
   const [businessName, setBusinessName] = useState(user?.businessName || "");
@@ -133,12 +221,47 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState(defaultNotificationSettings);
+  const [initialNotificationSettings, setInitialNotificationSettings] = useState(defaultNotificationSettings);
+  const [notificationLoading, setNotificationLoading] = useState(true);
+  const [notificationTesting, setNotificationTesting] = useState(false);
+  const [pushStatus, setPushStatus] = useState(() => notificationSupport());
 
   useEffect(() => {
     setBusinessName(user?.businessName || "");
     setBusinessLogo(user?.businessLogo || "");
     if (user?.businessType) setBusinessType(user.businessType);
   }, [user?.businessLogo, user?.businessName, user?.businessType]);
+
+  useEffect(() => {
+    let active = true;
+    setNotificationLoading(true);
+
+    getNotificationSettings()
+      .then((data) => {
+        if (!active) return;
+        const settings = {
+          ...defaultNotificationSettings,
+          ...(data.settings || {})
+        };
+        setNotificationSettings(settings);
+        setInitialNotificationSettings(settings);
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err.message || "Nao foi possivel carregar configuracoes de notificacao.");
+        }
+      })
+      .finally(() => {
+        if (active) setNotificationLoading(false);
+      });
+
+    setPushStatus(notificationSupport());
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const typeOptions = useMemo(() => {
     if (!businessType || businessTypes.some((type) => type.label === businessType)) {
@@ -165,7 +288,26 @@ export default function Settings() {
   const hasTypeChanged = Boolean(user?.businessType && businessType !== user.businessType);
   const hasBusinessNameChanged = businessName.trim() !== String(user?.businessName || "").trim();
   const hasLogoChanged = businessLogo !== String(user?.businessLogo || "");
-  const hasChanges = hasTypeChanged || hasBusinessNameChanged || hasLogoChanged;
+  const hasNotificationChanges =
+    JSON.stringify(notificationSettings) !== JSON.stringify(initialNotificationSettings);
+  const hasChanges = hasTypeChanged || hasBusinessNameChanged || hasLogoChanged || hasNotificationChanges;
+  const reminderPreview = renderAppointmentMessage({
+    appointment: previewAppointment,
+    user,
+    template: notificationSettings.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE
+  });
+  const confirmationPreview = renderAppointmentMessage({
+    appointment: previewAppointment,
+    user,
+    template: notificationSettings.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE
+  });
+
+  function updateLocalNotificationSettings(patch) {
+    setNotificationSettings((current) => ({
+      ...current,
+      ...patch
+    }));
+  }
 
   function selectBusinessType(type) {
     setBusinessType(type.label);
@@ -227,10 +369,32 @@ export default function Settings() {
         businessType
       });
 
+      const savedNotifications = await updateNotificationSettings(notificationSettings);
+      const savedSettings = {
+        ...defaultNotificationSettings,
+        ...(savedNotifications.settings || notificationSettings)
+      };
+
+      setNotificationSettings(savedSettings);
+      setInitialNotificationSettings(savedSettings);
+      if (savedSettings.appointmentNotificationsEnabled) {
+        const pushResult = await enablePushNotifications().catch((err) => ({ enabled: false, reason: err.message }));
+        if (!pushResult.enabled && pushResult.reason === "unsupported") {
+          showToast("Notificacoes internas ativadas. Push nao e suportado neste navegador.", "error");
+        } else if (!pushResult.enabled && pushResult.reason === "permission_denied") {
+          showToast("Notificacoes internas ativadas. Permissao de push negada.", "error");
+        } else if (!pushResult.enabled && pushResult.reason === "missing_config") {
+          showToast("Notificacoes internas ativadas. Push fica preparado para configuracao futura.");
+        }
+      } else {
+        await disablePushNotifications().catch(() => null);
+      }
+
       if (syncSuggestedServices && hasTypeChanged) {
         await addMissingSuggestedServices();
       }
 
+      await refreshSession?.({ silent: true }).catch(() => null);
       setSyncSuggestedServices(false);
       setSavedFeedback(true);
       showToast("Configurações salvas com sucesso");
@@ -240,6 +404,33 @@ export default function Settings() {
       showToast(err.message, "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestNotification() {
+    setNotificationTesting(true);
+    setError("");
+
+    try {
+      const result = await testNotification();
+      setPushStatus(notificationSupport());
+      if (result.ok) {
+        showToast("Notificação de teste enviada.");
+        return;
+      }
+
+      if (result.reason === "unsupported") {
+        showToast("Este navegador não suporta notificações.", "error");
+      } else if (result.reason === "permission_denied") {
+        showToast("Permissão de notificação negada neste navegador.", "error");
+      } else {
+        showToast("Não foi possível testar a notificação.", "error");
+      }
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setNotificationTesting(false);
     }
   }
 
@@ -449,6 +640,130 @@ export default function Settings() {
                   Alterar o tipo não limita recursos e não remove clientes, agenda, financeiro ou serviços já cadastrados.
                 </div>
               )}
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
+            <SectionHeader
+              eyebrow="Agenda"
+              title="Notificações de agendamento"
+              description="Defina se o AgenSync deve avisar antes dos atendimentos e com quanto tempo de antecedência."
+              icon="bell"
+            />
+
+            <div className="space-y-5 p-4 sm:p-5">
+              {notificationLoading ? (
+                <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm font-black text-muted">
+                  Carregando preferências de notificação...
+                </div>
+              ) : null}
+
+              <SwitchControl
+                checked={notificationSettings.appointmentNotificationsEnabled}
+                onChange={(checked) => updateLocalNotificationSettings({ appointmentNotificationsEnabled: checked })}
+                label={notificationSettings.appointmentNotificationsEnabled ? "Ativar notificações: Sim" : "Ativar notificações: Não"}
+                description="Quando ativo, lembretes internos são criados antes dos agendamentos futuros."
+              />
+
+              <div>
+                <label className="text-sm font-black text-ink" htmlFor="appointmentNotificationOffset">
+                  Tempo antes do agendamento
+                </label>
+                <select
+                  id="appointmentNotificationOffset"
+                  value={notificationSettings.appointmentNotificationOffsetMinutes}
+                  onChange={(event) =>
+                    updateLocalNotificationSettings({ appointmentNotificationOffsetMinutes: Number(event.target.value) })
+                  }
+                  className="mt-2 min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
+                >
+                  {notificationOffsetOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Tipo de notificação</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-blue-100 bg-white p-3">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.appointmentNotificationChannels?.includes("internal")}
+                      onChange={() => {}}
+                      disabled
+                      className="mt-1 h-5 w-5 accent-brand"
+                    />
+                    <span>
+                      <span className="block text-sm font-black text-ink">Notificação interna</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted">Central do sistema e sino no layout.</span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-blue-100 bg-white p-3">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.appointmentNotificationChannels?.includes("push")}
+                      onChange={(event) => {
+                        const nextChannels = event.target.checked
+                          ? [...new Set([...(notificationSettings.appointmentNotificationChannels || []), "push"])]
+                          : (notificationSettings.appointmentNotificationChannels || []).filter((channel) => channel !== "push");
+                        updateLocalNotificationSettings({ appointmentNotificationChannels: ["internal", ...nextChannels.filter((channel) => channel !== "internal")] });
+                      }}
+                      className="mt-1 h-5 w-5 accent-brand"
+                    />
+                    <span>
+                      <span className="block text-sm font-black text-ink">Push notification</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted">Usa Notification API quando o navegador permitir.</span>
+                    </span>
+                  </label>
+                </div>
+                <p className="mt-3 text-xs font-bold leading-5 text-muted">
+                  Email e WhatsApp automático ficam apenas preparados para etapas futuras.
+                </p>
+              </div>
+
+              {!pushStatus.notificationApi ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-warning">
+                  Este navegador não suporta notificações push. A central interna continua funcionando normalmente.
+                </div>
+              ) : pushStatus.permission === "denied" ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold leading-6 text-danger">
+                  A permissão de notificação foi negada neste navegador. Ative nas configurações do navegador para receber push.
+                </div>
+              ) : null}
+
+              <Button type="button" variant="secondary" loading={notificationTesting} loadingLabel="Testando..." onClick={handleTestNotification}>
+                <Icon name="bell" className="h-5 w-5" />
+                Testar notificação
+              </Button>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
+            <SectionHeader
+              eyebrow="WhatsApp manual"
+              title="Mensagens do WhatsApp"
+              description="Edite os textos usados no preview antes de copiar ou abrir o WhatsApp. O envio continua manual."
+              icon="message"
+            />
+
+            <div className="space-y-4 bg-[#F8FAFC] p-4 sm:p-5">
+              <MessageEditor
+                title="Lembrete de atendimento"
+                value={notificationSettings.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE}
+                onChange={(value) => updateLocalNotificationSettings({ whatsappReminderMessage: value })}
+                onRestore={() => updateLocalNotificationSettings({ whatsappReminderMessage: DEFAULT_REMINDER_MESSAGE })}
+                preview={reminderPreview}
+              />
+              <MessageEditor
+                title="Confirmação de comparecimento"
+                value={notificationSettings.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE}
+                onChange={(value) => updateLocalNotificationSettings({ whatsappConfirmationMessage: value })}
+                onRestore={() => updateLocalNotificationSettings({ whatsappConfirmationMessage: DEFAULT_CONFIRMATION_MESSAGE })}
+                preview={confirmationPreview}
+              />
             </div>
           </section>
 

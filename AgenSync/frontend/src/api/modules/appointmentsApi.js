@@ -5,6 +5,10 @@ export function listAppointmentsApi(params) {
   return httpClient.get(endpoints.appointments.list, { params, cacheTtlMs: 10_000 });
 }
 
+export function getAppointmentApi(appointmentId) {
+  return httpClient.get(endpoints.appointments.byId(appointmentId), { cacheTtlMs: 10_000 });
+}
+
 export function createAppointmentApi(payload) {
   return httpClient.post(endpoints.appointments.list, { body: payload });
 }

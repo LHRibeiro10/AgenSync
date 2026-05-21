@@ -1,6 +1,7 @@
 import {
   createAppointmentApi,
   deleteAppointmentApi,
+  getAppointmentApi,
   listAppointmentsApi,
   updateAppointmentApi
 } from "../api/modules/appointmentsApi.js";
@@ -10,6 +11,13 @@ export function listAppointments(params) {
   return executeDataSource({
     feature: "appointments.list",
     remote: () => listAppointmentsApi(params)
+  });
+}
+
+export function getAppointment(appointmentId) {
+  return executeDataSource({
+    feature: "appointments.get",
+    remote: () => getAppointmentApi(appointmentId)
   });
 }
 

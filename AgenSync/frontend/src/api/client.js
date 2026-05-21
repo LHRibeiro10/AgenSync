@@ -44,6 +44,7 @@ export const api = {
   deleteService: (id) => serviceCatalogService.deleteService(id),
 
   listAppointments: (params) => appointmentService.listAppointments(params),
+  getAppointment: (id) => appointmentService.getAppointment(id),
   createAppointment: (payload) => appointmentService.createAppointment(payload),
   updateAppointment: (id, payload) => appointmentService.updateAppointment(id, payload),
   deleteAppointment: (id) => appointmentService.deleteAppointment(id),

@@ -56,3 +56,19 @@ export async function sendPushToTokens(tokens, notification) {
 
   return { sent: response.successCount, failureCount: response.failureCount };
 }
+
+export async function sendPushToSubscriptions(subscriptions, notification) {
+  if (!Array.isArray(subscriptions) || !subscriptions.length) {
+    return { sent: 0, skipped: true };
+  }
+
+  // Native Web Push delivery needs VAPID signing. The subscription table is
+  // prepared now; actual delivery can be enabled later without changing routes.
+  return {
+    sent: 0,
+    skipped: true,
+    reason: "web_push_delivery_not_configured",
+    subscriptionCount: subscriptions.length,
+    notification
+  };
+}

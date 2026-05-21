@@ -11,7 +11,11 @@ export const endpoints = Object.freeze({
   notifications: {
     list: "/notifications",
     read: (id) => `/notifications/${id}/read`,
-    readAll: "/notifications/read-all"
+    readAll: "/notifications/read-all",
+    settings: "/notifications/settings",
+    test: "/notifications/test",
+    pushSubscribe: "/notifications/push/subscribe",
+    pushUnsubscribe: "/notifications/push/unsubscribe"
   },
   admin: {
     summary: "/admin/summary",

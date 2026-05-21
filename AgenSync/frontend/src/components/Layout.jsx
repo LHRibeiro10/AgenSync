@@ -6,6 +6,7 @@ import BrandLogo from "./BrandLogo.jsx";
 import Button from "./Button.jsx";
 import ContextHelpWidget from "./ContextHelpWidget.jsx";
 import Icon from "./Icon.jsx";
+import NotificationCenter from "./NotificationCenter.jsx";
 import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
 import PageTransition from "./PageTransition.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
@@ -253,6 +254,13 @@ export default function Layout() {
           </nav>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+            <div className="mb-3 flex items-center gap-2">
+              <NotificationCenter tone="dark" />
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-300">Notificações</p>
+                <p className="text-xs text-slate-400">Lembretes e avisos</p>
+              </div>
+            </div>
             <ThemeToggle className="mb-3 border-white/10 bg-white/[0.06] hover:bg-white/[0.1] [&_span]:text-white" />
             <div className="flex items-center gap-3">
               <AccountMark user={user} />
@@ -299,6 +307,7 @@ export default function Layout() {
             </button>
           ) : null}
 
+          <NotificationCenter />
           <ThemeToggle compact />
         </div>
       </header>
@@ -352,6 +361,13 @@ export default function Layout() {
             </nav>
 
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+              <div className="mb-3 flex items-center gap-2">
+                <NotificationCenter tone="dark" />
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-300">Notificações</p>
+                  <p className="text-xs text-slate-400">Lembretes e avisos</p>
+                </div>
+              </div>
               <ThemeToggle className="mb-3 border-white/10 bg-white/[0.06] hover:bg-white/[0.1] [&_span]:text-white" />
               <div className="flex items-center gap-3">
                 <AccountMark user={user} size="lg" />

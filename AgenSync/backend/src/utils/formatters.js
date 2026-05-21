@@ -55,6 +55,12 @@ export function publicUser(user) {
     whatsappReminderOffsetMinutes: Number(user.whatsappReminderOffsetMinutes || 120),
     whatsappReminderMessage: user.whatsappReminderMessage || "",
     whatsappReminderTestPhone: user.whatsappReminderTestPhone || "",
+    whatsappConfirmationMessage: user.whatsappConfirmationMessage || "",
+    appointmentNotificationsEnabled: user.appointmentNotificationsEnabled !== false,
+    appointmentNotificationOffsetMinutes: Number(user.appointmentNotificationOffsetMinutes || 30),
+    appointmentNotificationChannels: Array.isArray(user.appointmentNotificationChannels)
+      ? user.appointmentNotificationChannels
+      : ["internal", "push"],
     createdAt: user.createdAt
   };
 }

@@ -259,6 +259,10 @@ const userSelect = {
   whatsappReminderOffsetMinutes: true,
   whatsappReminderMessage: true,
   whatsappReminderTestPhone: true,
+  whatsappConfirmationMessage: true,
+  appointmentNotificationsEnabled: true,
+  appointmentNotificationOffsetMinutes: true,
+  appointmentNotificationChannels: true,
   createdAt: true
 };
 

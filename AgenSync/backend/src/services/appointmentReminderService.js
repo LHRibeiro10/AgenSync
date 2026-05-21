@@ -2,59 +2,136 @@ import { prisma } from "../prisma.js";
 import { publicAppointment } from "../utils/formatters.js";
 import { createInternalNotification } from "./notificationService.js";
 
-const REMINDER_OFFSETS = [
-  ["ONE_DAY_BEFORE", 24 * 60 * 60 * 1000],
-  ["TWO_HOURS_BEFORE", 2 * 60 * 60 * 1000],
-  ["THIRTY_MINUTES_BEFORE", 30 * 60 * 1000]
-];
+const REMINDER_TYPES_BY_OFFSET = {
+  10: "TEN_MINUTES_BEFORE",
+  15: "FIFTEEN_MINUTES_BEFORE",
+  30: "THIRTY_MINUTES_BEFORE",
+  60: "ONE_HOUR_BEFORE",
+  120: "TWO_HOURS_BEFORE",
+  1440: "ONE_DAY_BEFORE"
+};
+
+const OFFSET_BY_REMINDER_TYPE = Object.fromEntries(
+  Object.entries(REMINDER_TYPES_BY_OFFSET).map(([offset, type]) => [type, Number(offset)])
+);
+
+const NOTIFIABLE_STATUSES = new Set(["SCHEDULED"]);
+
+function normalizeReminderOffset(value) {
+  const offset = Number(value || 30);
+  return REMINDER_TYPES_BY_OFFSET[offset] ? offset : 30;
+}
+
+function offsetLabel(minutes) {
+  if (minutes === 60) return "1 hora";
+  if (minutes === 120) return "2 horas";
+  if (minutes === 1440) return "1 dia";
+  return `${minutes} minutos`;
+}
+
+async function reminderSettingsForUser(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      appointmentNotificationsEnabled: true,
+      appointmentNotificationOffsetMinutes: true
+    }
+  });
+
+  return {
+    enabled: user?.appointmentNotificationsEnabled !== false,
+    offsetMinutes: normalizeReminderOffset(user?.appointmentNotificationOffsetMinutes)
+  };
+}
+
+async function cancelPendingReminders(appointmentId, errorMessage) {
+  await prisma.appointmentReminder.updateMany({
+    where: { appointmentId, status: "PENDING" },
+    data: { status: "FAILED", errorMessage }
+  });
+}
 
 export async function syncAppointmentReminders(appointment) {
   if (!appointment?.id || !appointment?.startsAt) return;
 
-  if (appointment.status === "CANCELED") {
-    await prisma.appointmentReminder.updateMany({
-      where: { appointmentId: appointment.id, status: "PENDING" },
-      data: { status: "FAILED", errorMessage: "Agendamento cancelado." }
-    });
+  if (!NOTIFIABLE_STATUSES.has(appointment.status)) {
+    await cancelPendingReminders(appointment.id, "Agendamento sem status notificavel.");
+    return;
+  }
+
+  const settings = await reminderSettingsForUser(appointment.userId);
+  if (!settings.enabled) {
+    await cancelPendingReminders(appointment.id, "Notificacoes desativadas.");
     return;
   }
 
   const startsAt = new Date(appointment.startsAt).getTime();
+  const reminderType = REMINDER_TYPES_BY_OFFSET[settings.offsetMinutes];
+  const scheduledFor = new Date(startsAt - settings.offsetMinutes * 60 * 1000);
   const now = Date.now();
 
-  await Promise.all(
-    REMINDER_OFFSETS.map(([reminderType, offsetMs]) => {
-      const scheduledFor = new Date(startsAt - offsetMs);
-      if (scheduledFor.getTime() <= now) return null;
+  await prisma.appointmentReminder.updateMany({
+    where: {
+      appointmentId: appointment.id,
+      status: "PENDING",
+      reminderType: { not: reminderType }
+    },
+    data: { status: "FAILED", errorMessage: "Substituido pela configuracao atual." }
+  });
 
-      return prisma.appointmentReminder.upsert({
-        where: {
-          appointmentId_reminderType: {
-            appointmentId: appointment.id,
-            reminderType
-          }
-        },
-        create: {
-          appointmentId: appointment.id,
-          userId: appointment.userId,
-          reminderType,
-          scheduledFor
-        },
-        update: {
-          userId: appointment.userId,
-          scheduledFor,
-          status: "PENDING",
-          sentAt: null,
-          errorMessage: null
-        }
-      });
-    })
-  );
+  if (scheduledFor.getTime() <= now) return;
+
+  await prisma.appointmentReminder.upsert({
+    where: {
+      appointmentId_reminderType: {
+        appointmentId: appointment.id,
+        reminderType
+      }
+    },
+    create: {
+      appointmentId: appointment.id,
+      userId: appointment.userId,
+      reminderType,
+      scheduledFor
+    },
+    update: {
+      userId: appointment.userId,
+      scheduledFor,
+      status: "PENDING",
+      sentAt: null,
+      errorMessage: null
+    }
+  });
 }
 
-export async function processDueAppointmentReminders({ limit = 50 } = {}) {
+export async function rescheduleFutureAppointmentRemindersForUser(userId) {
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      userId,
+      startsAt: { gt: new Date() },
+      status: { in: [...NOTIFIABLE_STATUSES] }
+    },
+    select: {
+      id: true,
+      userId: true,
+      startsAt: true,
+      status: true
+    },
+    orderBy: [{ startsAt: "asc" }],
+    take: 500
+  });
+
+  for (const appointment of appointments) {
+    await syncAppointmentReminders(appointment);
+  }
+
+  return { rescheduled: appointments.length };
+}
+
+export async function processDueAppointmentReminders({ limit = 50, userId = "" } = {}) {
   const dueReminders = await prisma.appointmentReminder.findMany({
     where: {
+      ...(userId ? { userId } : {}),
       status: "PENDING",
       scheduledFor: { lte: new Date() },
       sentAt: null
@@ -85,13 +162,26 @@ export async function processDueAppointmentReminders({ limit = 50 } = {}) {
     if (!claimed.count) continue;
 
     try {
+      if (!NOTIFIABLE_STATUSES.has(reminder.appointment.status)) {
+        throw new Error("Agendamento sem status notificavel.");
+      }
+
+      const settings = await reminderSettingsForUser(reminder.userId);
+      if (!settings.enabled) {
+        throw new Error("Notificacoes desativadas.");
+      }
+
+      const offsetMinutes = OFFSET_BY_REMINDER_TYPE[reminder.reminderType] || settings.offsetMinutes;
       const appointment = publicAppointment(reminder.appointment);
       await createInternalNotification({
         userId: reminder.userId,
-        title: "Lembrete de agendamento",
-        body: `${appointment.client?.name || "Cliente"} as ${appointment.startTime} - ${appointment.service?.name || "Servico"}`,
+        workspaceId: reminder.userId,
+        title: `Próximo atendimento em ${offsetLabel(offsetMinutes)}`,
+        body: `${appointment.client?.name || "Cliente"} - ${appointment.service?.name || "Serviço"} às ${appointment.startTime}`,
         type: "appointment_reminder",
-        actionUrl: "/agenda"
+        actionUrl: `/agenda?agendamento=${appointment.id}`,
+        relatedEntityType: "appointment",
+        relatedEntityId: appointment.id
       });
 
       await prisma.appointmentReminder.update({

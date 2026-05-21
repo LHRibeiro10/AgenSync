@@ -66,8 +66,11 @@ enum UserAccountStatus {
 }
 
 enum ReminderType {
+  TEN_MINUTES_BEFORE
+  FIFTEEN_MINUTES_BEFORE
   ONE_DAY_BEFORE
   TWO_HOURS_BEFORE
+  ONE_HOUR_BEFORE
   THIRTY_MINUTES_BEFORE
 }
 
@@ -100,6 +103,10 @@ model User {
   whatsappReminderOffsetMinutes Int @default(120)
   whatsappReminderMessage String?
   whatsappReminderTestPhone String?
+  whatsappConfirmationMessage String?
+  appointmentNotificationsEnabled Boolean @default(true)
+  appointmentNotificationOffsetMinutes Int @default(30)
+  appointmentNotificationChannels Json @default("[\"internal\",\"push\"]")
   clients       Client[]
   professionals Professional[]
   services      Service[]
@@ -110,6 +117,7 @@ model User {
   monthlyPlans  MonthlyPlan[]
   auditLogs     AuditLog[]
   notificationTokens NotificationToken[]
+  pushSubscriptions PushSubscription[]
   notifications Notification[]
   appointmentReminders AppointmentReminder[]
   createdAt     DateTime       @default(now())
@@ -379,19 +387,38 @@ model NotificationToken {
   @@index([userId, disabledAt])
 }
 
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  keys      Json
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+}
+
 model Notification {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
   title     String
   body      String?
   type      String    @default("info")
   actionUrl String?
+  relatedEntityType String?
+  relatedEntityId String?
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId, createdAt])
   @@index([userId, readAt, createdAt])
+  @@index([userId, relatedEntityType, relatedEntityId])
+  @@index([workspaceId, createdAt])
 }
 
 model AppointmentReminder {

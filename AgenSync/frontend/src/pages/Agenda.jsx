@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import AgendaStatusDrawer from "../components/agenda/AgendaStatusDrawer.jsx";
+import AppointmentWhatsAppModal from "../components/agenda/AppointmentWhatsAppModal.jsx";
 import CalendarGrid from "../components/agenda/CalendarGrid.jsx";
 import DayCard from "../components/agenda/DayCard.jsx";
 import DaySelector from "../components/agenda/DaySelector.jsx";
@@ -17,7 +18,10 @@ import { appointmentsForDate, buildTimeRows, minutesToTime, timeToMinutes } from
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { useAuth } from "../contexts/AuthContext.jsx";
 import { agendaSchedule, defaultWorkingHours } from "../data/agendaConfig.js";
+import { DEFAULT_CONFIRMATION_MESSAGE, DEFAULT_REMINDER_MESSAGE } from "../services/appointmentWhatsApp.js";
+import { getNotificationSettings } from "../services/notificationService.js";
 import { todayInputValue } from "../utils.js";
 
 const workingHoursStorageKey = "agensync_working_hours_v1";
@@ -108,7 +112,9 @@ function getBreaksForWeek(days) {
 
 export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
   const initialSelectedDate = todayInputValue();
   const [viewMode, setViewMode] = useState(() =>
@@ -129,6 +135,11 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [workingHours, setWorkingHours] = useState(loadWorkingHours);
   const [workingHoursOpen, setWorkingHoursOpen] = useState(focus === "workingHours");
+  const [whatsAppAction, setWhatsAppAction] = useState(null);
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState({
+    reminder: DEFAULT_REMINDER_MESSAGE,
+    confirmation: DEFAULT_CONFIRMATION_MESSAGE
+  });
 
   const weekDays = useMemo(() => buildWeekDays(weekStart, workingHours), [weekStart, workingHours]);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
@@ -157,6 +168,24 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   useEffect(() => {
     setWorkingHoursOpen(focus === "workingHours");
   }, [focus]);
+
+  useEffect(() => {
+    let active = true;
+
+    getNotificationSettings()
+      .then((data) => {
+        if (!active) return;
+        setWhatsAppTemplates({
+          reminder: data.settings?.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE,
+          confirmation: data.settings?.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE
+        });
+      })
+      .catch(() => null);
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -193,6 +222,30 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
       active = false;
     };
   }, [weekStart, weekEnd, reloadKey, markStepComplete]);
+
+  useEffect(() => {
+    const appointmentId = new URLSearchParams(location.search).get("agendamento");
+    if (!appointmentId) return;
+
+    let active = true;
+
+    api
+      .getAppointment(appointmentId)
+      .then((data) => {
+        if (!active || !data.appointment) return;
+        const appointment = data.appointment;
+        setSelectedDate(appointment.date);
+        setWeekStart(startOfWeek(parseDateKey(appointment.date)));
+        setSelectedAppointment(appointment);
+      })
+      .catch((err) => {
+        if (active) showToast(err.message || "Nao foi possivel abrir o agendamento.", "error");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [location.search, showToast]);
 
   const metrics = useMemo(() => {
     const revenue = appointments
@@ -234,6 +287,10 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
     navigate(`/agendamentos?editar=${appointment.id}&acao=reagendar`, {
       state: { appointmentId: appointment.id, intent: "reschedule" }
     });
+  }
+
+  function openWhatsAppAction(mode, appointment) {
+    setWhatsAppAction({ mode, appointment });
   }
 
   function createAppointment(date, startTime) {
@@ -467,8 +524,24 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
         onClose={() => setSelectedAppointment(null)}
         onEdit={editAppointment}
         onReschedule={rescheduleAppointment}
+        onSendReminder={(appointment) => openWhatsAppAction("reminder", appointment)}
+        onConfirmAttendance={(appointment) => openWhatsAppAction("confirmation", appointment)}
         onSaveStatus={saveAppointmentStatus}
         onDelete={setPendingDelete}
+      />
+
+      <AppointmentWhatsAppModal
+        open={Boolean(whatsAppAction)}
+        appointment={whatsAppAction?.appointment}
+        mode={whatsAppAction?.mode}
+        template={
+          whatsAppAction?.mode === "reminder"
+            ? whatsAppTemplates.reminder
+            : whatsAppTemplates.confirmation
+        }
+        user={user}
+        showToast={showToast}
+        onClose={() => setWhatsAppAction(null)}
       />
 
       <ConfirmDialog

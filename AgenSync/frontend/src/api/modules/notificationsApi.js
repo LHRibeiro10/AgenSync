@@ -20,3 +20,23 @@ export function markNotificationReadApi(notificationId) {
 export function markAllNotificationsReadApi() {
   return httpClient.patch(endpoints.notifications.readAll);
 }
+
+export function getNotificationSettingsApi() {
+  return httpClient.get(endpoints.notifications.settings, { cacheTtlMs: 15_000 });
+}
+
+export function updateNotificationSettingsApi(payload) {
+  return httpClient.put(endpoints.notifications.settings, { body: payload });
+}
+
+export function testNotificationApi() {
+  return httpClient.post(endpoints.notifications.test);
+}
+
+export function subscribePushApi(payload) {
+  return httpClient.post(endpoints.notifications.pushSubscribe, { body: payload });
+}
+
+export function unsubscribePushApi(payload) {
+  return httpClient.delete(endpoints.notifications.pushUnsubscribe, { body: payload });
+}

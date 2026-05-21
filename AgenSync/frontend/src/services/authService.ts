@@ -135,7 +135,10 @@ async function requestBackendSettingsUpdate(token: string, payload: any) {
       whatsappReminderEnabled: payload.whatsappReminderEnabled,
       whatsappReminderOffsetMinutes: payload.whatsappReminderOffsetMinutes,
       whatsappReminderMessage: payload.whatsappReminderMessage,
-      whatsappReminderTestPhone: payload.whatsappReminderTestPhone
+      whatsappReminderTestPhone: payload.whatsappReminderTestPhone,
+      whatsappConfirmationMessage: payload.whatsappConfirmationMessage,
+      appointmentNotificationsEnabled: payload.appointmentNotificationsEnabled,
+      appointmentNotificationOffsetMinutes: payload.appointmentNotificationOffsetMinutes
     })
   });
 

@@ -7,7 +7,10 @@ const router = Router();
 router.post(
   "/process-due",
   asyncHandler(async (req, res) => {
-    const result = await processDueAppointmentReminders({ limit: req.body?.limit || req.query?.limit || 50 });
+    const result = await processDueAppointmentReminders({
+      limit: req.body?.limit || req.query?.limit || 50,
+      userId: req.user.id
+    });
     res.json(result);
   })
 );

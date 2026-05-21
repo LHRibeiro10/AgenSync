@@ -22,6 +22,8 @@ export default function AgendaStatusDrawer({
   onClose,
   onEdit,
   onReschedule,
+  onSendReminder,
+  onConfirmAttendance,
   onSaveStatus,
   onDelete
 }) {
@@ -40,13 +42,13 @@ export default function AgendaStatusDrawer({
 
   return (
     <div
-      className="agensync-overlay z-50 bg-slate-950/35 backdrop-blur-sm"
+      className="agensync-overlay z-50 flex items-end bg-slate-950/35 backdrop-blur-sm sm:items-stretch"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <aside
-        className="agensync-drawer-panel ml-auto flex w-full max-w-[430px] flex-col bg-white shadow-2xl"
+        className="agensync-drawer-panel ml-auto flex w-full flex-col rounded-t-[28px] bg-white shadow-2xl sm:max-w-[430px] sm:rounded-none"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="shrink-0 flex items-start justify-between gap-4 border-b border-line p-4 sm:p-5">
@@ -98,6 +100,19 @@ export default function AgendaStatusDrawer({
           </section>
 
           <section className="mt-4 rounded-2xl border border-line bg-white p-4">
+            <p className="text-xs font-black uppercase text-slate-500">Comunicação</p>
+            <p className="mt-1 text-xs font-bold text-muted">Mensagens manuais com preview antes de abrir o WhatsApp.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <Button variant="secondary" onClick={() => onSendReminder?.(appointment)} disabled={saving}>
+                Enviar lembrete
+              </Button>
+              <Button onClick={() => onConfirmAttendance?.(appointment)} disabled={saving}>
+                Confirmar comparecimento
+              </Button>
+            </div>
+          </section>
+
+          <section className="mt-4 rounded-2xl border border-line bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase text-slate-500">Alterar status</p>
@@ -135,6 +150,21 @@ export default function AgendaStatusDrawer({
                   </button>
                 );
               })}
+            </div>
+          </section>
+
+          <section className="mt-4 rounded-2xl border border-line bg-white p-4">
+            <p className="text-xs font-black uppercase text-slate-500">Ações rápidas</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <Button variant="secondary" onClick={() => onSaveStatus("concluido")} loading={saving} disabled={appointment.status === "concluido"}>
+                Concluir
+              </Button>
+              <Button variant="secondary" onClick={() => onSaveStatus("cancelado")} loading={saving} disabled={appointment.status === "cancelado"}>
+                Cancelar
+              </Button>
+              <Button variant="secondary" onClick={() => onSaveStatus("nao_compareceu")} loading={saving} disabled={appointment.status === "nao_compareceu"}>
+                Marcar falta
+              </Button>
             </div>
           </section>
 
