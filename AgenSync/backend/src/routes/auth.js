@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../prisma.js";
 import { invalidateAuthUserCache, requireAuth } from "../middleware/auth.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { recordAuditEvent } from "../utils/audit.js";
@@ -45,35 +44,6 @@ async function ensureInitialAdminRole(user) {
 
   invalidateAuthUserCache(user.id);
   return updatedUser;
-}
-
-function normalizeInitialServices(body, businessType) {
-  const hasCustomServices = Array.isArray(body.initialServices);
-  const source = hasCustomServices ? body.initialServices : getSuggestedServices(businessType);
-
-  return source
-    .map((service) => {
-      const name = String(service.name || "").trim();
-      if (name.length < 2) return null;
-
-      const priceDefault = Number(service.priceDefault ?? 0);
-      if (!Number.isFinite(priceDefault) || priceDefault < 0) {
-        throw new ApiError(400, "preco padrao deve ser maior ou igual a zero.");
-      }
-
-      const durationMinutes = Number(service.durationMinutes ?? 60);
-      if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-        throw new ApiError(400, "duracao deve ser maior que zero.");
-      }
-
-      return {
-        name,
-        priceDefault: Number(priceDefault.toFixed(2)),
-        durationMinutes,
-        isActive: service.isActive !== false
-      };
-    })
-    .filter(Boolean);
 }
 
 function normalizeBusinessLogo(value) {
@@ -119,8 +89,9 @@ router.post(
     const name = requiredString(req.body.name, "nome", 2);
     const email = validateEmail(req.body.email);
     const password = requiredString(req.body.password, "senha", 6);
-    const businessName = requiredString(req.body.businessName, "nome do negocio", 2);
-    const businessType = requiredString(req.body.businessType, "tipo de negocio", 2);
+    const businessName =
+      optionalLongString(req.body.businessName, "nome do negocio", 160) || `Agenda de ${name}`;
+    const businessType = optionalLongString(req.body.businessType, "tipo de negocio", 80) || "Outro";
     const businessLogo = normalizeBusinessLogo(req.body.businessLogo);
 
     const exists = await prisma.user.findUnique({ where: { email } });
@@ -129,9 +100,8 @@ router.post(
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const initialServices = normalizeInitialServices(req.body, businessType);
-    const user = await prisma.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
+    const user = await prisma.$transaction(async (tx) =>
+      tx.user.create({
         data: {
           name,
           email,
@@ -142,30 +112,11 @@ router.post(
           billingEnabled: false,
           businessName,
           businessLogo,
-          businessType
+          businessType,
+          onboardingCompleted: false
         }
-      });
-
-      if (initialServices.length) {
-        await tx.service.createMany({
-          data: initialServices.map((service) => ({
-            userId: createdUser.id,
-            ...service
-          }))
-        });
-      }
-
-      await tx.professional.create({
-        data: {
-          userId: createdUser.id,
-          name: createdUser.name,
-          role: "Profissional principal",
-          isActive: true
-        }
-      });
-
-      return createdUser;
-    });
+      })
+    );
 
     await recordAuditEvent({
       req,
@@ -209,6 +160,12 @@ router.post(
     }
 
     const authenticatedUser = await ensureInitialAdminRole(user);
+    if (String(authenticatedUser.accountStatus || "ACTIVE") !== "ACTIVE") {
+      throw new ApiError(403, "Conta inativa. Entre em contato com o suporte.");
+    }
+    if (String(authenticatedUser.userStatus || "ACTIVE") !== "ACTIVE") {
+      throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
+    }
 
     await recordAuditEvent({
       req,
@@ -316,10 +273,15 @@ router.put(
   "/me",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const businessType = requiredString(req.body.businessType, "tipo de negocio", 2);
+    const businessType =
+      req.body.businessType === undefined ? undefined : requiredString(req.body.businessType, "tipo de negocio", 2);
     const businessName =
       req.body.businessName === undefined ? undefined : requiredString(req.body.businessName, "nome do negocio", 2);
     const businessLogo = req.body.businessLogo === undefined ? undefined : normalizeBusinessLogo(req.body.businessLogo);
+    const businessTypeCustom = optionalLongString(req.body.businessTypeCustom, "Tipo personalizado", 120);
+    const businessPhone = optionalLongString(req.body.businessPhone, "Telefone do negocio", 32);
+    const businessCity = optionalLongString(req.body.businessCity, "Cidade", 120);
+    const businessAddress = optionalLongString(req.body.businessAddress, "Endereco", 240);
     const whatsappReminderEnabled = optionalBoolean(req.body.whatsappReminderEnabled);
     const whatsappReminderOffsetMinutes = optionalReminderOffset(req.body.whatsappReminderOffsetMinutes);
     const whatsappReminderMessage = optionalLongString(req.body.whatsappReminderMessage, "Mensagem do lembrete");
@@ -334,9 +296,13 @@ router.put(
     const user = await prisma.user.update({
       where: { id: req.user.id },
       data: {
-        businessType,
+        ...(businessType === undefined ? {} : { businessType }),
         ...(businessName === undefined ? {} : { businessName }),
         ...(businessLogo === undefined ? {} : { businessLogo }),
+        ...(businessTypeCustom === undefined ? {} : { businessTypeCustom }),
+        ...(businessPhone === undefined ? {} : { businessPhone }),
+        ...(businessCity === undefined ? {} : { businessCity }),
+        ...(businessAddress === undefined ? {} : { businessAddress }),
         ...(whatsappReminderEnabled === undefined ? {} : { whatsappReminderEnabled }),
         ...(whatsappReminderOffsetMinutes === undefined ? {} : { whatsappReminderOffsetMinutes }),
         ...(whatsappReminderMessage === undefined ? {} : { whatsappReminderMessage }),
@@ -349,6 +315,54 @@ router.put(
 
     invalidateAuthUserCache(user.id);
     res.json({ user: publicUser(user) });
+  })
+);
+
+router.delete(
+  "/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const workspaceRole = String(req.user.workspaceRole || "OWNER").toUpperCase();
+    const platformRole = String(req.user.platformRole || "USER").toUpperCase();
+    if (workspaceRole !== "OWNER") {
+      throw new ApiError(403, "Somente o proprietario pode excluir a conta.");
+    }
+    if (platformRole === "DEVELOPER" || platformRole === "PLATFORM_OWNER") {
+      throw new ApiError(403, "Contas da plataforma nao podem ser excluidas por aqui.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.appointmentReminder.deleteMany({ where: { userId: req.user.id } });
+      await tx.notification.deleteMany({ where: { userId: req.user.id } });
+      await tx.pushSubscription.deleteMany({ where: { userId: req.user.id } });
+      await tx.notificationToken.deleteMany({ where: { userId: req.user.id } });
+      await tx.appointment.deleteMany({ where: { userId: req.user.id } });
+      await tx.productSale.deleteMany({ where: { userId: req.user.id } });
+      await tx.monthlyPlan.deleteMany({ where: { userId: req.user.id } });
+      await tx.expense.deleteMany({ where: { userId: req.user.id } });
+      await tx.product.deleteMany({ where: { userId: req.user.id } });
+      await tx.client.deleteMany({ where: { userId: req.user.id } });
+      await tx.service.deleteMany({ where: { userId: req.user.id } });
+      await tx.professional.deleteMany({ where: { userId: req.user.id } });
+      await tx.auditLog.updateMany({ where: { userId: req.user.id }, data: { userId: null } });
+      await tx.user.update({
+        where: { id: req.user.id },
+        data: {
+          accountStatus: "INACTIVE",
+          userStatus: "INACTIVE",
+          billingEnabled: false,
+          businessName: "Conta excluida",
+          businessLogo: null,
+          businessPhone: null,
+          businessCity: null,
+          businessAddress: null,
+          professionalId: null
+        }
+      });
+    });
+
+    invalidateAuthUserCache(req.user.id);
+    res.json({ ok: true });
   })
 );
 

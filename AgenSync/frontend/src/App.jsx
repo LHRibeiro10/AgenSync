@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Expenses = lazy(() => import("./pages/Expenses.jsx"));
 const Finance = lazy(() => import("./pages/Finance.jsx"));
 const History = lazy(() => import("./pages/History.jsx"));
+const InitialOnboarding = lazy(() => import("./pages/InitialOnboarding.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
 const ModulePlaceholder = lazy(() => import("./pages/ModulePlaceholder.jsx"));
 const PlatformDashboard = lazy(() => import("./pages/PlatformDashboard.jsx"));
@@ -25,7 +26,7 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions.jsx"));
 
 function ProtectedRoute() {
-  const { loading, isAuthenticated, hasPlatformAccess } = useAuth();
+  const { loading, isAuthenticated, hasPlatformAccess, user, workspaceRole } = useAuth();
   const location = useLocation();
   const isPlatformPath =
     location.pathname.startsWith("/platform") ||
@@ -34,6 +35,9 @@ function ProtectedRoute() {
 
   if (loading) return <Loading label="Abrindo sua agenda..." />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!hasPlatformAccess && workspaceRole === "owner" && user?.onboardingCompleted === false && location.pathname !== "/onboarding") {
+    return <Navigate to="/onboarding" replace />;
+  }
   if (hasPlatformAccess && !isPlatformPath) {
     return <Navigate to="/platform" replace />;
   }
@@ -44,11 +48,29 @@ function ProtectedRoute() {
 }
 
 function PublicRoute({ children }) {
-  const { loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated, user, hasPlatformAccess, workspaceRole } = useAuth();
 
   if (loading) return <Loading label="Preparando acesso..." />;
+  if (isAuthenticated && !hasPlatformAccess && workspaceRole === "owner" && user?.onboardingCompleted === false) {
+    return <Navigate to="/onboarding" replace />;
+  }
   if (isAuthenticated) return <Navigate to="/" replace />;
   return children;
+}
+
+function OnboardingRoute() {
+  const { loading, isAuthenticated, hasPlatformAccess, user, workspaceRole } = useAuth();
+
+  if (loading) return <Loading label="Preparando configuração inicial..." />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (hasPlatformAccess) return <Navigate to="/platform" replace />;
+  if (workspaceRole !== "owner") return <Navigate to="/" replace />;
+  if (user?.onboardingCompleted === true) return <Navigate to="/" replace />;
+  return (
+    <PageTransition>
+      <InitialOnboarding />
+    </PageTransition>
+  );
 }
 
 function AdminRoute({ children }) {
@@ -89,6 +111,7 @@ export default function App() {
             </PageTransition>
           }
         />
+        <Route path="/onboarding" element={<OnboardingRoute />} />
         <Route element={<ProtectedRoute />}>
           <Route index element={<Dashboard />} />
           <Route

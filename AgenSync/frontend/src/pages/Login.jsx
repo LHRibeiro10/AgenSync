@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import BrandLogo from "../components/BrandLogo.jsx";
-import { getSuggestedServices } from "../data/businessOnboarding.js";
 import SvgIcon from "../components/SvgIcon.jsx";
 
 const initialForm = {
@@ -49,15 +48,6 @@ const highlights = [
     description: "Receitas, despesas e performance com visao direta para decisoes."
   }
 ];
-
-function cleanInitialServices() {
-  return getSuggestedServices("Manicure").map((service) => ({
-    name: service.name,
-    priceDefault: Number(service.priceDefault) || 0,
-    durationMinutes: Number(service.durationMinutes) || 60,
-    isActive: true
-  }));
-}
 
 function AuthInput({
   label,
@@ -153,9 +143,8 @@ export default function Login() {
       name: form.name.trim(),
       email: form.email.trim(),
       password: form.password,
-      businessName: form.name.trim() ? `Agenda de ${form.name.trim()}` : "Meu negócio",
-      businessType: "Manicure",
-      initialServices: cleanInitialServices()
+      businessName: "",
+      businessType: ""
     });
 
     if (data?.emailConfirmationRequired) {

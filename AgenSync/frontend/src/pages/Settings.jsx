@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import Button from "../components/Button.jsx";
@@ -211,7 +212,8 @@ function MessageEditor({ title, value, onChange, onRestore, preview }) {
 }
 
 export default function Settings() {
-  const { user, updateUserSettings, refreshSession } = useAuth();
+  const navigate = useNavigate();
+  const { user, updateUserSettings, refreshSession, deleteAccount } = useAuth();
   const { showToast } = useToast();
   const { startTour } = useOnboarding();
   const [businessName, setBusinessName] = useState(user?.businessName || "");
@@ -226,6 +228,8 @@ export default function Settings() {
   const [notificationLoading, setNotificationLoading] = useState(true);
   const [notificationTesting, setNotificationTesting] = useState(false);
   const [pushStatus, setPushStatus] = useState(() => notificationSupport());
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     setBusinessName(user?.businessName || "");
@@ -431,6 +435,27 @@ export default function Settings() {
       showToast(err.message, "error");
     } finally {
       setNotificationTesting(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmation.trim().toUpperCase() !== "EXCLUIR") {
+      showToast("Digite EXCLUIR para confirmar.", "error");
+      return;
+    }
+
+    setDeletingAccount(true);
+    setError("");
+
+    try {
+      await deleteAccount();
+      showToast("Conta excluída.");
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setError(err.message || "Não foi possível excluir a conta.");
+      showToast(err.message || "Não foi possível excluir a conta.", "error");
+    } finally {
+      setDeletingAccount(false);
     }
   }
 
@@ -822,6 +847,35 @@ export default function Settings() {
             <Button type="button" variant="secondary" size="lg" className="mt-3 hidden w-full rounded-lg lg:inline-flex" onClick={startTour}>
               <Icon name="appointments" className="h-5 w-5" />
               Assistir tutorial
+            </Button>
+          </section>
+
+          <section className="rounded-lg border border-red-200 bg-red-50 p-4 shadow-soft sm:p-5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-danger">Zona de perigo</p>
+            <h2 className="mt-2 text-xl font-black text-ink">Excluir conta</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Remove os dados desta conta no AgenSync e encerra o acesso do usuário atual. Clientes de outras contas não são alterados.
+            </p>
+            <label className="mt-4 block">
+              <span className="text-sm font-black text-ink">Digite EXCLUIR para confirmar</span>
+              <input
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                className="mt-2 min-h-12 w-full rounded-lg border border-red-200 bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-danger focus:ring-4 focus:ring-red-100"
+                placeholder="EXCLUIR"
+              />
+            </label>
+            <Button
+              type="button"
+              variant="danger"
+              size="lg"
+              loading={deletingAccount}
+              loadingLabel="Excluindo..."
+              disabled={deleteConfirmation.trim().toUpperCase() !== "EXCLUIR"}
+              className="mt-4 w-full rounded-lg"
+              onClick={handleDeleteAccount}
+            >
+              Excluir minha conta
             </Button>
           </section>
         </aside>

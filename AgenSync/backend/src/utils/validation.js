@@ -52,6 +52,17 @@ export function validateEmail(value) {
   return email;
 }
 
+export function optionalEmail(value, fieldName = "email") {
+  if (value === undefined || value === null || value === "") return "";
+  const email = String(value || "").trim().toLowerCase();
+  if (!email) return "";
+  const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!pattern.test(email)) {
+    throw new ApiError(400, `${fieldName} invalido.`);
+  }
+  return email;
+}
+
 export function parsePagination(query, { defaultPageSize = 50, maxPageSize = 200 } = {}) {
   const hasPagination =
     query?.page !== undefined ||

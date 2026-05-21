@@ -99,6 +99,13 @@ model User {
   businessName  String
   businessLogo  String?
   businessType  String
+  businessTypeCustom String?
+  businessPhone String?
+  businessCity  String?
+  businessAddress String?
+  onboardingCompleted Boolean @default(false)
+  onboardingCompletedAt DateTime?
+  professionalId String?
   whatsappReminderEnabled Boolean @default(false)
   whatsappReminderOffsetMinutes Int @default(120)
   whatsappReminderMessage String?
@@ -130,6 +137,8 @@ model User {
   @@index([accountStatus])
   @@index([userStatus])
   @@index([subscriptionStatus])
+  @@index([onboardingCompleted])
+  @@index([professionalId])
   @@index([createdAt])
 }
 
@@ -157,6 +166,7 @@ model Client {
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   phone        String
+  email        String?
   cpf          String?
   cnpj         String?
   rg           String?
@@ -183,6 +193,7 @@ model Client {
   @@index([userId])
   @@index([userId, name])
   @@index([userId, phone])
+  @@index([userId, email])
   @@index([userId, isActive])
   @@index([userId, cpf])
   @@index([userId, externalId])
@@ -331,7 +342,9 @@ model Professional {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   role         String?
+  email        String?
   phone        String?
+  monthlyGoal  Decimal?      @db.Decimal(10, 2)
   isActive     Boolean       @default(true)
   appointments Appointment[]
   createdAt    DateTime      @default(now())
@@ -340,6 +353,7 @@ model Professional {
   @@index([userId])
   @@index([userId, isActive])
   @@index([userId, name])
+  @@index([userId, email])
   @@index([userId, isActive, name])
   @@index([userId, createdAt])
 }

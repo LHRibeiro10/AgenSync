@@ -1,7 +1,42 @@
 import EventCard from "./EventCard.jsx";
 import TimeColumn from "./TimeColumn.jsx";
 import WeekHeader from "./WeekHeader.jsx";
-import { appointmentsForDate, getTimedBlockStyle, timeToMinutes } from "./agendaTime.js";
+import { appointmentsForDate, getTimedBlockStyle, minutesToTime, timeToMinutes } from "./agendaTime.js";
+
+const COMPACT_EVENT_GAP = 4;
+const COMPACT_EVENT_MIN_HEIGHT = 16;
+const COMPACT_EVENT_MAX_HEIGHT = 34;
+
+function compactClusterLayout(cluster, schedule) {
+  const clusterStart = Math.min(...cluster.map((appointment) => timeToMinutes(appointment.startTime)));
+  const clusterEnd = Math.max(...cluster.map((appointment) => timeToMinutes(appointment.endTime)));
+  const clusterStyle = getTimedBlockStyle(
+    {
+      startTime: minutesToTime(clusterStart),
+      endTime: minutesToTime(clusterEnd)
+    },
+    schedule
+  );
+  const clusterTop = Number.parseFloat(clusterStyle.top) || 0;
+  const clusterHeight = Number.parseFloat(clusterStyle.height) || schedule.slotHeight;
+  const totalGap = COMPACT_EVENT_GAP * Math.max(cluster.length - 1, 0);
+  const availableRowHeight = (clusterHeight - totalGap) / Math.max(cluster.length, 1);
+  const rowHeight = Math.max(
+    COMPACT_EVENT_MIN_HEIGHT,
+    Math.min(COMPACT_EVENT_MAX_HEIGHT, availableRowHeight)
+  );
+
+  return cluster.map((appointment, index) => ({
+    appointment,
+    compact: true,
+    style: {
+      top: `${clusterTop + index * (rowHeight + COMPACT_EVENT_GAP)}px`,
+      height: `${rowHeight}px`,
+      left: "0.75rem",
+      right: "0.75rem"
+    }
+  }));
+}
 
 function layoutAppointments(appointments, schedule) {
   const clusters = [];
@@ -25,6 +60,10 @@ function layoutAppointments(appointments, schedule) {
   if (currentCluster.length) clusters.push(currentCluster);
 
   return clusters.flatMap((cluster) => {
+    if (cluster.length > 1) {
+      return compactClusterLayout(cluster, schedule);
+    }
+
     const columnEnds = [];
     const positioned = cluster.map((appointment) => {
       const start = timeToMinutes(appointment.startTime);
@@ -52,7 +91,7 @@ function layoutAppointments(appointments, schedule) {
         style.width = `calc(${100 / columnCount}% - 1rem)`;
       }
 
-      return { appointment, style };
+      return { appointment, style, compact: false };
     });
   });
 }
@@ -102,11 +141,12 @@ function DayColumn({ day, appointments, breaks, rows, schedule, onSlotClick, onE
         </div>
       ))}
 
-      {positionedAppointments.map(({ appointment, style }) => (
+      {positionedAppointments.map(({ appointment, style, compact }) => (
         <EventCard
           key={appointment.id}
           appointment={appointment}
           style={style}
+          compact={compact}
           onClick={onEventClick}
         />
       ))}

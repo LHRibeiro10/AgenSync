@@ -138,7 +138,11 @@ async function requestBackendSettingsUpdate(token: string, payload: any) {
       whatsappReminderTestPhone: payload.whatsappReminderTestPhone,
       whatsappConfirmationMessage: payload.whatsappConfirmationMessage,
       appointmentNotificationsEnabled: payload.appointmentNotificationsEnabled,
-      appointmentNotificationOffsetMinutes: payload.appointmentNotificationOffsetMinutes
+      appointmentNotificationOffsetMinutes: payload.appointmentNotificationOffsetMinutes,
+      businessTypeCustom: payload.businessTypeCustom,
+      businessPhone: payload.businessPhone,
+      businessCity: payload.businessCity,
+      businessAddress: payload.businessAddress
     })
   });
 
@@ -167,6 +171,32 @@ async function requestBackendLogout(token: string) {
       Authorization: `Bearer ${safeToken}`
     }
   }).catch(() => null);
+}
+
+async function requestBackendDeleteAccount(token: string) {
+  const safeToken = safeTokenForAuthHeader(token);
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl || !safeToken) return null;
+
+  const response = await fetch(`${apiBaseUrl}/auth/me`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${safeToken}`
+    }
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw authError(data?.message || "Nao foi possivel excluir a conta.");
+  }
+
+  return data;
 }
 
 function metadataWithoutHeavyLogo(user: any, payload: any) {
@@ -327,18 +357,6 @@ export async function signUp(emailOrPayload: any, maybePassword?: string) {
     "register"
   );
 
-  if (result?.token) {
-    const backendUser = await requestBackendSettingsUpdate(result.token, {
-      businessType: payload.businessType || result.user?.businessType || "Manicure",
-      businessName: payload.businessName || result.user?.businessName || "",
-      businessLogo: payload.businessLogo || ""
-    }).catch(() => null);
-
-    if (backendUser) {
-      result.user = mergeUser(result.user, backendUser);
-    }
-  }
-
   return {
     ...result,
     emailConfirmationRequired: Boolean(data.user && !data.session),
@@ -368,6 +386,15 @@ export async function signOut() {
 
 export async function logout() {
   return signOut();
+}
+
+export async function deleteAccount() {
+  const client = requireSupabase();
+  const { data: currentSessionData } = await client.auth.getSession();
+  await requestBackendDeleteAccount(currentSessionData.session?.access_token || "");
+  await client.auth.signOut().catch(() => null);
+  clearAccessToken();
+  return { ok: true };
 }
 
 export async function resetPassword(emailOrPayload: any) {

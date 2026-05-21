@@ -255,6 +255,13 @@ const userSelect = {
   businessName: true,
   businessLogo: true,
   businessType: true,
+  businessTypeCustom: true,
+  businessPhone: true,
+  businessCity: true,
+  businessAddress: true,
+  onboardingCompleted: true,
+  onboardingCompletedAt: true,
+  professionalId: true,
   whatsappReminderEnabled: true,
   whatsappReminderOffsetMinutes: true,
   whatsappReminderMessage: true,
@@ -307,6 +314,11 @@ async function authenticateWithLegacyJwt(token) {
 
 async function ensureSupabaseBootstrap(user) {
   if (isPlatformOwner(user)) {
+    markSupabaseBootstrapChecked(user.id);
+    return;
+  }
+
+  if (user.onboardingCompleted !== true) {
     markSupabaseBootstrapChecked(user.id);
     return;
   }
@@ -381,7 +393,7 @@ async function ensureSupabaseUser(payload) {
   });
 
   const resolvedName = metadataName || existingUser?.name || email;
-  const resolvedBusinessType = metadataBusinessType || existingUser?.businessType || "Manicure";
+  const resolvedBusinessType = metadataBusinessType || existingUser?.businessType || "Outro";
   const resolvedBusinessName = metadataBusinessName || existingUser?.businessName || `Agenda de ${resolvedName}`;
   const resolvedBusinessLogo = existingUser?.businessLogo || null;
 
@@ -398,7 +410,8 @@ async function ensureSupabaseUser(payload) {
           passwordHash: "supabase-auth",
           businessName: resolvedBusinessName,
           businessLogo: resolvedBusinessLogo,
-          businessType: resolvedBusinessType
+          businessType: resolvedBusinessType,
+          onboardingCompleted: false
         },
         select: userSelect
       })
@@ -407,8 +420,8 @@ async function ensureSupabaseUser(payload) {
         if (existingUser.name !== resolvedName) updates.name = resolvedName;
         if (existingUser.email !== email) updates.email = email;
         if (existingUser.role !== roleForEmail(email) && roleForEmail(email) === "ADMIN") updates.role = "ADMIN";
-        if (existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
-        if (existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
+        if (metadataBusinessName && existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
+        if (metadataBusinessType && existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
 
         if (!Object.keys(updates).length) return existingUser;
 
@@ -444,6 +457,12 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
 
   try {
     req.user = await primaryAuth(token);
+    if (!isPlatformOwner(req.user) && String(req.user.accountStatus || "ACTIVE") !== "ACTIVE") {
+      throw new ApiError(403, "Conta inativa. Entre em contato com o suporte.");
+    }
+    if (!isPlatformOwner(req.user) && String(req.user.userStatus || "ACTIVE") !== "ACTIVE") {
+      throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
+    }
     next();
     return;
   } catch (primaryError) {
@@ -464,6 +483,12 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
 
   try {
     req.user = await fallbackAuth(token);
+    if (!isPlatformOwner(req.user) && String(req.user.accountStatus || "ACTIVE") !== "ACTIVE") {
+      throw new ApiError(403, "Conta inativa. Entre em contato com o suporte.");
+    }
+    if (!isPlatformOwner(req.user) && String(req.user.userStatus || "ACTIVE") !== "ACTIVE") {
+      throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
+    }
     next();
     return;
   } catch (fallbackError) {

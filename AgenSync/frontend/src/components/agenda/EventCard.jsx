@@ -19,10 +19,28 @@ function appointmentProfessional(appointment) {
   return appointment.professional?.name || appointment.professional || "Profissional";
 }
 
-export default function EventCard({ appointment, style, onClick }) {
+export default function EventCard({ appointment, style, compact = false, onClick }) {
   const clientName = appointmentClient(appointment);
   const professionalName = appointmentProfessional(appointment);
   const serviceName = appointmentService(appointment);
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(appointment)}
+        className={[
+          "absolute z-20 flex items-center overflow-hidden rounded-xl border px-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-soft focus-visible:z-30",
+          statusStyles[appointment.status] || statusStyles.agendado
+        ].join(" ")}
+        style={style}
+        title={`${clientName} - ${appointment.startTime}`}
+        aria-label={`Editar atendimento de ${clientName} às ${appointment.startTime}`}
+      >
+        <span className="min-w-0 truncate text-xs font-black leading-none">{clientName}</span>
+      </button>
+    );
+  }
 
   return (
     <button

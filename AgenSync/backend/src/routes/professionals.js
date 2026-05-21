@@ -2,7 +2,14 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { publicProfessional } from "../utils/formatters.js";
-import { optionalString, parseBoolean, parsePagination, requiredString } from "../utils/validation.js";
+import {
+  optionalEmail,
+  optionalString,
+  parseBoolean,
+  parsePagination,
+  parsePositiveMoney,
+  requiredString
+} from "../utils/validation.js";
 
 const router = Router();
 
@@ -41,11 +48,16 @@ router.post(
   asyncHandler(async (req, res) => {
     const name = requiredString(req.body.name, "nome", 2);
     const role = optionalString(req.body.role);
+    const email = optionalEmail(req.body.email);
     const phone = optionalString(req.body.phone);
+    const monthlyGoal =
+      req.body.monthlyGoal === undefined || req.body.monthlyGoal === null || req.body.monthlyGoal === ""
+        ? null
+        : parsePositiveMoney(req.body.monthlyGoal, "meta mensal");
     const isActive = parseBoolean(req.body.isActive, true);
 
     const professional = await prisma.professional.create({
-      data: { userId: req.user.id, name, role, phone, isActive }
+      data: { userId: req.user.id, name, role, email, phone, monthlyGoal, isActive }
     });
 
     res.status(201).json({ professional: publicProfessional(professional) });
@@ -67,12 +79,17 @@ router.put(
 
     const name = requiredString(req.body.name, "nome", 2);
     const role = optionalString(req.body.role);
+    const email = optionalEmail(req.body.email);
     const phone = optionalString(req.body.phone);
+    const monthlyGoal =
+      req.body.monthlyGoal === undefined || req.body.monthlyGoal === null || req.body.monthlyGoal === ""
+        ? null
+        : parsePositiveMoney(req.body.monthlyGoal, "meta mensal");
     const isActive = parseBoolean(req.body.isActive, true);
 
     const professional = await prisma.professional.update({
       where: { id: req.params.id },
-      data: { name, role, phone, isActive }
+      data: { name, role, email, phone, monthlyGoal, isActive }
     });
 
     res.json({ professional: publicProfessional(professional) });

@@ -11,6 +11,7 @@ import financeRouter from "./finance.js";
 import monthlyPlansRouter from "./monthlyPlans.js";
 import notificationTokensRouter from "./notificationTokens.js";
 import notificationsRouter from "./notifications.js";
+import onboardingRouter from "./onboarding.js";
 import professionalsRouter from "./professionals.js";
 import platformRouter from "./platform.js";
 import productsRouter from "./products.js";
@@ -39,5 +40,6 @@ router.use("/sales", requireAuth, salesRouter);
 router.use("/subscriptions/monthly-plans", requireAuth, monthlyPlansRouter);
 router.use("/notification-tokens", requireAuth, notificationTokensRouter);
 router.use("/notifications", requireAuth, notificationsRouter);
+router.use("/onboarding", requireAuth, onboardingRouter);
 
 export default router;

@@ -113,6 +113,15 @@ export function AuthProvider({ children }) {
     setSession(null);
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    await authService.deleteAccount();
+    httpClient.clearCache?.();
+    clearUserDataCache();
+    setToken("");
+    setUser(null);
+    setSession(null);
+  }, []);
+
   const workspaceRole = getWorkspaceRole(user);
   const platformRole = getPlatformRole(user);
   const isAdmin = canAccessAdmin(user);
@@ -136,6 +145,7 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      deleteAccount,
       updateUserSettings,
       forgotPassword,
       resendConfirmation,
@@ -158,6 +168,7 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      deleteAccount,
       updateUserSettings,
       forgotPassword,
       resendConfirmation,

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { publicClient, publicClientCareRecord } from "../utils/formatters.js";
-import { optionalString, parsePagination, requiredString } from "../utils/validation.js";
+import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
 
@@ -106,10 +106,11 @@ router.post(
   asyncHandler(async (req, res) => {
     const name = requiredString(req.body.name, "nome", 2);
     const phone = requiredString(req.body.phone, "telefone", 8);
+    const email = optionalEmail(req.body.email);
     const notes = optionalString(req.body.notes);
 
     const client = await prisma.client.create({
-      data: { userId: req.user.id, name, phone, notes }
+      data: { userId: req.user.id, name, phone, email, notes }
     });
 
     res.status(201).json({ client: publicClient(client) });
@@ -251,6 +252,7 @@ router.put(
 
     const name = requiredString(req.body.name, "nome", 2);
     const phone = requiredString(req.body.phone, "telefone", 8);
+    const email = optionalEmail(req.body.email);
     const notes = optionalString(req.body.notes);
 
     const client = await prisma.client.update({
@@ -258,6 +260,7 @@ router.put(
       data: {
         name,
         phone,
+        email,
         notes,
         ...(req.body.isActive === undefined ? {} : { isActive: parseBoolean(req.body.isActive, true) })
       }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Button from "../Button.jsx";
 import StatusBadge from "../StatusBadge.jsx";
 import { money, statusOptions } from "../../utils.js";
@@ -33,25 +34,44 @@ export default function AgendaStatusDrawer({
     if (appointment) setDraftStatus(appointment.status);
   }, [appointment]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose?.();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open, onClose]);
+
   if (!open || !appointment) return null;
 
+  const canUsePortal = typeof document !== "undefined";
   const clientName = appointmentClient(appointment);
   const professionalName = appointmentProfessional(appointment);
   const serviceName = appointmentService(appointment);
   const hasStatusChange = draftStatus !== appointment.status;
 
-  return (
+  const drawer = (
     <div
-      className="agensync-overlay z-50 flex items-end bg-slate-950/35 backdrop-blur-sm sm:items-stretch"
+      className="agensync-overlay z-[70] flex items-end bg-slate-950/35 backdrop-blur-sm sm:items-stretch"
       onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <aside
         className="agensync-drawer-panel ml-auto flex w-full flex-col rounded-t-[28px] bg-white shadow-2xl sm:max-w-[430px] sm:rounded-none"
         onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Detalhes do atendimento de ${clientName}`}
       >
-        <header className="shrink-0 flex items-start justify-between gap-4 border-b border-line p-4 sm:p-5">
+        <header className="shrink-0 flex items-start justify-between gap-4 border-b border-line p-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:p-5">
           <div>
             <p className="text-xs font-black uppercase text-brand">Atendimento</p>
             <h2 className="mt-2 text-2xl font-black text-ink">{clientName}</h2>
@@ -195,4 +215,6 @@ export default function AgendaStatusDrawer({
       </aside>
     </div>
   );
+
+  return canUsePortal ? createPortal(drawer, document.body) : drawer;
 }

@@ -5,7 +5,17 @@ export const endpoints = Object.freeze({
     me: "/auth/me",
     logout: "/auth/logout",
     forgotPassword: "/auth/forgot-password",
-    resetPassword: "/auth/reset-password"
+    resetPassword: "/auth/reset-password",
+    deleteAccount: "/auth/me"
+  },
+  onboarding: {
+    status: "/onboarding/status",
+    business: "/onboarding/business",
+    type: "/onboarding/type",
+    services: "/onboarding/services",
+    professionals: "/onboarding/professionals",
+    clients: "/onboarding/clients",
+    complete: "/onboarding/complete"
   },
   notificationTokens: "/notification-tokens",
   notifications: {
