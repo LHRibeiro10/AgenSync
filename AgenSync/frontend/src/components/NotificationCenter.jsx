@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { addDays, formatDateKey } from "./agenda/agendaDate.js";
@@ -38,6 +39,7 @@ export default function NotificationCenter({ tone = "light" }) {
   const [error, setError] = useState("");
 
   const hasItems = notifications.length || upcoming.length;
+  const canUsePortal = typeof document !== "undefined";
   const buttonClass = useMemo(() => {
     const base = "relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition active:scale-95";
     if (tone === "dark") {
@@ -114,9 +116,107 @@ export default function NotificationCenter({ tone = "light" }) {
 
   async function readAll() {
     await markAllNotificationsRead();
-    setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString(), read: true })));
+    setNotifications((current) =>
+      current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString(), read: true }))
+    );
     setUnreadCount(0);
   }
+
+  const panel = open ? (
+    <div className="agensync-overlay z-[90] flex items-end bg-slate-950/35 p-3 backdrop-blur-sm sm:items-start sm:justify-end sm:p-5">
+      <button type="button" className="absolute inset-0" onClick={() => setOpen(false)} aria-label="Fechar notificações" />
+      <section className="relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-line bg-white shadow-panel sm:mt-12 sm:max-w-md sm:rounded-2xl">
+        <header className="flex items-start justify-between gap-3 border-b border-line p-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">Central</p>
+            <h2 className="mt-1 text-xl font-black text-ink">Notificações</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-white text-lg font-black text-slate-500"
+            aria-label="Fechar"
+          >
+            X
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {error ? (
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-danger">{error}</div>
+          ) : null}
+
+          {loading ? (
+            <div className="flex min-h-44 items-center justify-center text-sm font-black text-muted">Carregando notificações...</div>
+          ) : !hasItems ? (
+            <EmptyState
+              title="Nenhuma notificação por enquanto."
+              description="Lembretes e avisos importantes aparecem aqui quando houver algo novo."
+            />
+          ) : (
+            <div className="space-y-4">
+              {upcoming.length ? (
+                <section>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Próximos agendamentos</p>
+                  <div className="mt-2 space-y-2">
+                    {upcoming.map((appointment) => (
+                      <button
+                        key={appointment.id}
+                        type="button"
+                        onClick={() => openAppointment(appointment)}
+                        className="w-full rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-left transition hover:border-brand/40"
+                      >
+                        <p className="text-sm font-black text-ink">{upcomingLabel(appointment)}</p>
+                        <p className="mt-1 text-xs font-bold text-muted">{appointment.date}</p>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {notifications.length ? (
+                <section>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Lembretes e avisos</p>
+                    {unreadCount ? (
+                      <button type="button" onClick={readAll} className="text-xs font-black text-brand hover:text-brand-dark">
+                        Marcar lidas
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {notifications.map((notification) => (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        onClick={() => openNotification(notification)}
+                        className={`w-full rounded-xl border px-3 py-3 text-left transition hover:border-brand/40 ${
+                          notification.readAt ? "border-line bg-white" : "border-blue-100 bg-blue-50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-black text-ink">{notification.title}</p>
+                          {!notification.readAt ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand" /> : null}
+                        </div>
+                        <p className="mt-1 text-sm leading-5 text-muted">{notification.message || notification.body}</p>
+                        <p className="mt-2 text-xs font-bold text-slate-500">{dateTimeLabel(notification.createdAt)}</p>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <footer className="border-t border-line p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          <Button variant="secondary" className="w-full" onClick={() => loadData()}>
+            Atualizar
+          </Button>
+        </footer>
+      </section>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -129,101 +229,7 @@ export default function NotificationCenter({ tone = "light" }) {
         ) : null}
       </button>
 
-      {open ? (
-        <div className="agensync-overlay z-50 flex items-end bg-slate-950/35 p-3 backdrop-blur-sm sm:items-start sm:justify-end sm:p-5">
-          <button type="button" className="absolute inset-0" onClick={() => setOpen(false)} aria-label="Fechar notificações" />
-          <section className="relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-line bg-white shadow-panel sm:mt-12 sm:max-w-md sm:rounded-2xl">
-            <header className="flex items-start justify-between gap-3 border-b border-line p-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">Central</p>
-                <h2 className="mt-1 text-xl font-black text-ink">Notificações</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-white text-lg font-black text-slate-500"
-                aria-label="Fechar"
-              >
-                X
-              </button>
-            </header>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {error ? (
-                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-danger">{error}</div>
-              ) : null}
-
-              {loading ? (
-                <div className="flex min-h-44 items-center justify-center text-sm font-black text-muted">Carregando notificações...</div>
-              ) : !hasItems ? (
-                <EmptyState
-                  title="Nenhuma notificação por enquanto."
-                  description="Lembretes e avisos importantes aparecem aqui quando houver algo novo."
-                />
-              ) : (
-                <div className="space-y-4">
-                  {upcoming.length ? (
-                    <section>
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Próximos agendamentos</p>
-                      <div className="mt-2 space-y-2">
-                        {upcoming.map((appointment) => (
-                          <button
-                            key={appointment.id}
-                            type="button"
-                            onClick={() => openAppointment(appointment)}
-                            className="w-full rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-left transition hover:border-brand/40"
-                          >
-                            <p className="text-sm font-black text-ink">{upcomingLabel(appointment)}</p>
-                            <p className="mt-1 text-xs font-bold text-muted">{appointment.date}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-
-                  {notifications.length ? (
-                    <section>
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Lembretes e avisos</p>
-                        {unreadCount ? (
-                          <button type="button" onClick={readAll} className="text-xs font-black text-brand hover:text-brand-dark">
-                            Marcar lidas
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        {notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            type="button"
-                            onClick={() => openNotification(notification)}
-                            className={`w-full rounded-xl border px-3 py-3 text-left transition hover:border-brand/40 ${
-                              notification.readAt ? "border-line bg-white" : "border-blue-100 bg-blue-50"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-sm font-black text-ink">{notification.title}</p>
-                              {!notification.readAt ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand" /> : null}
-                            </div>
-                            <p className="mt-1 text-sm leading-5 text-muted">{notification.message || notification.body}</p>
-                            <p className="mt-2 text-xs font-bold text-slate-500">{dateTimeLabel(notification.createdAt)}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-                </div>
-              )}
-            </div>
-
-            <footer className="border-t border-line p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-              <Button variant="secondary" className="w-full" onClick={() => loadData()}>
-                Atualizar
-              </Button>
-            </footer>
-          </section>
-        </div>
-      ) : null}
+      {canUsePortal && panel ? createPortal(panel, document.body) : panel}
     </>
   );
 }

@@ -9,7 +9,6 @@ import Icon from "./Icon.jsx";
 import NotificationCenter from "./NotificationCenter.jsx";
 import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
 import PageTransition from "./PageTransition.jsx";
-import ThemeToggle from "./ThemeToggle.jsx";
 import WelcomeOnboardingModal from "./onboarding/WelcomeOnboardingModal.jsx";
 
 const OPEN_MODULES_KEY = "agensync_sidebar_open_modules";
@@ -261,7 +260,6 @@ export default function Layout() {
                 <p className="text-xs text-slate-400">Lembretes e avisos</p>
               </div>
             </div>
-            <ThemeToggle className="mb-3 border-white/10 bg-white/[0.06] hover:bg-white/[0.1] [&_span]:text-white" />
             <div className="flex items-center gap-3">
               <AccountMark user={user} />
               <div className="min-w-0">
@@ -308,7 +306,6 @@ export default function Layout() {
           ) : null}
 
           <NotificationCenter />
-          <ThemeToggle compact />
         </div>
       </header>
 
@@ -368,7 +365,6 @@ export default function Layout() {
                   <p className="text-xs text-slate-400">Lembretes e avisos</p>
                 </div>
               </div>
-              <ThemeToggle className="mb-3 border-white/10 bg-white/[0.06] hover:bg-white/[0.1] [&_span]:text-white" />
               <div className="flex items-center gap-3">
                 <AccountMark user={user} size="lg" />
                 <div className="min-w-0">
