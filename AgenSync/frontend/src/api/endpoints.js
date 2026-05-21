@@ -10,12 +10,17 @@ export const endpoints = Object.freeze({
   notificationTokens: "/notification-tokens",
   notifications: {
     list: "/notifications",
+    clear: "/notifications",
+    delete: (id) => `/notifications/${id}`,
     read: (id) => `/notifications/${id}/read`,
     readAll: "/notifications/read-all",
     settings: "/notifications/settings",
     test: "/notifications/test",
     pushSubscribe: "/notifications/push/subscribe",
     pushUnsubscribe: "/notifications/push/unsubscribe"
+  },
+  appointmentReminders: {
+    processDue: "/appointment-reminders/process-due"
   },
   admin: {
     summary: "/admin/summary",

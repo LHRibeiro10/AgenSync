@@ -1,9 +1,12 @@
 import {
+  clearNotificationsApi,
+  deleteNotificationApi,
   disableNotificationTokenApi,
   getNotificationSettingsApi,
   listNotificationsApi,
   markAllNotificationsReadApi,
   markNotificationReadApi,
+  processDueAppointmentRemindersApi,
   registerNotificationTokenApi,
   subscribePushApi,
   testNotificationApi,
@@ -28,12 +31,24 @@ export function listNotifications(params) {
   return listNotificationsApi(params);
 }
 
+export function clearNotifications() {
+  return clearNotificationsApi();
+}
+
+export function deleteNotification(notificationId) {
+  return deleteNotificationApi(notificationId);
+}
+
 export function markNotificationRead(notificationId) {
   return markNotificationReadApi(notificationId);
 }
 
 export function markAllNotificationsRead() {
   return markAllNotificationsReadApi();
+}
+
+export function processDueAppointmentReminders(payload) {
+  return processDueAppointmentRemindersApi(payload);
 }
 
 export function getNotificationSettings() {

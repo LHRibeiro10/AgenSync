@@ -6,10 +6,14 @@ import { addDays, formatDateKey } from "./agenda/agendaDate.js";
 import Button from "./Button.jsx";
 import EmptyState from "./EmptyState.jsx";
 import Icon from "./Icon.jsx";
+import { useToast } from "./Toast.jsx";
 import {
+  clearNotifications,
   listNotifications,
   markAllNotificationsRead,
-  markNotificationRead
+  markNotificationRead,
+  processDueAppointmentReminders,
+  showLocalNotification
 } from "../services/notificationService.js";
 import { todayInputValue } from "../utils.js";
 
@@ -31,8 +35,10 @@ function upcomingLabel(appointment) {
 
 export default function NotificationCenter({ tone = "light" }) {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -53,6 +59,15 @@ export default function NotificationCenter({ tone = "light" }) {
     setError("");
 
     try {
+      const reminderResult = await processDueAppointmentReminders({ limit: 50 }).catch(() => null);
+      (reminderResult?.notifications || []).forEach((notification) => {
+        showLocalNotification({
+          title: notification.title,
+          body: notification.message || notification.body,
+          actionUrl: notification.actionUrl || "/agenda"
+        });
+      });
+
       const today = todayInputValue();
       const endDate = formatDateKey(addDays(new Date(), 7));
       const [notificationResult, appointmentsResult] = await Promise.allSettled([
@@ -122,6 +137,21 @@ export default function NotificationCenter({ tone = "light" }) {
     setUnreadCount(0);
   }
 
+  async function clearAll() {
+    if (!notifications.length || clearing) return;
+    setClearing(true);
+    try {
+      await clearNotifications();
+      setNotifications([]);
+      setUnreadCount(0);
+      showToast("Notificações limpas.");
+    } catch (err) {
+      showToast(err.message || "Não foi possível limpar as notificações.", "error");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   const panel = open ? (
     <div className="agensync-overlay z-[90] flex items-end bg-slate-950/35 p-3 backdrop-blur-sm sm:items-start sm:justify-end sm:p-5">
       <button type="button" className="absolute inset-0" onClick={() => setOpen(false)} aria-label="Fechar notificações" />
@@ -178,11 +208,21 @@ export default function NotificationCenter({ tone = "light" }) {
                 <section>
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Lembretes e avisos</p>
-                    {unreadCount ? (
-                      <button type="button" onClick={readAll} className="text-xs font-black text-brand hover:text-brand-dark">
-                        Marcar lidas
+                    <div className="flex shrink-0 items-center gap-3">
+                      {unreadCount ? (
+                        <button type="button" onClick={readAll} className="text-xs font-black text-brand hover:text-brand-dark">
+                          Marcar lidas
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={clearAll}
+                        disabled={clearing}
+                        className="text-xs font-black text-slate-500 transition hover:text-danger disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {clearing ? "Limpando..." : "Limpar"}
                       </button>
-                    ) : null}
+                    </div>
                   </div>
                   <div className="mt-2 space-y-2">
                     {notifications.map((notification) => (

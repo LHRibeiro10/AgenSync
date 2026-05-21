@@ -216,6 +216,17 @@ router.patch(
   })
 );
 
+router.delete(
+  "/",
+  asyncHandler(async (req, res) => {
+    const result = await prisma.notification.deleteMany({
+      where: { userId: req.user.id }
+    });
+
+    res.json({ ok: true, deletedCount: result.count });
+  })
+);
+
 router.patch(
   "/:id/read",
   asyncHandler(async (req, res) => {
@@ -231,6 +242,19 @@ router.patch(
     });
 
     res.json({ notification: publicNotification(updated) });
+  })
+);
+
+router.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const result = await prisma.notification.deleteMany({
+      where: { id: req.params.id, userId: req.user.id }
+    });
+
+    if (!result.count) throw new ApiError(404, "Notificacao nao encontrada.");
+
+    res.json({ ok: true });
   })
 );
 

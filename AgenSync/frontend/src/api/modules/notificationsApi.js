@@ -13,6 +13,14 @@ export function listNotificationsApi(params) {
   return httpClient.get(endpoints.notifications.list, { params, cacheTtlMs: 15_000 });
 }
 
+export function clearNotificationsApi() {
+  return httpClient.delete(endpoints.notifications.clear);
+}
+
+export function deleteNotificationApi(notificationId) {
+  return httpClient.delete(endpoints.notifications.delete(notificationId));
+}
+
 export function markNotificationReadApi(notificationId) {
   return httpClient.patch(endpoints.notifications.read(notificationId));
 }
@@ -39,4 +47,8 @@ export function subscribePushApi(payload) {
 
 export function unsubscribePushApi(payload) {
   return httpClient.delete(endpoints.notifications.pushUnsubscribe, { body: payload });
+}
+
+export function processDueAppointmentRemindersApi(payload = {}) {
+  return httpClient.post(endpoints.appointmentReminders.processDue, { body: payload });
 }

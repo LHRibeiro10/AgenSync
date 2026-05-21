@@ -1,6 +1,6 @@
 import { prisma } from "../prisma.js";
 import { publicAppointment } from "../utils/formatters.js";
-import { createInternalNotification } from "./notificationService.js";
+import { createInternalNotification, publicNotification } from "./notificationService.js";
 
 const REMINDER_TYPES_BY_OFFSET = {
   10: "TEN_MINUTES_BEFORE",
@@ -79,23 +79,40 @@ export async function syncAppointmentReminders(appointment) {
     data: { status: "FAILED", errorMessage: "Substituido pela configuracao atual." }
   });
 
-  if (scheduledFor.getTime() <= now) return;
+  if (startsAt <= now) return;
 
-  await prisma.appointmentReminder.upsert({
-    where: {
-      appointmentId_reminderType: {
+  const reminderKey = {
+    appointmentId_reminderType: {
+      appointmentId: appointment.id,
+      reminderType
+    }
+  };
+  const existing = await prisma.appointmentReminder.findUnique({
+    where: reminderKey
+  });
+
+  if (existing?.status === "SENT" && existing.scheduledFor.getTime() === scheduledFor.getTime()) {
+    return;
+  }
+
+  if (!existing) {
+    await prisma.appointmentReminder.create({
+      data: {
         appointmentId: appointment.id,
-        reminderType
+        userId: appointment.userId,
+        reminderType,
+        scheduledFor
       }
-    },
-    create: {
+    });
+    return;
+  }
+
+  await prisma.appointmentReminder.update({
+    where: { id: existing.id },
+    data: {
       appointmentId: appointment.id,
       userId: appointment.userId,
       reminderType,
-      scheduledFor
-    },
-    update: {
-      userId: appointment.userId,
       scheduledFor,
       status: "PENDING",
       sentAt: null,
@@ -149,7 +166,7 @@ export async function processDueAppointmentReminders({ limit = 50, userId = "" }
     take: Math.min(Math.max(Number(limit) || 50, 1), 100)
   });
 
-  const results = { processed: 0, sent: 0, failed: 0 };
+  const results = { processed: 0, sent: 0, failed: 0, notifications: [] };
 
   for (const reminder of dueReminders) {
     results.processed += 1;
@@ -173,7 +190,7 @@ export async function processDueAppointmentReminders({ limit = 50, userId = "" }
 
       const offsetMinutes = OFFSET_BY_REMINDER_TYPE[reminder.reminderType] || settings.offsetMinutes;
       const appointment = publicAppointment(reminder.appointment);
-      await createInternalNotification({
+      const notification = await createInternalNotification({
         userId: reminder.userId,
         workspaceId: reminder.userId,
         title: `Próximo atendimento em ${offsetLabel(offsetMinutes)}`,
@@ -183,6 +200,7 @@ export async function processDueAppointmentReminders({ limit = 50, userId = "" }
         relatedEntityType: "appointment",
         relatedEntityId: appointment.id
       });
+      results.notifications.push(publicNotification(notification));
 
       await prisma.appointmentReminder.update({
         where: { id: reminder.id },
