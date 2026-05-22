@@ -221,11 +221,14 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/agensync?schema=publ
 JWT_SECRET="agensync-local-dev-secret-change-me"
 SUPABASE_URL="https://SEU-PROJETO.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="SUA_CHAVE_SECRETA_SERVICE_ROLE"
+CRON_SECRET="um-segredo-para-processar-lembretes"
 PORT=3333
 CORS_ORIGIN="http://localhost:5173"
 ```
 
 As variáveis `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são obrigatórias quando o frontend usa Supabase Auth, pois a exclusão de conta precisa remover também o usuário em Authentication > Users. Nunca exponha a chave `service_role` no frontend.
+
+Os lembretes de agendamento são processados automaticamente pelo backend a cada minuto. Em deploys serverless, configure um cron para chamar `POST /api/cron/appointment-reminders/process-due` com `Authorization: Bearer CRON_SECRET`.
 
 Se seu PostgreSQL usa outra senha, troque a senha na `DATABASE_URL`.
 

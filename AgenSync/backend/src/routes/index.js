@@ -1,5 +1,8 @@
 import { Router } from "express";
 import { requireAdmin, requireAuth, requirePlatformRole } from "../middleware/auth.js";
+import { ApiError, asyncHandler } from "../middleware/error.js";
+import { processDueAppointmentReminders } from "../services/appointmentReminderService.js";
+import { normalizeEnvValue } from "../utils/env.js";
 import adminRouter from "./admin.js";
 import appointmentsRouter from "./appointments.js";
 import appointmentRemindersRouter from "./appointmentReminders.js";
@@ -20,9 +23,33 @@ import servicesRouter from "./services.js";
 
 const router = Router();
 
+function cronSecretFromRequest(req) {
+  const authHeader = String(req.get("authorization") || "");
+  if (authHeader.startsWith("Bearer ")) return authHeader.slice("Bearer ".length).trim();
+  return String(req.get("x-cron-secret") || req.query.secret || "").trim();
+}
+
+function requireCronSecret(req) {
+  const configuredSecret = normalizeEnvValue(process.env.CRON_SECRET || process.env.APPOINTMENT_REMINDER_CRON_SECRET);
+  if (!configuredSecret && process.env.NODE_ENV !== "production") return;
+  if (!configuredSecret) throw new ApiError(500, "CRON_SECRET nao configurado no backend.");
+  if (cronSecretFromRequest(req) !== configuredSecret) throw new ApiError(401, "Cron nao autorizado.");
+}
+
 router.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+router.post(
+  "/cron/appointment-reminders/process-due",
+  asyncHandler(async (req, res) => {
+    requireCronSecret(req);
+    const result = await processDueAppointmentReminders({
+      limit: req.body?.limit || req.query?.limit || 100
+    });
+    res.json(result);
+  })
+);
 
 router.use("/auth", authRouter);
 router.use("/admin", requireAuth, requireAdmin, adminRouter);

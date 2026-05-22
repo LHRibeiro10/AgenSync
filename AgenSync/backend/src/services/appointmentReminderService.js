@@ -34,13 +34,19 @@ async function reminderSettingsForUser(userId) {
     where: { id: userId },
     select: {
       appointmentNotificationsEnabled: true,
-      appointmentNotificationOffsetMinutes: true
+      appointmentNotificationOffsetMinutes: true,
+      appointmentNotificationChannels: true
     }
   });
 
+  const channels = Array.isArray(user?.appointmentNotificationChannels)
+    ? user.appointmentNotificationChannels
+    : ["internal", "push"];
+
   return {
     enabled: user?.appointmentNotificationsEnabled !== false,
-    offsetMinutes: normalizeReminderOffset(user?.appointmentNotificationOffsetMinutes)
+    offsetMinutes: normalizeReminderOffset(user?.appointmentNotificationOffsetMinutes),
+    channels
   };
 }
 
@@ -198,7 +204,8 @@ export async function processDueAppointmentReminders({ limit = 50, userId = "" }
         type: "appointment_reminder",
         actionUrl: `/agenda?agendamento=${appointment.id}`,
         relatedEntityType: "appointment",
-        relatedEntityId: appointment.id
+        relatedEntityId: appointment.id,
+        push: settings.channels.includes("push")
       });
       results.notifications.push(publicNotification(notification));
 
