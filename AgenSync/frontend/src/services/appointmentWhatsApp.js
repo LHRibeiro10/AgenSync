@@ -6,6 +6,9 @@ export const DEFAULT_REMINDER_MESSAGE =
 export const DEFAULT_CONFIRMATION_MESSAGE =
   "Olá, {cliente}! Tudo certo para o seu atendimento de {servico} no dia {data} às {hora}? Pode me confirmar por aqui, por favor?";
 
+export const DEFAULT_CANCELLATION_MESSAGE =
+  "Ola, {cliente}! Precisamos cancelar seu atendimento de {servico} que estava agendado para {data} as {hora}. Se quiser, podemos combinar um novo horario por aqui.";
+
 export const WHATSAPP_VARIABLES = ["{cliente}", "{servico}", "{data}", "{hora}", "{negocio}", "{profissional}", "{valor}"];
 
 export function normalizeWhatsAppPhone(phone) {

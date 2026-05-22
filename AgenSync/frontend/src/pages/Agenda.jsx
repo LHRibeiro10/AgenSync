@@ -20,7 +20,11 @@ import Message from "../components/Message.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { agendaSchedule, defaultWorkingHours } from "../data/agendaConfig.js";
-import { DEFAULT_CONFIRMATION_MESSAGE, DEFAULT_REMINDER_MESSAGE } from "../services/appointmentWhatsApp.js";
+import {
+  DEFAULT_CANCELLATION_MESSAGE,
+  DEFAULT_CONFIRMATION_MESSAGE,
+  DEFAULT_REMINDER_MESSAGE
+} from "../services/appointmentWhatsApp.js";
 import { getNotificationSettings } from "../services/notificationService.js";
 import { todayInputValue } from "../utils.js";
 
@@ -138,7 +142,8 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const [whatsAppAction, setWhatsAppAction] = useState(null);
   const [whatsAppTemplates, setWhatsAppTemplates] = useState({
     reminder: DEFAULT_REMINDER_MESSAGE,
-    confirmation: DEFAULT_CONFIRMATION_MESSAGE
+    confirmation: DEFAULT_CONFIRMATION_MESSAGE,
+    cancellation: DEFAULT_CANCELLATION_MESSAGE
   });
 
   const weekDays = useMemo(() => buildWeekDays(weekStart, workingHours), [weekStart, workingHours]);
@@ -177,7 +182,8 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
         if (!active) return;
         setWhatsAppTemplates({
           reminder: data.settings?.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE,
-          confirmation: data.settings?.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE
+          confirmation: data.settings?.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE,
+          cancellation: data.settings?.whatsappCancellationMessage || DEFAULT_CANCELLATION_MESSAGE
         });
       })
       .catch(() => null);
@@ -526,6 +532,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
         onReschedule={rescheduleAppointment}
         onSendReminder={(appointment) => openWhatsAppAction("reminder", appointment)}
         onConfirmAttendance={(appointment) => openWhatsAppAction("confirmation", appointment)}
+        onSendCancellation={(appointment) => openWhatsAppAction("cancellation", appointment)}
         onSaveStatus={saveAppointmentStatus}
         onDelete={setPendingDelete}
       />
@@ -534,11 +541,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
         open={Boolean(whatsAppAction)}
         appointment={whatsAppAction?.appointment}
         mode={whatsAppAction?.mode}
-        template={
-          whatsAppAction?.mode === "reminder"
-            ? whatsAppTemplates.reminder
-            : whatsAppTemplates.confirmation
-        }
+        template={whatsAppTemplates[whatsAppAction?.mode] || whatsAppTemplates.confirmation}
         user={user}
         showToast={showToast}
         onClose={() => setWhatsAppAction(null)}

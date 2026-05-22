@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Button from "../Button.jsx";
 import Icon from "../Icon.jsx";
 import {
   buildAppointmentWhatsAppUrl,
   copyWithFallback,
+  DEFAULT_CANCELLATION_MESSAGE,
   DEFAULT_CONFIRMATION_MESSAGE,
+  DEFAULT_REMINDER_MESSAGE,
   normalizeWhatsAppPhone,
   renderAppointmentMessage,
   WHATSAPP_VARIABLES
@@ -13,6 +16,21 @@ import {
 function appointmentClient(appointment) {
   return appointment?.client?.name || appointment?.client || "Cliente";
 }
+
+const modeConfig = {
+  reminder: {
+    title: "Enviar lembrete",
+    fallbackTemplate: DEFAULT_REMINDER_MESSAGE
+  },
+  confirmation: {
+    title: "Confirmar comparecimento",
+    fallbackTemplate: DEFAULT_CONFIRMATION_MESSAGE
+  },
+  cancellation: {
+    title: "Enviar cancelamento",
+    fallbackTemplate: DEFAULT_CANCELLATION_MESSAGE
+  }
+};
 
 export default function AppointmentWhatsAppModal({
   appointment,
@@ -25,8 +43,9 @@ export default function AppointmentWhatsAppModal({
 }) {
   const [message, setMessage] = useState("");
 
-  const title = mode === "reminder" ? "Enviar lembrete" : "Confirmar comparecimento";
-  const fallbackTemplate = template || DEFAULT_CONFIRMATION_MESSAGE;
+  const activeMode = modeConfig[mode] || modeConfig.confirmation;
+  const title = activeMode.title;
+  const fallbackTemplate = template || activeMode.fallbackTemplate;
   const phoneStatus = useMemo(() => normalizeWhatsAppPhone(appointment?.client?.phone), [appointment]);
   const hasValidPhone = phoneStatus.valid;
 
@@ -37,6 +56,7 @@ export default function AppointmentWhatsAppModal({
   }, [appointment, fallbackTemplate, open, user]);
 
   if (!open || !appointment) return null;
+  const canUsePortal = typeof document !== "undefined";
 
   async function copyMessage() {
     try {
@@ -56,8 +76,8 @@ export default function AppointmentWhatsAppModal({
     window.open(buildAppointmentWhatsAppUrl(appointment.client?.phone, message), "_blank", "noopener,noreferrer");
   }
 
-  return (
-    <div className="agensync-overlay z-[55] flex items-end bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
+  const modal = (
+    <div className="agensync-overlay z-[90] flex items-end bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
       <div
         className="max-h-[92dvh] w-full overflow-hidden rounded-t-[28px] border border-[#E2E8F0] bg-white shadow-panel sm:max-w-2xl sm:rounded-2xl"
         role="dialog"
@@ -134,4 +154,6 @@ export default function AppointmentWhatsAppModal({
       </div>
     </div>
   );
+
+  return canUsePortal ? createPortal(modal, document.body) : modal;
 }

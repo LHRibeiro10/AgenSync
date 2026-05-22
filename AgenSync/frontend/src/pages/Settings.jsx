@@ -388,7 +388,7 @@ export default function Settings() {
         } else if (!pushResult.enabled && pushResult.reason === "permission_denied") {
           showToast("Notificacoes internas ativadas. Permissao de push negada.", "error");
         } else if (!pushResult.enabled && pushResult.reason === "missing_config") {
-          showToast("Notificacoes internas ativadas. Push fica preparado para configuracao futura.");
+          showToast("Notificacoes internas ativadas. Configure Firebase para enviar push com o app fechado.");
         }
       } else {
         await disablePushNotifications().catch(() => null);
@@ -745,7 +745,7 @@ export default function Settings() {
                   </label>
                 </div>
                 <p className="mt-3 text-xs font-bold leading-5 text-muted">
-                  Email e WhatsApp automático ficam apenas preparados para etapas futuras.
+                  Lembretes internos são processados automaticamente; push remoto exige Firebase configurado no backend.
                 </p>
               </div>
 

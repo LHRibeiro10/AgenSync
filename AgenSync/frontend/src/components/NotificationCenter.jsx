@@ -33,6 +33,36 @@ function upcomingLabel(appointment) {
   return `${appointment.client?.name || "Cliente"} - ${appointment.service?.name || "Serviço"} às ${appointment.startTime}`;
 }
 
+const shownBrowserNotificationIds = new Set();
+let hasPrimedNotificationList = false;
+
+function shouldShowBrowserNotification(notification) {
+  return (
+    notification?.id &&
+    !shownBrowserNotificationIds.has(notification.id) &&
+    !notification.readAt &&
+    ["appointment_reminder", "test"].includes(notification.type)
+  );
+}
+
+function showBrowserNotifications(notifications = []) {
+  notifications.filter(shouldShowBrowserNotification).forEach((notification) => {
+    shownBrowserNotificationIds.add(notification.id);
+    showLocalNotification({
+      title: notification.title,
+      body: notification.message || notification.body,
+      actionUrl: notification.actionUrl || "/agenda"
+    });
+  });
+}
+
+function primeNotificationList(notifications = []) {
+  notifications.forEach((notification) => {
+    if (notification?.id) shownBrowserNotificationIds.add(notification.id);
+  });
+  hasPrimedNotificationList = true;
+}
+
 export default function NotificationCenter({ tone = "light" }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -60,13 +90,7 @@ export default function NotificationCenter({ tone = "light" }) {
 
     try {
       const reminderResult = await processDueAppointmentReminders({ limit: 50 }).catch(() => null);
-      (reminderResult?.notifications || []).forEach((notification) => {
-        showLocalNotification({
-          title: notification.title,
-          body: notification.message || notification.body,
-          actionUrl: notification.actionUrl || "/agenda"
-        });
-      });
+      showBrowserNotifications(reminderResult?.notifications || []);
 
       const today = todayInputValue();
       const endDate = formatDateKey(addDays(new Date(), 7));
@@ -78,12 +102,19 @@ export default function NotificationCenter({ tone = "light" }) {
 
       const notificationData = notificationResult.value;
       const appointmentsData = appointmentsResult.status === "fulfilled" ? appointmentsResult.value : { appointments: [] };
+      const nextNotifications = notificationData.notifications || [];
+
+      if (hasPrimedNotificationList) {
+        showBrowserNotifications(nextNotifications);
+      } else {
+        primeNotificationList(nextNotifications);
+      }
 
       const futureAppointments = (appointmentsData.appointments || [])
         .filter((appointment) => ["agendado", "confirmado", "pendente"].includes(appointment.status))
         .slice(0, 5);
 
-      setNotifications(notificationData.notifications || []);
+      setNotifications(nextNotifications);
       setUnreadCount(notificationData.unreadCount || 0);
       setUpcoming(futureAppointments);
     } catch (err) {

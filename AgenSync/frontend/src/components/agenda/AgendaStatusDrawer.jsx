@@ -25,6 +25,7 @@ export default function AgendaStatusDrawer({
   onReschedule,
   onSendReminder,
   onConfirmAttendance,
+  onSendCancellation,
   onSaveStatus,
   onDelete
 }) {
@@ -128,6 +129,9 @@ export default function AgendaStatusDrawer({
               </Button>
               <Button onClick={() => onConfirmAttendance?.(appointment)} disabled={saving}>
                 Confirmar comparecimento
+              </Button>
+              <Button variant="danger" className="sm:col-span-2" onClick={() => onSendCancellation?.(appointment)} disabled={saving}>
+                Enviar cancelamento
               </Button>
             </div>
           </section>
