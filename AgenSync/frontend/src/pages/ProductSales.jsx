@@ -53,6 +53,15 @@ const salesViews = {
     panelDescription: "Resumo operacional das vendas de produtos.",
     listTitle: "Base do relatorio",
     showForm: false
+  },
+  commissions: {
+    title: "Comissoes",
+    description: "Calcule comissoes sobre as vendas filtradas por periodo, produto e cliente.",
+    eyebrow: "Comissoes",
+    panelTitle: "Calculo de comissao",
+    panelDescription: "Defina percentual, base e responsavel pelo pagamento.",
+    listTitle: "Vendas com comissao",
+    showForm: false
   }
 };
 
@@ -98,9 +107,11 @@ export default function ProductSales({ mode = "new" }) {
   });
   const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
+  const [professionals, setProfessionals] = useState([]);
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [commission, setCommission] = useState({ professionalId: "", rate: 10, base: "sales" });
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState(0);
   const [quickClientOpen, setQuickClientOpen] = useState(false);
@@ -110,19 +121,52 @@ export default function ProductSales({ mode = "new" }) {
   const { showToast } = useToast();
 
   useEffect(() => {
-    api
-      .listClients()
-      .then((data) => setClients(data.clients))
-      .catch((err) => {
-        setClients([]);
-        setError(err.message);
-      });
+    let active = true;
+
+    Promise.allSettled([api.listClients(), api.listProfessionals({ active: true })]).then(
+      ([clientsResult, professionalsResult]) => {
+        if (!active) return;
+
+        if (clientsResult.status === "fulfilled") {
+          setClients(clientsResult.value?.clients || []);
+        } else {
+          setClients([]);
+          setError(clientsResult.reason?.message || "Nao foi possivel carregar clientes.");
+        }
+
+        if (professionalsResult.status === "fulfilled") {
+          setProfessionals(professionalsResult.value?.professionals || []);
+        } else {
+          setProfessionals([]);
+        }
+      }
+    );
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const selectedProduct = products.find((product) => product.id === form.productId);
+  const selectedCommissionProfessional = professionals.find((professional) => professional.id === commission.professionalId);
   const totalSales = sumProductSales(sales);
   const grossProfit = productSalesProfit(sales);
   const saleTotal = selectedProduct ? Number(selectedProduct.salePrice) * Number(form.quantity || 0) : 0;
+  const commissionRate = Math.max(0, Number(commission.rate || 0));
+  const commissionBaseTotal = commission.base === "profit" ? grossProfit : totalSales;
+  const commissionTotal = (commissionBaseTotal * commissionRate) / 100;
+  const commissionRows = sales.map((sale) => {
+    const base =
+      commission.base === "profit"
+        ? (Number(sale.unitPrice || 0) - Number(sale.unitCost || 0)) * Number(sale.quantity || 0)
+        : Number(sale.total || 0);
+
+    return {
+      ...sale,
+      commissionBase: base,
+      commissionAmount: (base * commissionRate) / 100
+    };
+  });
 
   useEffect(() => {
     let active = true;
@@ -201,6 +245,10 @@ export default function ProductSales({ mode = "new" }) {
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateCommission(field, value) {
+    setCommission((current) => ({ ...current, [field]: value }));
   }
 
   async function handleSubmit(event) {
@@ -380,6 +428,71 @@ export default function ProductSales({ mode = "new" }) {
             </article>
           </section>
 
+          {mode === "commissions" ? (
+            <Card className="p-4 sm:p-5">
+              <div className="grid gap-4 lg:grid-cols-[1fr_150px_180px] lg:items-end">
+                <Field label="Profissional a pagar">
+                  <select
+                    value={commission.professionalId}
+                    onChange={(event) => updateCommission("professionalId", event.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Equipe geral</option>
+                    {professionals.map((professional) => (
+                      <option key={professional.id} value={professional.id}>
+                        {professional.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Percentual">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={commission.rate}
+                      onChange={(event) => updateCommission("rate", event.target.value)}
+                      className={`${inputClass} pr-10`}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-black text-muted">
+                      %
+                    </span>
+                  </div>
+                </Field>
+                <Field label="Base">
+                  <select
+                    value={commission.base}
+                    onChange={(event) => updateCommission("base", event.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="sales">Valor vendido</option>
+                    <option value="profit">Margem estimada</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Base filtrada</p>
+                  <p className="mt-2 text-xl font-black text-ink">{money(commissionBaseTotal)}</p>
+                </div>
+                <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Percentual</p>
+                  <p className="mt-2 text-xl font-black text-ink">{commissionRate.toLocaleString("pt-BR")}%</p>
+                </div>
+                <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-success">A pagar</p>
+                  <p className="mt-2 text-xl font-black text-success">{money(commissionTotal)}</p>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm font-bold text-muted">
+                {selectedCommissionProfessional?.name || "Equipe geral"} · {sales.length} venda(s) no filtro atual
+              </p>
+            </Card>
+          ) : null}
+
           <FilterBar
             title="Filtrar vendas"
             description="Localize vendas por período, produto, cliente ou busca livre."
@@ -409,7 +522,7 @@ export default function ProductSales({ mode = "new" }) {
               {loading ? (
                 <Loading label="Carregando vendas..." />
               ) : sales.length ? (
-                sales.map((sale) => (
+                (mode === "commissions" ? commissionRows : sales).map((sale) => (
                   <article
                     key={sale.id}
                     className="grid gap-3 p-4 transition duration-200 hover:bg-[#F8FAFC] lg:grid-cols-[1fr_auto] lg:items-center"
@@ -422,8 +535,17 @@ export default function ProductSales({ mode = "new" }) {
                       {sale.notes ? <p className="mt-2 text-sm text-muted">{sale.notes}</p> : null}
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-black text-success">{money(sale.total)}</p>
-                      <p className="text-xs font-bold text-muted">unitário {money(sale.unitPrice)}</p>
+                      {mode === "commissions" ? (
+                        <>
+                          <p className="text-lg font-black text-success">{money(sale.commissionAmount)}</p>
+                          <p className="text-xs font-bold text-muted">base {money(sale.commissionBase)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-lg font-black text-success">{money(sale.total)}</p>
+                          <p className="text-xs font-bold text-muted">unitário {money(sale.unitPrice)}</p>
+                        </>
+                      )}
                     </div>
                   </article>
                 ))

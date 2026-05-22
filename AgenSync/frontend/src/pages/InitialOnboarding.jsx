@@ -378,9 +378,16 @@ export default function InitialOnboarding() {
 
               {activeStep.key === "services" ? (
                 <div className="space-y-3">
+                  <div className="hidden rounded-xl border border-line bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-muted sm:grid sm:grid-cols-[auto_minmax(0,1.4fr)_140px_140px_auto] sm:items-center sm:gap-3">
+                    <span>Status</span>
+                    <span>Serviço</span>
+                    <span>Valor (R$)</span>
+                    <span>Duração (min)</span>
+                    <span>Ação</span>
+                  </div>
                   {services.map((service) => (
-                    <div key={service.id} className="grid gap-3 rounded-xl border border-line bg-slate-50 p-3 sm:grid-cols-[auto_minmax(0,1.4fr)_120px_120px_auto] sm:items-center">
-                      <label className="flex items-center gap-2 text-sm font-black text-ink">
+                    <div key={service.id} className="grid gap-3 rounded-xl border border-line bg-slate-50 p-3 sm:grid-cols-[auto_minmax(0,1.4fr)_140px_140px_auto] sm:items-end">
+                      <label className="flex min-h-12 items-center gap-2 text-sm font-black text-ink">
                         <input
                           type="checkbox"
                           checked={service.selected !== false}
@@ -389,29 +396,46 @@ export default function InitialOnboarding() {
                         />
                         Ativo
                       </label>
-                      <input
-                        value={service.name}
-                        onChange={(event) => updateService(service.id, { name: event.target.value })}
-                        className={inputClass}
-                        placeholder="Nome do serviço"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={service.priceDefault}
-                        onChange={(event) => updateService(service.id, { priceDefault: event.target.value })}
-                        className={inputClass}
-                        placeholder="Valor"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        value={service.durationMinutes}
-                        onChange={(event) => updateService(service.id, { durationMinutes: event.target.value })}
-                        className={inputClass}
-                        placeholder="Min"
-                      />
-                      <Button type="button" variant="secondary" onClick={() => removeService(service.id)}>
+                      <Field label="Nome do serviço">
+                        <input
+                          value={service.name}
+                          onChange={(event) => updateService(service.id, { name: event.target.value })}
+                          className={inputClass}
+                          placeholder="Ex: Consulta"
+                        />
+                      </Field>
+                      <Field label="Valor cobrado">
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-muted">
+                            R$
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={service.priceDefault}
+                            onChange={(event) => updateService(service.id, { priceDefault: event.target.value })}
+                            className={`${inputClass} pl-10`}
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </Field>
+                      <Field label="Duração">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            value={service.durationMinutes}
+                            onChange={(event) => updateService(service.id, { durationMinutes: event.target.value })}
+                            className={`${inputClass} pr-12`}
+                            placeholder="60"
+                          />
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black uppercase text-muted">
+                            min
+                          </span>
+                        </div>
+                      </Field>
+                      <Button type="button" variant="secondary" className="min-h-12" onClick={() => removeService(service.id)}>
                         Remover
                       </Button>
                     </div>

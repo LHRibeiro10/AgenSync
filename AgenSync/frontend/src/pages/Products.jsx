@@ -41,12 +41,12 @@ const stockFilters = [
 const productViews = {
   catalog: {
     title: "Produtos",
-    description: "Cadastro de produtos, precos, categorias e status de venda.",
-    eyebrow: "Cadastro",
+    description: "Cadastro, categorias, estoque, reposicao e status de venda em uma unica tela.",
+    eyebrow: "Cadastro e estoque",
     formTitle: "Cadastrar produto",
-    formDescription: "Mantenha o catalogo limpo, com preco, margem e status.",
+    formDescription: "Informe preco, categoria, estoque atual e estoque minimo.",
     listTitle: "Produtos cadastrados",
-    highlight: "Tela focada no cadastro; estoque e reposicao ficam em submodulos proprios."
+    highlight: "Cadastre produtos, ajuste estoque, acompanhe margens e resolva alertas sem sair desta tela."
   },
   stock: {
     title: "Estoque",
@@ -157,6 +157,13 @@ export default function Products({ mode = "catalog" }) {
 
   const lowStock = allProducts.filter((product) => stockStatus(product) === "low").length;
   const outStock = allProducts.filter((product) => stockStatus(product) === "out").length;
+  const attentionProducts = allProducts.filter((product) => ["low", "out"].includes(stockStatus(product)));
+  const categoryCounts = productCategories
+    .map((category) => ({
+      ...category,
+      count: allProducts.filter((product) => product.category === category.value).length
+    }))
+    .filter((category) => category.count > 0);
 
   useEffect(() => {
     setFilters((current) => ({ ...current, stock: mode === "stock" ? "attention" : "" }));
@@ -344,6 +351,71 @@ export default function Products({ mode = "catalog" }) {
           <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Sem estoque</p>
           <p className="mt-2 text-3xl font-black text-red-600">{outStock}</p>
         </article>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+        <Card className="p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">Reposição</p>
+              <h2 className="mt-2 text-lg font-black text-ink">Alertas de estoque</h2>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => updateFilter("stock", "attention")}>
+              Ver alertas
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            {attentionProducts.slice(0, 4).map((product) => (
+              <button
+                key={product.id}
+                type="button"
+                onClick={() => updateFilter("search", product.name)}
+                className="rounded-xl border border-line bg-slate-50 p-3 text-left transition hover:border-brand/40 hover:bg-blue-50"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="min-w-0 truncate text-sm font-black text-ink">{product.name}</p>
+                  <StockBadge product={product} />
+                </div>
+                <p className="mt-2 text-xs font-bold text-muted">
+                  Atual {product.stockQty} · mínimo {product.minStock}
+                </p>
+              </button>
+            ))}
+            {!attentionProducts.length ? (
+              <div className="rounded-xl border border-line bg-slate-50 p-3">
+                <p className="text-sm font-black text-success">Nenhum alerta de reposição</p>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">Categorias</p>
+              <h2 className="mt-2 text-lg font-black text-ink">Produtos por grupo</h2>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => updateFilter("category", "")}>
+              Todas
+            </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {categoryCounts.length ? (
+              categoryCounts.map((category) => (
+                <button
+                  key={category.value}
+                  type="button"
+                  onClick={() => updateFilter("category", category.value)}
+                  className="rounded-full border border-line bg-slate-50 px-3 py-2 text-xs font-black text-ink transition hover:border-brand/40 hover:bg-blue-50 hover:text-brand"
+                >
+                  {category.label} · {category.count}
+                </button>
+              ))
+            ) : (
+              <p className="text-sm font-bold text-muted">Cadastre produtos para visualizar categorias.</p>
+            )}
+          </div>
+        </Card>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)] xl:items-start">

@@ -37,7 +37,7 @@ const TOUR_STEPS = [
     id: "products",
     path: "/produtos",
     title: "Produtos e estoque",
-    description: "Produtos agora fica preparado para catalogo, estoque, movimentacoes, reposicao e categorias em submodulos separados."
+    description: "Produtos concentra catalogo, estoque, reposicao, categorias e entradas rapidas em uma unica tela."
   },
   {
     id: "sales",

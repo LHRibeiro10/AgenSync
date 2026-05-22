@@ -29,20 +29,7 @@ export const workspaceNavigation = [
   },
   { to: "/profissionais", label: "Profissionais", icon: "professionals", permission: "professionals" },
   { to: "/servicos", label: "Servicos", icon: "services", tourId: "services", permission: "services" },
-  {
-    id: "produtos",
-    label: "Produtos",
-    icon: "products",
-    tourId: "products",
-    permission: "products",
-    children: [
-      { to: "/produtos", label: "Produtos", permission: "products" },
-      { to: "/produtos/estoque", label: "Estoque", permission: "stock" },
-      { to: "/produtos/movimentacoes", label: "Movimentacoes", permission: "stock" },
-      { to: "/produtos/reposicao", label: "Reposicao", permission: "stock" },
-      { to: "/produtos/categorias", label: "Categorias", permission: "products" }
-    ]
-  },
+  { to: "/produtos", label: "Produtos", icon: "products", tourId: "products", permission: "products" },
   {
     id: "vendas",
     label: "Vendas",

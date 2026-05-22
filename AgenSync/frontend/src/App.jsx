@@ -15,7 +15,6 @@ const Finance = lazy(() => import("./pages/Finance.jsx"));
 const History = lazy(() => import("./pages/History.jsx"));
 const InitialOnboarding = lazy(() => import("./pages/InitialOnboarding.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
-const ModulePlaceholder = lazy(() => import("./pages/ModulePlaceholder.jsx"));
 const PlatformDashboard = lazy(() => import("./pages/PlatformDashboard.jsx"));
 const Products = lazy(() => import("./pages/Products.jsx"));
 const ProductSales = lazy(() => import("./pages/ProductSales.jsx"));
@@ -141,26 +140,14 @@ export default function App() {
           <Route path="clientes/linha-do-tempo" element={<Clients section="timeline" />} />
           <Route path="profissionais" element={<Professionals />} />
           <Route path="servicos" element={<Services />} />
-          <Route path="produtos" element={<Products mode="catalog" />} />
-          <Route path="produtos/estoque" element={<Products mode="stock" />} />
-          <Route
-            path="produtos/movimentacoes"
-            element={<ModulePlaceholder title="Movimentacoes de estoque" description="Base para entradas, saidas, ajustes, perdas e historico de estoque." items={["Entrada", "Saida", "Ajuste manual", "Perda", "Validade", "Fornecedor"]} />}
-          />
-          <Route
-            path="produtos/reposicao"
-            element={<ModulePlaceholder title="Reposicao" description="Estrutura para alertas inteligentes, ponto de reposicao e compras futuras." items={["Estoque baixo", "Sem estoque", "Sugestao de compra", "Custo medio"]} />}
-          />
-          <Route
-            path="produtos/categorias"
-            element={<ModulePlaceholder title="Categorias" description="Preparado para organizar catalogo, estoque e relatorios por familia de produtos." items={["Categorias", "Margem por grupo", "Alertas por grupo"]} />}
-          />
+          <Route path="produtos" element={<Products />} />
+          <Route path="produtos/:section" element={<Navigate to="/produtos" replace />} />
           <Route path="vendas" element={<ProductSales mode="new" />} />
           <Route path="vendas/nova" element={<ProductSales mode="new" />} />
           <Route path="vendas/historico" element={<ProductSales mode="history" />} />
           <Route
             path="vendas/comissoes"
-            element={<ModulePlaceholder title="Comissoes" description="Base para regras de comissao por profissional, produto, servico e periodo." items={["Profissional", "Percentual", "Venda", "Pagamento", "Periodo"]} />}
+            element={<ProductSales mode="commissions" />}
           />
           <Route path="vendas/relatorios" element={<ProductSales mode="reports" />} />
           <Route path="mensalidades" element={<Subscriptions />} />
