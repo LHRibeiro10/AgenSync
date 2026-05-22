@@ -7,6 +7,7 @@ import { ApiError, asyncHandler } from "../middleware/error.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { recordAuditEvent } from "../utils/audit.js";
+import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
 import { requiredString, validateEmail } from "../utils/validation.js";
 
 const router = Router();
@@ -81,6 +82,21 @@ function optionalLongString(value, fieldName, maxLength = 1200) {
     throw new ApiError(400, `${fieldName} deve ter ate ${maxLength} caracteres.`);
   }
   return text;
+}
+
+function bearerToken(req) {
+  const header = req.headers.authorization || "";
+  const [scheme, token] = header.split(" ");
+  return scheme === "Bearer" ? token || "" : "";
+}
+
+function requestUsesSupabaseAuth(req) {
+  const token = bearerToken(req);
+  if (!token) return false;
+
+  const decoded = jwt.decode(token);
+  const payload = decoded?.payload && typeof decoded.payload === "object" ? decoded.payload : decoded;
+  return Boolean(payload?.sub && (payload?.iss || payload?.aud) && !payload?.userId);
 }
 
 router.post(
@@ -322,6 +338,7 @@ router.delete(
   "/me",
   requireAuth,
   asyncHandler(async (req, res) => {
+    const userId = req.user.id;
     const workspaceRole = String(req.user.workspaceRole || "OWNER").toUpperCase();
     const platformRole = String(req.user.platformRole || "USER").toUpperCase();
     if (workspaceRole !== "OWNER") {
@@ -331,37 +348,48 @@ router.delete(
       throw new ApiError(403, "Contas da plataforma nao podem ser excluidas por aqui.");
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.appointmentReminder.deleteMany({ where: { userId: req.user.id } });
-      await tx.notification.deleteMany({ where: { userId: req.user.id } });
-      await tx.pushSubscription.deleteMany({ where: { userId: req.user.id } });
-      await tx.notificationToken.deleteMany({ where: { userId: req.user.id } });
-      await tx.appointment.deleteMany({ where: { userId: req.user.id } });
-      await tx.productSale.deleteMany({ where: { userId: req.user.id } });
-      await tx.monthlyPlan.deleteMany({ where: { userId: req.user.id } });
-      await tx.expense.deleteMany({ where: { userId: req.user.id } });
-      await tx.product.deleteMany({ where: { userId: req.user.id } });
-      await tx.client.deleteMany({ where: { userId: req.user.id } });
-      await tx.service.deleteMany({ where: { userId: req.user.id } });
-      await tx.professional.deleteMany({ where: { userId: req.user.id } });
-      await tx.auditLog.updateMany({ where: { userId: req.user.id }, data: { userId: null } });
-      await tx.user.update({
-        where: { id: req.user.id },
-        data: {
-          accountStatus: "INACTIVE",
-          userStatus: "INACTIVE",
-          billingEnabled: false,
-          businessName: "Conta excluida",
-          businessLogo: null,
-          businessPhone: null,
-          businessCity: null,
-          businessAddress: null,
-          professionalId: null
-        }
-      });
-    });
+    const usesSupabaseAuth = requestUsesSupabaseAuth(req);
+    let removedSupabaseAuthUser = false;
 
-    invalidateAuthUserCache(req.user.id);
+    if (usesSupabaseAuth) {
+      await deleteSupabaseAuthUser(userId);
+      removedSupabaseAuthUser = true;
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.appointmentReminder.deleteMany({ where: { userId } });
+        await tx.notification.deleteMany({ where: { userId } });
+        await tx.pushSubscription.deleteMany({ where: { userId } });
+        await tx.notificationToken.deleteMany({ where: { userId } });
+        await tx.appointment.deleteMany({ where: { userId } });
+        await tx.productSale.deleteMany({ where: { userId } });
+        await tx.monthlyPlan.deleteMany({ where: { userId } });
+        await tx.expense.deleteMany({ where: { userId } });
+        await tx.product.deleteMany({ where: { userId } });
+        await tx.client.deleteMany({ where: { userId } });
+        await tx.service.deleteMany({ where: { userId } });
+        await tx.professional.deleteMany({ where: { userId } });
+        await tx.auditLog.updateMany({ where: { userId }, data: { userId: null } });
+        await tx.user.delete({ where: { id: userId } });
+      });
+    } catch (error) {
+      if (removedSupabaseAuthUser) {
+        await prisma.user
+          .update({
+            where: { id: userId },
+            data: {
+              accountStatus: "INACTIVE",
+              userStatus: "INACTIVE",
+              billingEnabled: false
+            }
+          })
+          .catch(() => null);
+      }
+      throw error;
+    }
+
+    invalidateAuthUserCache(userId);
     res.json({ ok: true });
   })
 );

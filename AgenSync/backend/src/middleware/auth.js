@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "./error.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
+import { ensureSupabaseAuthUserExists } from "../utils/supabaseAuthAdmin.js";
 
 function jwtSecret() {
   const secret = normalizeEnvValue(process.env.JWT_SECRET);
@@ -365,7 +366,7 @@ async function ensureSupabaseBootstrap(user) {
   markSupabaseBootstrapChecked(user.id);
 }
 
-async function ensureSupabaseUser(payload) {
+async function ensureSupabaseUser(payload, token) {
   const supabaseId = payload?.sub;
   const email = payload?.email;
   if (!supabaseId || !email) throw new ApiError(401, "Token Supabase invalido.");
@@ -396,6 +397,10 @@ async function ensureSupabaseUser(payload) {
   const resolvedBusinessType = metadataBusinessType || existingUser?.businessType || "Outro";
   const resolvedBusinessName = metadataBusinessName || existingUser?.businessName || `Agenda de ${resolvedName}`;
   const resolvedBusinessLogo = existingUser?.businessLogo || null;
+
+  if (!existingUser) {
+    await ensureSupabaseAuthUserExists(supabaseId, token);
+  }
 
   const user = !existingUser
     ? await prisma.user.create({
@@ -440,7 +445,7 @@ async function ensureSupabaseUser(payload) {
 
 async function authenticateWithSupabaseJwt(token) {
   const payload = await verifySupabaseJwt(token);
-  return ensureSupabaseUser(payload);
+  return ensureSupabaseUser(payload, token);
 }
 
 export const requireAuth = asyncHandler(async (req, res, next) => {
