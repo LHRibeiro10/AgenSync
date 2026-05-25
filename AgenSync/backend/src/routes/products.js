@@ -103,6 +103,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const product = await prisma.product.create({
       data: {
+        workspaceId: req.workspaceId || null,
         userId: req.user.id,
         name: requiredString(req.body.name, "nome", 2),
         category: requiredString(req.body.category, "categoria"),
@@ -223,6 +224,7 @@ router.post(
 
       return tx.productSale.create({
         data: {
+          workspaceId: req.workspaceId || null,
           userId: req.user.id,
           productId: product.id,
           clientId,

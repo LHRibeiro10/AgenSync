@@ -116,7 +116,7 @@ router.post(
     const notes = optionalString(req.body.notes);
 
     const client = await prisma.client.create({
-      data: { userId: req.user.id, name, phone, email, notes }
+      data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, phone, email, notes }
     });
 
     res.status(201).json({ client: publicClient(client) });
@@ -178,6 +178,7 @@ router.post(
       }
 
       toCreate.push({
+        workspaceId: req.workspaceId || null,
         userId: req.user.id,
         ...client
       });

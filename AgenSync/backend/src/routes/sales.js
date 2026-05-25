@@ -104,6 +104,7 @@ router.post(
 
       return tx.productSale.create({
         data: {
+          workspaceId: req.workspaceId || null,
           userId: req.user.id,
           productId: product.id,
           clientId,

@@ -49,11 +49,14 @@ export function requirePlanFeature(req, featureKey, message = "Recurso indisponi
   }
 }
 
-export async function assertProfessionalBelongsToUser(prisma, userId, professionalId, message = "Profissional invalido para esta conta.") {
+export async function assertProfessionalBelongsToUser(prisma, userOrId, professionalId, message = "Profissional invalido para esta conta.") {
   if (!professionalId) return null;
+  const user = typeof userOrId === "object" ? userOrId : { id: userOrId };
+  const ownership = [{ userId: user.id }];
+  if (user.currentWorkspaceId) ownership.push({ workspaceId: user.currentWorkspaceId });
 
   const professional = await prisma.professional.findFirst({
-    where: { id: String(professionalId), userId },
+    where: { id: String(professionalId), OR: ownership },
     select: { id: true, isActive: true }
   });
 
@@ -70,7 +73,7 @@ export async function resolveProfessionalScope(prisma, user, requestedProfession
       throw new ApiError(403, "Usuario profissional sem profissional vinculado.");
     }
 
-    await assertProfessionalBelongsToUser(prisma, user.id, user.professionalId);
+    await assertProfessionalBelongsToUser(prisma, user, user.professionalId);
     return {
       professionalId: user.professionalId,
       restricted: true
@@ -82,7 +85,7 @@ export async function resolveProfessionalScope(prisma, user, requestedProfession
     return { professionalId: "", restricted: false };
   }
 
-  await assertProfessionalBelongsToUser(prisma, user.id, professionalId);
+  await assertProfessionalBelongsToUser(prisma, user, professionalId);
   return { professionalId, restricted: false };
 }
 
@@ -96,7 +99,7 @@ export async function assertCanCreateProfessional(prisma, user, { excludeProfess
   const plan = getCurrentPlan(user);
   const activeProfessionals = await prisma.professional.count({
     where: {
-      userId: user.id,
+      ...(user.currentWorkspaceId ? { workspaceId: user.currentWorkspaceId } : { userId: user.id }),
       isActive: true,
       ...(excludeProfessionalId ? { id: { not: excludeProfessionalId } } : {})
     }
@@ -113,7 +116,10 @@ export async function assertPlanCanUseMultipleProfessionals(prisma, user) {
   const plan = getCurrentPlan(user);
   if (!planHasFeature(user, PLAN_FEATURES.MULTIPLE_PROFESSIONALS)) {
     const activeProfessionals = await prisma.professional.count({
-      where: { userId: user.id, isActive: true }
+      where: {
+        ...(user.currentWorkspaceId ? { workspaceId: user.currentWorkspaceId } : { userId: user.id }),
+        isActive: true
+      }
     });
     if (activeProfessionals > 1) {
       throw new ApiError(403, `Seu plano atual permite ate ${plan.maxProfessionals} profissional(is).`);

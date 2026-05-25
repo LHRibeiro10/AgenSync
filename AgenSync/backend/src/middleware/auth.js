@@ -6,6 +6,7 @@ import { PLAN_SLUGS } from "../config/plans.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { ensureSupabaseAuthUserExists } from "../utils/supabaseAuthAdmin.js";
+import { attachWorkspaceContext, ensureDefaultWorkspaceForUser } from "../utils/workspaceContext.js";
 
 function jwtSecret() {
   const secret = normalizeEnvValue(process.env.JWT_SECRET);
@@ -254,6 +255,7 @@ const userSelect = {
   subscriptionPaidUntil: true,
   temporaryAccessUntil: true,
   billingEnabled: true,
+  currentWorkspaceId: true,
   businessName: true,
   businessLogo: true,
   businessType: true,
@@ -450,6 +452,18 @@ async function authenticateWithSupabaseJwt(token) {
   return ensureSupabaseUser(payload, token);
 }
 
+async function finishAuthenticatedRequest(req, user, next) {
+  req.user = await ensureDefaultWorkspaceForUser(user);
+  if (!isPlatformOwner(req.user) && String(req.user.accountStatus || "ACTIVE") !== "ACTIVE") {
+    throw new ApiError(403, "Conta inativa. Entre em contato com o suporte.");
+  }
+  if (!isPlatformOwner(req.user) && String(req.user.userStatus || "ACTIVE") !== "ACTIVE") {
+    throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
+  }
+  await attachWorkspaceContext(req);
+  next();
+}
+
 export const requireAuth = asyncHandler(async (req, res, next) => {
   const header = req.headers.authorization || "";
   const [scheme, token] = header.split(" ");
@@ -463,14 +477,7 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
   const fallbackAuth = strategy === "supabase" ? authenticateWithLegacyJwt : authenticateWithSupabaseJwt;
 
   try {
-    req.user = await primaryAuth(token);
-    if (!isPlatformOwner(req.user) && String(req.user.accountStatus || "ACTIVE") !== "ACTIVE") {
-      throw new ApiError(403, "Conta inativa. Entre em contato com o suporte.");
-    }
-    if (!isPlatformOwner(req.user) && String(req.user.userStatus || "ACTIVE") !== "ACTIVE") {
-      throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
-    }
-    next();
+    await finishAuthenticatedRequest(req, await primaryAuth(token), next);
     return;
   } catch (primaryError) {
     debugAuthLog("primary_auth_error", primaryError);
@@ -489,14 +496,7 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    req.user = await fallbackAuth(token);
-    if (!isPlatformOwner(req.user) && String(req.user.accountStatus || "ACTIVE") !== "ACTIVE") {
-      throw new ApiError(403, "Conta inativa. Entre em contato com o suporte.");
-    }
-    if (!isPlatformOwner(req.user) && String(req.user.userStatus || "ACTIVE") !== "ACTIVE") {
-      throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
-    }
-    next();
+    await finishAuthenticatedRequest(req, await fallbackAuth(token), next);
     return;
   } catch (fallbackError) {
     debugAuthLog("fallback_auth_error", fallbackError);

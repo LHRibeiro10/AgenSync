@@ -71,7 +71,7 @@ router.post(
     await assertCanCreateProfessional(prisma, req.user, { active: isActive });
 
     const professional = await prisma.professional.create({
-      data: { userId: req.user.id, name, role, email, phone, monthlyGoal, isActive }
+      data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, role, email, phone, monthlyGoal, isActive }
     });
 
     res.status(201).json({ professional: publicProfessional(professional) });

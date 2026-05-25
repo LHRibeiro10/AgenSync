@@ -57,7 +57,7 @@ router.post(
     const isActive = parseBoolean(req.body.isActive, true);
 
     const service = await prisma.service.create({
-      data: { userId: req.user.id, name, priceDefault, durationMinutes, isActive }
+      data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, priceDefault, durationMinutes, isActive }
     });
 
     res.status(201).json({ service: publicService(service) });

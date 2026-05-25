@@ -12,6 +12,17 @@ const subscriptionStatuses = new Set(["PAID", "TRIAL", "PAST_DUE", "CANCELED"]);
 const accountStatuses = new Set(["ACTIVE", "INACTIVE", "BLOCKED"]);
 const userStatuses = new Set(["ACTIVE", "INACTIVE"]);
 
+async function syncPrimaryWorkspaceForUser(userId, data) {
+  if (!userId || !data || !Object.keys(data).length) return;
+  try {
+    await prisma.workspace.updateMany({ where: { ownerId: userId }, data });
+  } catch (error) {
+    if (String(error?.code || "") !== "P2021" && String(error?.code || "") !== "P2022") {
+      throw error;
+    }
+  }
+}
+
 const workspaceSelect = {
   id: true,
   name: true,
@@ -449,6 +460,9 @@ router.patch(
     const current = await prisma.user.findFirst({ where: { id: req.params.id, ...platformUserWhere() }, select: { id: true } });
     if (!current) throw new ApiError(404, "Conta nao encontrada.");
     const user = await prisma.user.update({ where: { id: req.params.id }, data, select: workspaceSelect });
+    await syncPrimaryWorkspaceForUser(user.id, {
+      ...(data.subscriptionStatus ? { planStatus: data.subscriptionStatus } : {})
+    });
     invalidateAuthUserCache(user.id);
     await recordAuditEvent({
       req,
@@ -472,6 +486,7 @@ router.patch(
     const current = await prisma.user.findFirst({ where: { id: req.params.id, ...platformUserWhere() }, select: { id: true } });
     if (!current) throw new ApiError(404, "Conta nao encontrada.");
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { platformPlan }, select: workspaceSelect });
+    await syncPrimaryWorkspaceForUser(user.id, { plan: platformPlan });
     invalidateAuthUserCache(user.id);
     await recordAuditEvent({
       req,

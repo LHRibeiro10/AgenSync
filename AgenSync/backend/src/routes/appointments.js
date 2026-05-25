@@ -284,6 +284,7 @@ router.post(
 
     const appointment = await prisma.appointment.create({
       data: {
+        workspaceId: req.workspaceId || null,
         userId: req.user.id,
         clientId,
         serviceId,
@@ -335,7 +336,7 @@ router.put(
       throw new ApiError(400, "Profissional obrigatorio para este agendamento.");
     }
 
-    await assertProfessionalBelongsToUser(prisma, req.user.id, professionalId);
+    await assertProfessionalBelongsToUser(prisma, req.user, professionalId);
     const date = req.body.date === undefined ? currentPublic.date : requiredString(req.body.date, "data");
     const startTime =
       req.body.startTime === undefined

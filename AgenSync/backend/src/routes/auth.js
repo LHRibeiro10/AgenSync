@@ -9,6 +9,7 @@ import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { recordAuditEvent } from "../utils/audit.js";
 import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
+import { hydrateUserWorkspace } from "../utils/workspaceContext.js";
 import { requiredString, validateEmail } from "../utils/validation.js";
 
 const router = Router();
@@ -144,7 +145,8 @@ router.post(
       message: "Usuario registrado com sucesso."
     });
 
-    res.status(201).json({ token: signToken(user.id), user: publicUser(user) });
+    const hydratedUser = await hydrateUserWorkspace(user);
+    res.status(201).json({ token: signToken(user.id), user: publicUser(hydratedUser) });
   })
 );
 
@@ -193,7 +195,8 @@ router.post(
       message: "Login realizado com sucesso."
     });
 
-    res.json({ token: signToken(authenticatedUser.id), user: publicUser(authenticatedUser) });
+    const hydratedUser = await hydrateUserWorkspace(authenticatedUser);
+    res.json({ token: signToken(authenticatedUser.id), user: publicUser(hydratedUser) });
   })
 );
 
@@ -267,7 +270,7 @@ router.get(
       });
     }
 
-    res.json({ user: req.user });
+    res.json({ user: publicUser(req.user) });
   })
 );
 
@@ -331,8 +334,21 @@ router.put(
       }
     });
 
+    if (businessName !== undefined && req.workspaceId) {
+      try {
+        await prisma.workspace.updateMany({
+          where: { id: req.workspaceId, ownerId: req.user.id },
+          data: { name: businessName }
+        });
+      } catch (error) {
+        if (String(error?.code || "") !== "P2021" && String(error?.code || "") !== "P2022") {
+          throw error;
+        }
+      }
+    }
+
     invalidateAuthUserCache(user.id);
-    res.json({ user: publicUser(user) });
+    res.json({ user: publicUser(await hydrateUserWorkspace(user)) });
   })
 );
 

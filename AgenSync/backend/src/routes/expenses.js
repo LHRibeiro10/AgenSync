@@ -111,6 +111,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const expense = await prisma.expense.create({
       data: {
+        workspaceId: req.workspaceId || null,
         userId: req.user.id,
         description: requiredString(req.body.description, "descrição", 2),
         category: requiredString(req.body.category, "categoria"),

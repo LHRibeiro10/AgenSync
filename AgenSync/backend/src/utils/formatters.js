@@ -35,16 +35,20 @@ export function normalizeStatus(value, fallback = null) {
 }
 
 export function publicUser(user) {
-  const plan = publicPlan(user);
+  const currentWorkspace = user.currentWorkspace || null;
+  const workspaceMember = user.workspaceMember || null;
+  const plan = publicPlan(currentWorkspace ? { platformPlan: currentWorkspace.plan } : user);
+  const workspaceRole = workspaceMember?.role || String(user.workspaceRole || "OWNER").toLowerCase();
+  const professionalId = workspaceMember?.professionalId || user.professionalId || "";
 
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: String(user.role || "USER").toLowerCase(),
-    workspaceRole: String(user.workspaceRole || "OWNER").toLowerCase(),
+    workspaceRole: String(workspaceRole || "owner").toLowerCase(),
     platformRole: user.platformRole ? String(user.platformRole).toLowerCase() : "",
-    platformPlan: normalizePlanSlug(user.platformPlan),
+    platformPlan: plan.slug,
     plan: plan.slug,
     planLimits: {
       maxUsers: plan.maxUsers,
@@ -58,6 +62,9 @@ export function publicUser(user) {
     subscriptionPaidUntil: user.subscriptionPaidUntil || null,
     temporaryAccessUntil: user.temporaryAccessUntil || null,
     billingEnabled: Boolean(user.billingEnabled),
+    currentWorkspaceId: currentWorkspace?.id || user.currentWorkspaceId || "",
+    currentWorkspace,
+    workspaceMember,
     businessName: user.businessName,
     businessLogo: user.businessLogo || "",
     businessType: user.businessType,
@@ -67,7 +74,7 @@ export function publicUser(user) {
     businessAddress: user.businessAddress || "",
     onboardingCompleted: user.onboardingCompleted === true,
     onboardingCompletedAt: user.onboardingCompletedAt || null,
-    professionalId: user.professionalId || "",
+    professionalId,
     whatsappReminderEnabled: Boolean(user.whatsappReminderEnabled),
     whatsappReminderOffsetMinutes: Number(user.whatsappReminderOffsetMinutes || 120),
     whatsappReminderMessage: user.whatsappReminderMessage || "",

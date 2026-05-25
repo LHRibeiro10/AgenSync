@@ -191,7 +191,7 @@ router.post(
     let createdCount = 0;
     if (toCreate.length) {
       const result = await prisma.service.createMany({
-        data: toCreate.map((service) => ({ userId: req.user.id, ...service }))
+        data: toCreate.map((service) => ({ workspaceId: req.workspaceId || null, userId: req.user.id, ...service }))
       });
       createdCount = result.count;
     }
@@ -222,10 +222,10 @@ router.post(
     const primaryProfessional = existingPrimary
       ? await prisma.professional.update({
           where: { id: existingPrimary.id },
-          data: primary
+          data: { ...(req.workspaceId ? { workspaceId: req.workspaceId } : {}), ...primary }
         })
       : await prisma.professional.create({
-          data: { userId: req.user.id, ...primary, role: primary.role || "Profissional principal" }
+          data: { workspaceId: req.workspaceId || null, userId: req.user.id, ...primary, role: primary.role || "Profissional principal" }
         });
 
     if (extraProfessionals.length) {
@@ -251,7 +251,7 @@ router.post(
 
       if (toCreate.length) {
         await prisma.professional.createMany({
-          data: toCreate.map((professional) => ({ userId: req.user.id, ...professional }))
+          data: toCreate.map((professional) => ({ workspaceId: req.workspaceId || null, userId: req.user.id, ...professional }))
         });
       }
     }
@@ -260,6 +260,12 @@ router.post(
       where: { id: req.user.id },
       data: { professionalId: primaryProfessional.id }
     });
+    if (req.workspaceId) {
+      await prisma.workspaceMember.updateMany({
+        where: { workspaceId: req.workspaceId, userId: req.user.id },
+        data: { professionalId: primaryProfessional.id }
+      });
+    }
 
     invalidateAuthUserCache(user.id);
     res.status(201).json({ primaryProfessionalId: primaryProfessional.id, ...(await statusPayload(user)) });
@@ -306,7 +312,7 @@ router.post(
     let createdCount = 0;
     if (toCreate.length) {
       const result = await prisma.client.createMany({
-        data: toCreate.map((client) => ({ userId: req.user.id, ...client }))
+        data: toCreate.map((client) => ({ workspaceId: req.workspaceId || null, userId: req.user.id, ...client }))
       });
       createdCount = result.count;
     }
@@ -326,6 +332,7 @@ router.post(
     if (!counts.professionals) {
       const professional = await prisma.professional.create({
         data: {
+          workspaceId: req.workspaceId || null,
           userId: req.user.id,
           name: req.user.name,
           role: "Profissional principal",
@@ -351,6 +358,12 @@ router.post(
         professionalId: professionalId || null
       }
     });
+    if (req.workspaceId && professionalId) {
+      await prisma.workspaceMember.updateMany({
+        where: { workspaceId: req.workspaceId, userId: req.user.id },
+        data: { professionalId }
+      });
+    }
 
     invalidateAuthUserCache(user.id);
     res.json(await statusPayload(user));

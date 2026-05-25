@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum AppointmentStatus {
@@ -89,6 +90,12 @@ enum UserAccountStatus {
   INACTIVE
 }
 
+enum WorkspaceMemberStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
 enum ReminderType {
   TEN_MINUTES_BEFORE
   FIFTEEN_MINUTES_BEFORE
@@ -120,6 +127,8 @@ model User {
   subscriptionPaidUntil DateTime?
   temporaryAccessUntil DateTime?
   billingEnabled Boolean @default(false)
+  currentWorkspaceId String?
+  currentWorkspace Workspace? @relation("CurrentWorkspace", fields: [currentWorkspaceId], references: [id], onDelete: SetNull)
   businessName  String
   businessLogo  String?
   businessType  String
@@ -138,6 +147,8 @@ model User {
   appointmentNotificationsEnabled Boolean @default(true)
   appointmentNotificationOffsetMinutes Int @default(30)
   appointmentNotificationChannels Json @default("[\"internal\",\"push\"]")
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
   clients       Client[]
   professionals Professional[]
   services      Service[]
@@ -161,6 +172,7 @@ model User {
   @@index([accountStatus])
   @@index([userStatus])
   @@index([subscriptionStatus])
+  @@index([currentWorkspaceId])
   @@index([onboardingCompleted])
   @@index([professionalId])
   @@index([createdAt])
@@ -186,6 +198,8 @@ model AuditLog {
 
 model Client {
   id           String            @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId       String
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
@@ -214,6 +228,11 @@ model Client {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
+  @@index([workspaceId])
+  @@index([workspaceId, name])
+  @@index([workspaceId, phone])
+  @@index([workspaceId, email])
+  @@index([workspaceId, isActive])
   @@index([userId])
   @@index([userId, name])
   @@index([userId, phone])
@@ -226,6 +245,8 @@ model Client {
 
 model Expense {
   id          String            @id @default(cuid())
+  workspaceId String?
+  workspace   Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId      String
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   description String
@@ -237,6 +258,8 @@ model Expense {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
+  @@index([workspaceId, date])
+  @@index([workspaceId, category, date])
   @@index([userId, date])
   @@index([userId, category, date])
   @@index([userId, createdAt])
@@ -244,6 +267,8 @@ model Expense {
 
 model Product {
   id          String        @id @default(cuid())
+  workspaceId String?
+  workspace   Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
@@ -258,6 +283,10 @@ model Product {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, category])
+  @@index([workspaceId, isActive, name])
   @@index([userId])
   @@index([userId, isActive])
   @@index([userId, category])
@@ -267,6 +296,8 @@ model Product {
 
 model ProductSale {
   id          String   @id @default(cuid())
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId   String
@@ -282,6 +313,9 @@ model ProductSale {
   notes       String?
   createdAt   DateTime @default(now())
 
+  @@index([workspaceId, date])
+  @@index([workspaceId, productId, date])
+  @@index([workspaceId, clientId, date])
   @@index([userId, date])
   @@index([userId, productId, date])
   @@index([userId, clientId, date])
@@ -290,6 +324,8 @@ model ProductSale {
 
 model MonthlyPlan {
   id         String               @id @default(cuid())
+  workspaceId String?
+  workspace Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId     String
   user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId   String
@@ -323,6 +359,12 @@ model MonthlyPlan {
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
+  @@index([workspaceId, status])
+  @@index([workspaceId, clientId])
+  @@index([workspaceId, serviceId])
+  @@index([workspaceId, professionalId])
+  @@index([workspaceId, billingType])
+  @@index([workspaceId, startDate])
   @@index([userId, status])
   @@index([userId, clientId])
   @@index([userId, serviceId])
@@ -353,8 +395,62 @@ model MonthlyPlanPayment {
   @@index([dueDate, status])
 }
 
+model Workspace {
+  id             String                    @id @default(cuid())
+  name           String
+  slug           String?                   @unique
+  ownerId        String
+  owner          User                      @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan           String                    @default("padrao")
+  planStatus     AccountSubscriptionStatus @default(PAID)
+  trialStartedAt DateTime?
+  trialEndsAt    DateTime?
+  currentUsers   User[]                    @relation("CurrentWorkspace")
+  members        WorkspaceMember[]
+  clients        Client[]
+  professionals  Professional[]
+  services       Service[]
+  appointments   Appointment[]
+  expenses       Expense[]
+  products       Product[]
+  productSales   ProductSale[]
+  monthlyPlans   MonthlyPlan[]
+  careRecords    ClientCareRecord[]
+  notifications  Notification[]
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@index([ownerId])
+  @@index([plan])
+  @@index([planStatus])
+  @@index([createdAt])
+}
+
+model WorkspaceMember {
+  id             String                @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           WorkspaceRole         @default(PROFESSIONAL)
+  permissions    Json                  @default("{}")
+  professionalId String?
+  professional   Professional?         @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  status         WorkspaceMemberStatus @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, role])
+  @@index([workspaceId, status])
+  @@index([userId, status])
+  @@index([professionalId])
+}
+
 model ClientCareRecord {
   id         String   @id @default(cuid())
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   clientId   String   @unique
   client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   anamnesis  Json?
@@ -365,10 +461,14 @@ model ClientCareRecord {
   evolutions Json     @default("[]")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([workspaceId])
 }
 
 model Service {
   id              String        @id @default(cuid())
+  workspaceId     String?
+  workspace       Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId          String
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
@@ -380,6 +480,9 @@ model Service {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, isActive, name])
   @@index([userId])
   @@index([userId, isActive])
   @@index([userId, isActive, name])
@@ -388,6 +491,8 @@ model Service {
 
 model Professional {
   id           String        @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
@@ -398,9 +503,15 @@ model Professional {
   isActive     Boolean       @default(true)
   appointments Appointment[]
   monthlyPlans MonthlyPlan[]
+  workspaceMembers WorkspaceMember[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, name])
+  @@index([workspaceId, email])
+  @@index([workspaceId, isActive, name])
   @@index([userId])
   @@index([userId, isActive])
   @@index([userId, name])
@@ -411,6 +522,8 @@ model Professional {
 
 model Appointment {
   id              String            @id @default(cuid())
+  workspaceId     String?
+  workspace       Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId          String
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId        String
@@ -431,6 +544,11 @@ model Appointment {
   updatedAt       DateTime          @updatedAt
   reminders       AppointmentReminder[]
 
+  @@index([workspaceId, startsAt])
+  @@index([workspaceId, status, startsAt])
+  @@index([workspaceId, clientId])
+  @@index([workspaceId, professionalId, startsAt])
+  @@index([workspaceId, monthlyPlanId, startsAt])
   @@index([userId, startsAt])
   @@index([userId, status, startsAt])
   @@index([userId, clientId])
@@ -474,6 +592,7 @@ model Notification {
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspaceId String?
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   title     String
   body      String?
   type      String    @default("info")

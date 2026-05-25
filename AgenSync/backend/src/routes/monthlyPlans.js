@@ -66,6 +66,7 @@ const professionalSelect = {
 
 const appointmentSelect = {
   id: true,
+  workspaceId: true,
   userId: true,
   clientId: true,
   serviceId: true,
@@ -94,6 +95,7 @@ const appointmentSelect = {
 
 const monthlyPlanSelect = {
   id: true,
+  workspaceId: true,
   userId: true,
   clientId: true,
   serviceId: true,
@@ -560,6 +562,7 @@ async function generateAppointmentsForPlan(plan, options = {}) {
     const sessionPrice = plan.billingType === "PER_COMPLETED_SESSION" ? Number(plan.sessionPrice || plan.amount || 0) : 0;
     await prisma.appointment.createMany({
       data: available.map((occurrence) => ({
+        workspaceId: plan.workspaceId || null,
         userId: plan.userId,
         clientId: plan.clientId,
         serviceId: plan.serviceId,
@@ -773,6 +776,7 @@ router.post(
     const result = await prisma.$transaction(async (tx) => {
       const plan = await tx.monthlyPlan.create({
         data: {
+          workspaceId: req.workspaceId || null,
           userId: req.user.id,
           clientId: draft.clientId,
           serviceId: draft.serviceId,
