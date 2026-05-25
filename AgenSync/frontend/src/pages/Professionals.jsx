@@ -9,6 +9,8 @@ import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { getCurrentPlan } from "../config/plans.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
 import { money } from "../utils.js";
 
 const emptyForm = { name: "", role: "", phone: "", isActive: true };
@@ -47,6 +49,7 @@ export default function Professionals() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const stats = useMemo(() => buildStats(professionals, appointments), [professionals, appointments]);
   const statsByProfessional = useMemo(
@@ -137,6 +140,13 @@ export default function Professionals() {
   async function toggleActive(professional) {
     setError("");
 
+    if (!professional.isActive && activeCount >= currentPlan.maxProfessionals) {
+      const message = `Seu plano atual permite ate ${currentPlan.maxProfessionals} profissional(is).`;
+      setError(message);
+      showToast(message, "error");
+      return;
+    }
+
     try {
       await api.updateProfessional(professional.id, {
         name: professional.name,
@@ -169,7 +179,9 @@ export default function Professionals() {
     }
   }
 
+  const currentPlan = getCurrentPlan(user);
   const activeCount = professionals.filter((professional) => professional.isActive).length;
+  const professionalLimitReached = !editing && form.isActive && activeCount >= currentPlan.maxProfessionals;
   const totalRevenue = stats.reduce((sum, item) => sum + item.revenue, 0);
 
   return (
@@ -187,6 +199,11 @@ export default function Professionals() {
             <p className="mt-1 text-sm leading-6 text-muted">
               Profissionais ativos aparecem como opção na criação de agendamentos.
             </p>
+            {!editing ? (
+              <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-brand">
+                Plano {currentPlan.displayName}: {activeCount}/{currentPlan.maxProfessionals} profissional(is) ativo(s).
+              </p>
+            ) : null}
           </div>
 
           <Field label="Nome">
@@ -234,10 +251,20 @@ export default function Professionals() {
                 Cancelar
               </Button>
             ) : null}
-            <Button type="submit" loading={saving} className={editing ? "" : "col-span-2"}>
+            <Button
+              type="submit"
+              loading={saving}
+              disabled={professionalLimitReached}
+              className={editing ? "" : "col-span-2"}
+            >
               {editing ? "Atualizar" : "Cadastrar"}
             </Button>
           </div>
+          {professionalLimitReached ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
+              Seu plano atual permite ate {currentPlan.maxProfessionals} profissional(is).
+            </p>
+          ) : null}
         </Card>
 
         <div className="space-y-5">

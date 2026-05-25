@@ -7,7 +7,14 @@ import {
   normalizeRecurrenceConfig
 } from "../services/monthlyPlanSchedule.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { PLAN_FEATURES, planHasFeature } from "../config/plans.js";
 import { addMinutes, combineDateAndTime, formatDate, parseDateOnly, todayString } from "../utils/dates.js";
+import {
+  isWorkspaceProfessional,
+  professionalWhere,
+  requireWorkspaceManager,
+  resolveProfessionalScope
+} from "../utils/accessControl.js";
 import { publicAppointment, publicMonthlyPlan } from "../utils/formatters.js";
 import { optionalString, parseBoolean, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
@@ -309,9 +316,10 @@ function cyclesForRange(plans, startDate, endDate) {
   return cycles.sort((first, second) => `${second.dueDate}${second.clientName}`.localeCompare(`${first.dueDate}${first.clientName}`));
 }
 
-async function findPlan(userId, id, includeAppointments = false) {
+async function findPlan(user, id, includeAppointments = false) {
+  const scope = await resolveProfessionalScope(prisma, user);
   const plan = await prisma.monthlyPlan.findFirst({
-    where: { id, userId },
+    where: { id, userId: user.id, ...professionalWhere(scope) },
     select: includeAppointments
       ? {
           ...monthlyPlanSelect,
@@ -640,6 +648,13 @@ function attachMonthMetrics(plans, appointments) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const canFilterProfessionals =
+      isWorkspaceProfessional(req.user) || planHasFeature(req.user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
+    const scope = await resolveProfessionalScope(
+      prisma,
+      req.user,
+      canFilterProfessionals ? req.query.professionalId : ""
+    );
     const month = monthKey(req.query.month || req.query.endDate || todayString());
     const includeCycles = req.query.includeCycles === "true";
     const includeSummary = req.query.includeSummary === "true";
@@ -653,10 +668,10 @@ router.get(
     const plans = await prisma.monthlyPlan.findMany({
       where: {
         userId: req.user.id,
+        ...professionalWhere(scope),
         ...(req.query.status ? { status: normalizePlanStatus(req.query.status) } : {}),
         ...(req.query.billingType ? { billingType: normalizeBillingType(req.query.billingType) } : {}),
-        ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {}),
-        ...(req.query.professionalId ? { professionalId: String(req.query.professionalId) } : {})
+        ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {})
       },
       ...(!includeCycles && !includeSummary && pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       select: monthlyPlanSelect,
@@ -718,7 +733,7 @@ router.get(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const plan = await findPlan(req.user.id, req.params.id, true);
+    const plan = await findPlan(req.user, req.params.id, true);
     res.json({ monthlyPlan: publicMonthlyPlan(plan) });
   })
 );
@@ -726,6 +741,7 @@ router.get(
 router.post(
   "/preview",
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     const draft = await buildPlanDraft(req.user.id, req.body);
     const endDate = req.body.previewEndDate || generationEndDateFromMonths(formatDate(draft.startDate), req.body.generationMonths || 1);
     const occurrences = buildMonthlyPlanOccurrences(draft, { startDate: formatDate(draft.startDate), endDate });
@@ -750,6 +766,7 @@ router.post(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     const draft = await buildPlanDraft(req.user.id, req.body);
     const shouldCreateFirstPayment = isFixedBilling(draft);
     const firstMonth = monthKey(formatDate(draft.startDate));
@@ -805,7 +822,7 @@ router.post(
         })
       : null;
 
-    const plan = await findPlan(req.user.id, result.id);
+    const plan = await findPlan(req.user, result.id);
     res.status(201).json({ monthlyPlan: publicMonthlyPlan(plan), generation });
   })
 );
@@ -813,7 +830,8 @@ router.post(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    const current = await findPlan(req.user.id, req.params.id);
+    requireWorkspaceManager(req);
+    const current = await findPlan(req.user, req.params.id);
     const draft = await buildPlanDraft(req.user.id, req.body, current);
 
     const plan = await prisma.monthlyPlan.update({
@@ -852,7 +870,8 @@ router.put(
 router.post(
   "/:id/generate",
   asyncHandler(async (req, res) => {
-    const plan = await findPlan(req.user.id, req.params.id);
+    requireWorkspaceManager(req);
+    const plan = await findPlan(req.user, req.params.id);
     if (plan.status === "CANCELED") throw new ApiError(400, "Mensalidade cancelada nao pode gerar agenda.");
 
     const generation = await generateAppointmentsForPlan(plan, {
@@ -861,7 +880,7 @@ router.post(
       months: req.body.generationMonths || 1,
       skipConflicts: req.body.skipConflicts !== false
     });
-    const updated = await findPlan(req.user.id, req.params.id);
+    const updated = await findPlan(req.user, req.params.id);
     res.json({ monthlyPlan: publicMonthlyPlan(updated), generation });
   })
 );
@@ -869,7 +888,8 @@ router.post(
 router.post(
   "/:id/cancel-future-appointments",
   asyncHandler(async (req, res) => {
-    const plan = await findPlan(req.user.id, req.params.id);
+    requireWorkspaceManager(req);
+    const plan = await findPlan(req.user, req.params.id);
     const fromDate = optionalDate(req.body.fromDate || todayString(), "data inicial");
     const result = await prisma.appointment.updateMany({
       where: {
@@ -900,7 +920,8 @@ router.post(
 router.post(
   "/:id/cancel",
   asyncHandler(async (req, res) => {
-    await findPlan(req.user.id, req.params.id);
+    requireWorkspaceManager(req);
+    await findPlan(req.user, req.params.id);
     const plan = await prisma.monthlyPlan.update({
       where: { id: req.params.id },
       data: { status: "CANCELED", canceledAt: new Date() },
@@ -913,7 +934,8 @@ router.post(
 router.post(
   "/:id/payments",
   asyncHandler(async (req, res) => {
-    const plan = await findPlan(req.user.id, req.params.id);
+    requireWorkspaceManager(req);
+    const plan = await findPlan(req.user, req.params.id);
     if (!isFixedBilling(plan)) {
       throw new ApiError(400, "Pagamentos por competencia sao usados apenas em planos mensais fixos ou pacotes.");
     }

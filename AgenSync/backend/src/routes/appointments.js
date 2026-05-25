@@ -1,7 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { PLAN_FEATURES, planHasFeature } from "../config/plans.js";
 import { addMinutes, combineDateAndTime, dateRangeFromQuery } from "../utils/dates.js";
+import {
+  assertProfessionalBelongsToUser,
+  isWorkspaceProfessional,
+  professionalWhere,
+  resolveProfessionalScope
+} from "../utils/accessControl.js";
 import { normalizeStatus, publicAppointment } from "../utils/formatters.js";
 import { syncAppointmentReminders } from "../services/appointmentReminderService.js";
 import {
@@ -71,9 +78,12 @@ const appointmentSelect = {
   }
 };
 
-async function findAppointmentOrFail(userId, id) {
+async function findAppointmentOrFail(user, id) {
+  const scope = isWorkspaceProfessional(user)
+    ? { professionalId: user.professionalId || "__missing_professional__" }
+    : {};
   const appointment = await prisma.appointment.findFirst({
-    where: { id, userId },
+    where: { id, userId: user.id, ...scope },
     select: appointmentSelect
   });
 
@@ -180,8 +190,15 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
   return null;
 }
 
-function buildWhereFromQuery(userId, query) {
-  const where = { userId };
+async function buildWhereFromQuery(user, query) {
+  const canFilterProfessionals =
+    isWorkspaceProfessional(user) || planHasFeature(user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
+  const scope = await resolveProfessionalScope(
+    prisma,
+    user,
+    canFilterProfessionals ? query.professionalId : ""
+  );
+  const where = { userId: user.id, ...professionalWhere(scope) };
   const range = dateRangeFromQuery(query);
 
   if (range) {
@@ -190,10 +207,6 @@ function buildWhereFromQuery(userId, query) {
 
   if (query.clientId) {
     where.clientId = String(query.clientId);
-  }
-
-  if (query.professionalId) {
-    where.professionalId = String(query.professionalId);
   }
 
   if (query.status) {
@@ -210,7 +223,7 @@ router.get(
       defaultPageSize: 120,
       maxPageSize: 300
     });
-    const where = buildWhereFromQuery(req.user.id, req.query);
+    const where = await buildWhereFromQuery(req.user, req.query);
 
     const appointments = await prisma.appointment.findMany({
       where,
@@ -228,7 +241,11 @@ router.post(
   asyncHandler(async (req, res) => {
     const clientId = requiredString(req.body.clientId, "cliente");
     const serviceId = requiredString(req.body.serviceId, "serviço");
-    const professionalId = requiredString(req.body.professionalId, "profissional");
+    const requestedProfessionalId = isWorkspaceProfessional(req.user)
+      ? req.user.professionalId
+      : requiredString(req.body.professionalId, "profissional");
+    const professionalScope = await resolveProfessionalScope(prisma, req.user, requestedProfessionalId);
+    const professionalId = professionalScope.professionalId;
     const date = requiredString(req.body.date, "data");
     const startTime = requiredString(req.body.startTime, "hora inicial");
     const status = normalizeStatus(req.body.status, "SCHEDULED");
@@ -289,7 +306,7 @@ router.post(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const appointment = await findAppointmentOrFail(req.user.id, req.params.id);
+    const appointment = await findAppointmentOrFail(req.user, req.params.id);
     res.json({ appointment: publicAppointment(appointment) });
   })
 );
@@ -297,19 +314,28 @@ router.get(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    const current = await findAppointmentOrFail(req.user.id, req.params.id);
+    const current = await findAppointmentOrFail(req.user, req.params.id);
     const currentPublic = publicAppointment(current);
 
     const clientId =
       req.body.clientId === undefined ? current.clientId : requiredString(req.body.clientId, "cliente");
     const serviceId =
       req.body.serviceId === undefined ? current.serviceId : requiredString(req.body.serviceId, "serviço");
-    const professionalId =
+    const requestedProfessionalId =
       req.body.professionalId === undefined
         ? current.professionalId
         : req.body.professionalId
         ? requiredString(req.body.professionalId, "profissional")
         : null;
+    const professionalId = isWorkspaceProfessional(req.user)
+      ? req.user.professionalId
+      : requestedProfessionalId;
+
+    if (!professionalId) {
+      throw new ApiError(400, "Profissional obrigatorio para este agendamento.");
+    }
+
+    await assertProfessionalBelongsToUser(prisma, req.user.id, professionalId);
     const date = req.body.date === undefined ? currentPublic.date : requiredString(req.body.date, "data");
     const startTime =
       req.body.startTime === undefined
@@ -382,7 +408,7 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findAppointmentOrFail(req.user.id, req.params.id);
+    await findAppointmentOrFail(req.user, req.params.id);
     await prisma.appointment.delete({ where: { id: req.params.id } });
     res.status(204).send();
   })

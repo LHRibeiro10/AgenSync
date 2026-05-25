@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
+import { getWorkspaceRole, workspaceRoles } from "../lib/permissions.js";
 
 const WorkspaceViewContext = createContext(null);
 const STORAGE_PREFIX = "agensync_workspace_view";
@@ -24,9 +25,9 @@ export function WorkspaceViewProvider({ children }) {
   const [selectedProfessionalId, setSelectedProfessionalIdState] = useState("");
   const [period, setPeriodState] = useState("today");
 
-  const role = String(user?.role || "user").trim().toLowerCase();
-  const isProfessional = role === "professional";
-  const canManageWorkspace = !isProfessional;
+  const role = getWorkspaceRole(user);
+  const isProfessional = role === workspaceRoles.PROFESSIONAL;
+  const canManageWorkspace = role === workspaceRoles.OWNER || role === workspaceRoles.ADMIN;
 
   useEffect(() => {
     const stored = readStoredView(user?.id);

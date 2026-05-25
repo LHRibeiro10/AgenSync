@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { requireWorkspaceManager } from "../utils/accessControl.js";
 import { publicClient, publicClientCareRecord } from "../utils/formatters.js";
 import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
+
+router.use((req, res, next) => {
+  requireWorkspaceManager(req);
+  next();
+});
 
 async function findClientOrFail(userId, id) {
   const client = await prisma.client.findFirst({ where: { id, userId } });

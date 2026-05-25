@@ -50,6 +50,7 @@ export const api = {
   deleteAppointment: (id) => appointmentService.deleteAppointment(id),
 
   dashboard: (params) => dashboardService.getDashboard(params),
+  dashboardOverview: (params) => dashboardService.getDashboardOverview(params),
   finance: (params) => financeService.getFinanceSummary(params),
   adminSummary: () => adminService.getAdminSummary(),
   listAdminUsers: (params) => adminService.listAdminUsers(params),

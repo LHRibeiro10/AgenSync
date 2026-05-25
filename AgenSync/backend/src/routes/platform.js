@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { invalidateAuthUserCache } from "../middleware/auth.js";
+import { PLAN_SLUGS, normalizePlanSlug } from "../config/plans.js";
 import { recordAuditEvent } from "../utils/audit.js";
 import { endOfDay, endOfMonth, formatDate, parseDateOnly, startOfDay, startOfMonth, todayString } from "../utils/dates.js";
 
@@ -46,9 +47,7 @@ function normalizeUpper(value) {
 }
 
 function normalizePlan(value) {
-  const plan = String(value || "").trim();
-  if (!plan) return null;
-  return plan.slice(0, 80);
+  return normalizePlanSlug(value);
 }
 
 function decimalNumber(value) {
@@ -111,7 +110,7 @@ function publicWorkspace(user, extras = {}) {
     name: user.businessName || user.name,
     ownerName: user.name,
     ownerEmail: user.email,
-    plan: user.platformPlan || user.businessType || "Sem plano",
+    plan: normalizePlanSlug(user.platformPlan),
     businessType: user.businessType,
     status: String(user.accountStatus || "ACTIVE").toLowerCase(),
     userStatus: String(user.userStatus || "ACTIVE").toLowerCase(),
@@ -225,7 +224,7 @@ async function activityByWorkspace(userIds) {
 
 async function loadWorkspaceRows(period, options = {}) {
   const search = String(options.search || "").trim();
-  const plan = String(options.plan || "").trim();
+  const plan = options.plan ? normalizePlanSlug(options.plan) : "";
   const status = String(options.status || "").trim().toUpperCase();
 
   const searchWhere = search
@@ -238,13 +237,18 @@ async function loadWorkspaceRows(period, options = {}) {
         ]
       }
     : null;
+  const planWhere = plan
+    ? plan === PLAN_SLUGS.PADRAO
+      ? { OR: [{ platformPlan: plan }, { platformPlan: null }, { platformPlan: "" }] }
+      : { platformPlan: plan }
+    : null;
 
   const where = {
     AND: [
       platformUserWhere(),
-      ...(searchWhere ? [searchWhere] : [])
+      ...(searchWhere ? [searchWhere] : []),
+      ...(planWhere ? [planWhere] : [])
     ],
-    ...(plan ? { platformPlan: plan } : {}),
     ...(subscriptionStatuses.has(status) ? { subscriptionStatus: status } : {})
   };
 

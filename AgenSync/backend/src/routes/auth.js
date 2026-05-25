@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../prisma.js";
 import { invalidateAuthUserCache, requireAuth } from "../middleware/auth.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { PLAN_SLUGS } from "../config/plans.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { recordAuditEvent } from "../utils/audit.js";
@@ -124,6 +125,7 @@ router.post(
           passwordHash,
           role: roleForEmail(email),
           workspaceRole: "OWNER",
+          platformPlan: PLAN_SLUGS.PADRAO,
           subscriptionStatus: "PAID",
           billingEnabled: false,
           businessName,

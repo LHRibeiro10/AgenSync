@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { requireWorkspaceManager } from "../utils/accessControl.js";
 import { publicService } from "../utils/formatters.js";
 import {
   parseBoolean,
@@ -11,6 +12,11 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
+
+router.use((req, res, next) => {
+  requireWorkspaceManager(req);
+  next();
+});
 
 async function findServiceOrFail(userId, id) {
   const service = await prisma.service.findFirst({ where: { id, userId } });

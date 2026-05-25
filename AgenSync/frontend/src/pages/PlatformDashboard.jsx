@@ -10,6 +10,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { PLANS_CONFIG } from "../config/plans.js";
 
 const periodOptions = [
   { value: "today", label: "Hoje" },
@@ -320,7 +321,13 @@ function ActionPanel({ workspace, onRefresh }) {
             />
           </Field>
           <Field label="Plano manual">
-            <input className={inputClass} value={plan} onChange={(event) => setPlan(event.target.value)} placeholder="starter, pro, enterprise..." />
+            <select className={inputClass} value={plan} onChange={(event) => setPlan(event.target.value)}>
+              {Object.values(PLANS_CONFIG).map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.displayName} - R$ {item.price.toFixed(2).replace(".", ",")}
+                </option>
+              ))}
+            </select>
           </Field>
         </section>
 

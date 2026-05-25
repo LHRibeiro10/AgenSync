@@ -1,8 +1,10 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import AccessDenied from "./components/AccessDenied.jsx";
 import Layout from "./components/Layout.jsx";
 import Loading from "./components/Loading.jsx";
 import PageTransition from "./components/PageTransition.jsx";
+import { canUsePlanFeature } from "./config/plans.js";
 import { useAuth } from "./contexts/AuthContext.jsx";
 
 const Agenda = lazy(() => import("./pages/Agenda.jsx"));
@@ -88,6 +90,29 @@ function PlatformRoute({ children }) {
   return children;
 }
 
+function PermissionRoute({ children, permission, feature, title, description }) {
+  const { loading, user, canAccess } = useAuth();
+
+  if (loading) return <Loading label="Validando acesso..." />;
+  if (permission && !canAccess(permission)) {
+    return (
+      <AccessDenied
+        title={title}
+        description={description || "Seu perfil atual nao libera esta area."}
+      />
+    );
+  }
+  if (feature && !canUsePlanFeature(user, feature)) {
+    return (
+      <AccessDenied
+        title={title || "Recurso do plano"}
+        description={description || "Este recurso esta disponivel em outro plano do AgenSync."}
+      />
+    );
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <Suspense fallback={<Loading label="Carregando tela..." />}>
@@ -131,31 +156,31 @@ export default function App() {
           <Route path="agenda/semanal" element={<Agenda initialView="week" />} />
           <Route path="agenda/diaria" element={<Agenda initialView="day" />} />
           <Route path="agenda/horarios" element={<Agenda focus="workingHours" />} />
-          <Route path="agendamentos" element={<Appointments />} />
-          <Route path="clientes" element={<Clients section="clients" />} />
-          <Route path="clientes/atendimento" element={<Clients section="attendance" />} />
-          <Route path="clientes/fichas" element={<Clients section="forms" />} />
-          <Route path="clientes/evolucao" element={<Clients section="evolution" />} />
-          <Route path="clientes/documentos" element={<Clients section="documents" />} />
-          <Route path="clientes/linha-do-tempo" element={<Clients section="timeline" />} />
-          <Route path="profissionais" element={<Professionals />} />
-          <Route path="servicos" element={<Services />} />
-          <Route path="produtos" element={<Products />} />
+          <Route path="agendamentos" element={<PermissionRoute permission="clients"><Appointments /></PermissionRoute>} />
+          <Route path="clientes" element={<PermissionRoute permission="clients"><Clients section="clients" /></PermissionRoute>} />
+          <Route path="clientes/atendimento" element={<PermissionRoute permission="clients"><Clients section="attendance" /></PermissionRoute>} />
+          <Route path="clientes/fichas" element={<PermissionRoute permission="clients"><Clients section="forms" /></PermissionRoute>} />
+          <Route path="clientes/evolucao" element={<PermissionRoute permission="clients"><Clients section="evolution" /></PermissionRoute>} />
+          <Route path="clientes/documentos" element={<PermissionRoute permission="clients"><Clients section="documents" /></PermissionRoute>} />
+          <Route path="clientes/linha-do-tempo" element={<PermissionRoute permission="clients"><Clients section="timeline" /></PermissionRoute>} />
+          <Route path="profissionais" element={<PermissionRoute permission="professionals"><Professionals /></PermissionRoute>} />
+          <Route path="servicos" element={<PermissionRoute permission="services"><Services /></PermissionRoute>} />
+          <Route path="produtos" element={<PermissionRoute permission="products"><Products /></PermissionRoute>} />
           <Route path="produtos/:section" element={<Navigate to="/produtos" replace />} />
-          <Route path="vendas" element={<ProductSales mode="new" />} />
-          <Route path="vendas/nova" element={<ProductSales mode="new" />} />
-          <Route path="vendas/historico" element={<ProductSales mode="history" />} />
+          <Route path="vendas" element={<PermissionRoute permission="sales"><ProductSales mode="new" /></PermissionRoute>} />
+          <Route path="vendas/nova" element={<PermissionRoute permission="sales"><ProductSales mode="new" /></PermissionRoute>} />
+          <Route path="vendas/historico" element={<PermissionRoute permission="sales"><ProductSales mode="history" /></PermissionRoute>} />
           <Route
             path="vendas/comissoes"
-            element={<ProductSales mode="commissions" />}
+            element={<PermissionRoute permission="sales"><ProductSales mode="commissions" /></PermissionRoute>}
           />
-          <Route path="vendas/relatorios" element={<ProductSales mode="reports" />} />
-          <Route path="mensalidades" element={<Subscriptions />} />
+          <Route path="vendas/relatorios" element={<PermissionRoute permission="reports"><ProductSales mode="reports" /></PermissionRoute>} />
+          <Route path="mensalidades" element={<PermissionRoute permission="subscriptions"><Subscriptions /></PermissionRoute>} />
           <Route path="historico" element={<History />} />
-          <Route path="financeiro" element={<Finance />} />
-          <Route path="relatorios" element={<Finance />} />
-          <Route path="despesas" element={<Expenses />} />
-          <Route path="configuracoes" element={<Settings />} />
+          <Route path="financeiro" element={<PermissionRoute permission="finance"><Finance /></PermissionRoute>} />
+          <Route path="relatorios" element={<PermissionRoute permission="reports"><Finance /></PermissionRoute>} />
+          <Route path="despesas" element={<PermissionRoute permission="expenses"><Expenses /></PermissionRoute>} />
+          <Route path="configuracoes" element={<PermissionRoute permission="settings"><Settings /></PermissionRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { invalidateAuthUserCache, isPlatformOwner } from "../middleware/auth.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { getCurrentPlan } from "../config/plans.js";
 import { businessTypes, findBusinessType, getSuggestedServices } from "../utils/businessOnboarding.js";
 import { publicUser } from "../utils/formatters.js";
 import {
@@ -206,6 +207,11 @@ router.post(
     const professionals = normalizeProfessionalList(req.body.professionals);
     if (!professionals.length) {
       throw new ApiError(400, "Mantenha pelo menos um profissional ativo.");
+    }
+    const plan = getCurrentPlan(req.user);
+    const activeRequested = professionals.filter((professional) => professional.isActive !== false).length;
+    if (activeRequested > plan.maxProfessionals) {
+      throw new ApiError(409, `Seu plano atual permite ate ${plan.maxProfessionals} profissional(is).`);
     }
 
     const [primary, ...extraProfessionals] = professionals;

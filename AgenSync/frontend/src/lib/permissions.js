@@ -31,8 +31,14 @@ const defaultWorkspacePermissions = {
 
 const professionalPermissions = {
   ...defaultWorkspacePermissions,
+  clients: false,
+  services: false,
   professionals: false,
-  finance: false,
+  products: false,
+  stock: false,
+  sales: false,
+  subscriptions: false,
+  finance: true,
   expenses: false,
   reports: false,
   settings: false,
@@ -75,7 +81,7 @@ export function canAccessPermission(user, permission) {
   const customPermissions = user?.permissions && typeof user.permissions === "object" ? user.permissions : {};
   const basePermissions = role === workspaceRoles.PROFESSIONAL ? professionalPermissions : defaultWorkspacePermissions;
 
-  return customPermissions[permission] ?? basePermissions[permission] ?? true;
+  return customPermissions[permission] ?? basePermissions[permission] ?? false;
 }
 
 export function canAccessAdmin(user) {

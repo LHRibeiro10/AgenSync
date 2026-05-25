@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middleware/error.js";
+import { PLAN_FEATURES, planHasFeature } from "../config/plans.js";
+import { isWorkspaceProfessional, professionalWhere, resolveProfessionalScope } from "../utils/accessControl.js";
 import {
   endOfDay,
   endOfMonth,
@@ -13,10 +15,11 @@ import {
 
 const router = Router();
 
-async function revenue(userId, startsAt) {
+async function revenue(userId, startsAt, scope) {
   const result = await prisma.appointment.aggregate({
     where: {
       userId,
+      ...professionalWhere(scope),
       status: "COMPLETED",
       startsAt
     },
@@ -35,14 +38,23 @@ router.get(
     const weekStart = startOfWeek(selectedDate);
     const monthStart = startOfMonth(selectedDate);
     const monthEnd = endOfMonth(selectedDate);
+    const canFilterProfessionals =
+      isWorkspaceProfessional(req.user) || planHasFeature(req.user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
+    const scope = await resolveProfessionalScope(
+      prisma,
+      req.user,
+      canFilterProfessionals ? req.query.professionalId : ""
+    );
+    const scopeWhere = professionalWhere(scope);
 
     const [today, week, month, completedMonth] = await Promise.all([
-      revenue(req.user.id, { gte: dayStart, lt: dayEnd }),
-      revenue(req.user.id, { gte: weekStart, lt: dayEnd }),
-      revenue(req.user.id, { gte: monthStart, lt: monthEnd }),
+      revenue(req.user.id, { gte: dayStart, lt: dayEnd }, scope),
+      revenue(req.user.id, { gte: weekStart, lt: dayEnd }, scope),
+      revenue(req.user.id, { gte: monthStart, lt: monthEnd }, scope),
       prisma.appointment.count({
         where: {
           userId: req.user.id,
+          ...scopeWhere,
           status: "COMPLETED",
           startsAt: { gte: monthStart, lt: monthEnd }
         }

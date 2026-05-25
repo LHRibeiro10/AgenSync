@@ -3,6 +3,20 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@supabase")) return "vendor-supabase";
+          if (id.includes("firebase")) return "vendor-firebase";
+          if (id.includes("react")) return "vendor-react";
+          if (id.includes("read-excel-file")) return "vendor-excel";
+          return "vendor";
+        }
+      }
+    }
+  },
   plugins: [
     react(),
     VitePWA({

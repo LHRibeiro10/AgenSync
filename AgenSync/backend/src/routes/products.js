@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { requireWorkspaceManager } from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicProduct, publicProductSale } from "../utils/formatters.js";
 import {
@@ -13,6 +14,11 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
+
+router.use((req, res, next) => {
+  requireWorkspaceManager(req);
+  next();
+});
 
 const clientSelect = {
   id: true,

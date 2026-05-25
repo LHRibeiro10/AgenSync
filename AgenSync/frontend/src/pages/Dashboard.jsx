@@ -12,6 +12,8 @@ import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { PLAN_FEATURES, canUsePlanFeature } from "../config/plans.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import { listExpenses, sumExpenses } from "../services/expenses.js";
@@ -245,6 +247,9 @@ export default function Dashboard() {
     canManageWorkspace,
     isProfessional
   } = useWorkspaceView();
+  const { user } = useAuth();
+  const canUseProfessionalFilters = canUsePlanFeature(user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
+  const canUseTeamComparison = canUsePlanFeature(user, PLAN_FEATURES.TEAM_COMPARISON);
   const initialRange = rangeForPeriod(workspacePeriod || "today");
   const [filters, setFilters] = useState({
     period: workspacePeriod || "today",
@@ -277,8 +282,101 @@ export default function Dashboard() {
     try {
       const comparisonRange = previousRange(nextFilters);
       const tomorrow = formatInputDate(addDays(parseDate(rangeForPeriod("today").endDate), 1));
-      const effectiveProfessionalId = nextFilters.professionalId || "";
+      const effectiveProfessionalId = canUseProfessionalFilters ? nextFilters.professionalId || "" : "";
       const scopedParams = effectiveProfessionalId ? { professionalId: effectiveProfessionalId } : {};
+
+      try {
+        const overview = await api.dashboardOverview({
+          startDate: nextFilters.startDate,
+          endDate: nextFilters.endDate,
+          comparisonStartDate: comparisonRange.startDate,
+          comparisonEndDate: comparisonRange.endDate,
+          tomorrowDate: tomorrow,
+          includeTeam: Boolean(canManageWorkspace && canUseTeamComparison && effectiveProfessionalId),
+          ...scopedParams
+        });
+
+        if (overview?.dashboard) {
+          const dashboardData = overview.dashboard;
+          const periodAppointments = overview.appointments?.period || [];
+          const previousPeriodAppointments = overview.appointments?.previous || [];
+          const periodExpenses = overview.expenses?.period || [];
+          const periodSales = overview.sales?.period || [];
+          const periodSubscriptions = overview.subscriptions?.period || [];
+          const daySubscriptions = overview.subscriptions?.day || [];
+          const monthExpenses = overview.expenses?.month || [];
+          const monthSales = overview.sales?.month || [];
+          const monthSubscriptions = overview.subscriptions?.month || [];
+          const comparisonExpenses = overview.expenses?.comparison || [];
+          const comparisonSales = overview.sales?.comparison || [];
+          const comparisonSubscriptions = overview.subscriptions?.comparison || [];
+          const currentSubscriptionSummary = overview.subscriptions?.summary || {};
+          const tomorrowPeriodAppointments = overview.appointments?.tomorrow || [];
+          const daySales = periodSales.filter((sale) => sale.date === nextFilters.endDate);
+          const dayExpenses = periodExpenses.filter((expense) => expense.date === nextFilters.endDate);
+          const servicesPeriod = earnedCompleted(periodAppointments);
+          const productsPeriod = sumProductSales(periodSales);
+          const subscriptionsPeriod = sumPaidSubscriptionCycles(periodSubscriptions);
+          const isProfessionalScope = Boolean(effectiveProfessionalId);
+          const visibleProductsPeriod = isProfessionalScope ? 0 : productsPeriod;
+          const visibleSubscriptionsPeriod = isProfessionalScope ? 0 : subscriptionsPeriod;
+          const grossPeriod = servicesPeriod + visibleProductsPeriod + visibleSubscriptionsPeriod;
+          const totalExpensesPeriod = isProfessionalScope ? 0 : sumExpenses(periodExpenses);
+          const servicesDay = dashboardData.earnedToday;
+          const productsDay = sumProductSales(daySales);
+          const subscriptionsDay = sumPaidSubscriptionCycles(daySubscriptions);
+          const visibleProductsDay = isProfessionalScope ? 0 : productsDay;
+          const visibleSubscriptionsDay = isProfessionalScope ? 0 : subscriptionsDay;
+          const grossDay = servicesDay + visibleProductsDay + visibleSubscriptionsDay;
+          const totalExpensesDay = isProfessionalScope ? 0 : sumExpenses(dayExpenses);
+          const servicesMonth = dashboardData.earnedMonth;
+          const productsMonth = sumProductSales(monthSales);
+          const subscriptionsMonth = sumPaidSubscriptionCycles(monthSubscriptions);
+          const visibleProductsMonth = isProfessionalScope ? 0 : productsMonth;
+          const visibleSubscriptionsMonth = isProfessionalScope ? 0 : subscriptionsMonth;
+          const grossMonth = servicesMonth + visibleProductsMonth + visibleSubscriptionsMonth;
+          const totalExpensesMonth = isProfessionalScope ? 0 : sumExpenses(monthExpenses);
+
+          setData({
+            ...dashboardData,
+            appointmentsToday: periodAppointments.length,
+            earnedToday: grossPeriod,
+            servicesPeriod,
+            productsPeriod: visibleProductsPeriod,
+            subscriptionsPeriod: visibleSubscriptionsPeriod,
+            grossPeriod,
+            expensesPeriod: totalExpensesPeriod,
+            netPeriod: grossPeriod - totalExpensesPeriod,
+            servicesDay,
+            productsDay: visibleProductsDay,
+            subscriptionsDay: visibleSubscriptionsDay,
+            grossDay,
+            expensesDay: totalExpensesDay,
+            netDay: grossDay - totalExpensesDay,
+            servicesMonth,
+            productsMonth: visibleProductsMonth,
+            subscriptionsMonth: visibleSubscriptionsMonth,
+            grossMonth,
+            expensesMonth: totalExpensesMonth,
+            netMonth: grossMonth - totalExpensesMonth,
+            todayAppointments: periodAppointments,
+            productSales: isProfessionalScope ? [] : periodSales,
+            subscriptionCycles: isProfessionalScope ? [] : periodSubscriptions,
+            subscriptionSummary: isProfessionalScope
+              ? { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 }
+              : currentSubscriptionSummary
+          });
+          setPreviousAppointments(previousPeriodAppointments);
+          setTeamAppointments(overview.appointments?.team || periodAppointments);
+          setPreviousSales(isProfessionalScope ? [] : comparisonSales);
+          setPreviousExpenses(isProfessionalScope ? [] : comparisonExpenses);
+          setPreviousSubscriptions(isProfessionalScope ? [] : comparisonSubscriptions);
+          setTomorrowAppointments(tomorrowPeriodAppointments);
+          return;
+        }
+      } catch {
+        // Mantem compatibilidade com backends antigos que ainda nao tenham /dashboard/overview.
+      }
 
       const [dashboardData, appointmentsData, previousData, tomorrowData, teamData] = await Promise.all([
         api.dashboard({ date: nextFilters.endDate, ...scopedParams }),
@@ -294,7 +392,7 @@ export default function Dashboard() {
           ...scopedParams
         }),
         api.listAppointments({ date: tomorrow, ...scopedParams }),
-        canManageWorkspace && effectiveProfessionalId
+        canManageWorkspace && canUseTeamComparison && effectiveProfessionalId
           ? api.listAppointments({
               startDate: nextFilters.startDate,
               endDate: nextFilters.endDate
@@ -303,6 +401,7 @@ export default function Dashboard() {
       ]);
 
       const monthRange = monthRangeUntil(nextFilters.endDate);
+      const fallbackProfessionalScope = Boolean(effectiveProfessionalId);
       const [
         periodExpenses,
         periodSales,
@@ -316,29 +415,31 @@ export default function Dashboard() {
         comparisonSubscriptions,
         currentSubscriptionSummary
       ] = await Promise.all([
-        listExpenses({
+        fallbackProfessionalScope ? Promise.resolve([]) : listExpenses({
           startDate: nextFilters.startDate,
           endDate: nextFilters.endDate
         }),
-        listProductSales({
+        fallbackProfessionalScope ? Promise.resolve([]) : listProductSales({
           startDate: nextFilters.startDate,
           endDate: nextFilters.endDate
         }),
-        listSubscriptionCycles({
+        fallbackProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
           startDate: nextFilters.startDate,
           endDate: nextFilters.endDate
         }),
-        listSubscriptionCycles({
+        fallbackProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
           startDate: nextFilters.endDate,
           endDate: nextFilters.endDate
         }),
-        listExpenses(monthRange),
-        listProductSales(monthRange),
-        listSubscriptionCycles(monthRange),
-        listExpenses(comparisonRange),
-        listProductSales(comparisonRange),
-        listSubscriptionCycles(comparisonRange),
-        subscriptionSummary({ month: nextFilters.endDate.slice(0, 7) })
+        fallbackProfessionalScope ? Promise.resolve([]) : listExpenses(monthRange),
+        fallbackProfessionalScope ? Promise.resolve([]) : listProductSales(monthRange),
+        fallbackProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles(monthRange),
+        fallbackProfessionalScope ? Promise.resolve([]) : listExpenses(comparisonRange),
+        fallbackProfessionalScope ? Promise.resolve([]) : listProductSales(comparisonRange),
+        fallbackProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles(comparisonRange),
+        fallbackProfessionalScope
+          ? Promise.resolve({ activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 })
+          : subscriptionSummary({ month: nextFilters.endDate.slice(0, 7) })
       ]);
 
       const daySales = periodSales.filter((sale) => sale.date === nextFilters.endDate);
@@ -426,7 +527,7 @@ export default function Dashboard() {
       period: nextPeriod,
       startDate: range.startDate,
       endDate: range.endDate,
-      professionalId: selectedProfessionalId || ""
+      professionalId: canUseProfessionalFilters ? selectedProfessionalId || "" : ""
     };
     const nextKey = filterKey(next);
 
@@ -437,7 +538,7 @@ export default function Dashboard() {
     setFilters(next);
     setAppliedFilters(next);
     load(next);
-  }, [selectedProfessionalId, workspacePeriod]);
+  }, [canUseProfessionalFilters, selectedProfessionalId, workspacePeriod]);
 
   useEffect(() => {
     let ignore = false;
@@ -463,10 +564,11 @@ export default function Dashboard() {
   }
 
   function applyFilters() {
+    const next = canUseProfessionalFilters ? filters : { ...filters, professionalId: "" };
     setWorkspacePeriod(filters.period);
-    setSelectedProfessionalId(filters.professionalId);
-    setAppliedFilters(filters);
-    load(filters);
+    setSelectedProfessionalId(next.professionalId);
+    setAppliedFilters(next);
+    load(next);
   }
 
   function resetFilters() {
@@ -475,7 +577,7 @@ export default function Dashboard() {
       period: "today",
       startDate: range.startDate,
       endDate: range.endDate,
-      professionalId: isProfessional ? selectedProfessionalId || "" : ""
+      professionalId: isProfessional || canUseProfessionalFilters ? selectedProfessionalId || "" : ""
     };
     setWorkspacePeriod(next.period);
     setSelectedProfessionalId(next.professionalId);
@@ -555,9 +657,9 @@ export default function Dashboard() {
         period={filters.period}
         startDate={filters.startDate}
         endDate={filters.endDate}
-        professionalValue={filters.professionalId}
+        professionalValue={canUseProfessionalFilters ? filters.professionalId : ""}
         professionalOptions={professionals}
-        professionalDisabled={!canManageWorkspace}
+        professionalDisabled={!canManageWorkspace || !canUseProfessionalFilters}
         professionalAllLabel="Todos os profissionais"
         onProfessionalChange={(value) => updateFilter("professionalId", value)}
         onPeriodChange={(value) => updateFilter("period", value)}
@@ -565,7 +667,10 @@ export default function Dashboard() {
         onEndDateChange={(value) => updateFilter("endDate", value)}
         onSubmit={applyFilters}
         onClear={resetFilters}
-        resultLabel={resultLabelFor(appliedFilters, professionals)}
+        resultLabel={resultLabelFor(
+          canUseProfessionalFilters ? appliedFilters : { ...appliedFilters, professionalId: "" },
+          professionals
+        )}
       />
 
       {!progress.hasSeenWelcome ? <FirstStepsCard /> : null}
@@ -747,7 +852,7 @@ export default function Dashboard() {
             </article>
           </section>
 
-          {canManageWorkspace && !isProfessional && teamComparison.length > 1 ? (
+          {canManageWorkspace && canUseTeamComparison && !isProfessional && teamComparison.length > 1 ? (
             <Card className="overflow-hidden">
               <CardHeader
                 title="Comparativo da equipe"

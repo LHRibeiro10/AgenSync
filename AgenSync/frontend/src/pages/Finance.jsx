@@ -10,6 +10,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { api } from "../api/client.js";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
+import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import {
   expenseCategories,
   expenseCategoryLabel,
@@ -185,6 +186,7 @@ export default function Finance() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const { showToast } = useToast();
+  const { selectedProfessionalId } = useWorkspaceView();
 
   useEffect(() => {
     let active = true;
@@ -193,58 +195,62 @@ export default function Finance() {
     const previousStart = formatInputDate(addDays(selected, -13));
     const previousEnd = formatInputDate(addDays(selected, -7));
     const monthRange = monthRangeUntil(appliedFilters.endDate);
+    const scopedParams = selectedProfessionalId ? { professionalId: selectedProfessionalId } : {};
+    const isProfessionalScope = Boolean(selectedProfessionalId);
 
     setError("");
     setChartReady(false);
 
     Promise.all([
-      api.finance({ date: appliedFilters.endDate }),
+      api.finance({ date: appliedFilters.endDate, ...scopedParams }),
       api.listAppointments({
         startDate: appliedFilters.startDate,
         endDate: appliedFilters.endDate,
-        status: "concluido"
+        status: "concluido",
+        ...scopedParams
       }),
       api.listAppointments({
         startDate: previousStart,
         endDate: previousEnd,
-        status: "concluido"
+        status: "concluido",
+        ...scopedParams
       }),
-      listProductSales({
+      isProfessionalScope ? Promise.resolve([]) : listProductSales({
         startDate: appliedFilters.startDate,
         endDate: appliedFilters.endDate
       }),
-      listProductSales(monthRange),
-      listProductSales({
+      isProfessionalScope ? Promise.resolve([]) : listProductSales(monthRange),
+      isProfessionalScope ? Promise.resolve([]) : listProductSales({
         startDate: currentWeekStart,
         endDate: appliedFilters.endDate
       }),
-      listProductSales({
+      isProfessionalScope ? Promise.resolve([]) : listProductSales({
         startDate: previousStart,
         endDate: previousEnd
       }),
-      listSubscriptionCycles({
+      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
         startDate: currentWeekStart,
         endDate: appliedFilters.endDate
       }),
-      listSubscriptionCycles({
+      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
         startDate: previousStart,
         endDate: previousEnd
       }),
-      listSubscriptionCycles({
+      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
         startDate: appliedFilters.startDate,
         endDate: appliedFilters.endDate
       }),
-      listSubscriptionCycles({
+      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
         startDate: appliedFilters.endDate,
         endDate: appliedFilters.endDate
       }),
-      listSubscriptionCycles(monthRange),
-      listExpenses({
+      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles(monthRange),
+      isProfessionalScope ? Promise.resolve([]) : listExpenses({
         startDate: appliedFilters.startDate,
         endDate: appliedFilters.endDate,
         category: appliedFilters.category
       }),
-      listExpenses({
+      isProfessionalScope ? Promise.resolve([]) : listExpenses({
         ...monthRange,
         category: appliedFilters.category
       })
@@ -294,7 +300,7 @@ export default function Finance() {
     return () => {
       active = false;
     };
-  }, [appliedFilters, reloadKey]);
+  }, [appliedFilters, reloadKey, selectedProfessionalId]);
 
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));

@@ -1,4 +1,5 @@
 import { formatDate, formatTime } from "./dates.js";
+import { normalizePlanSlug, publicPlan } from "../config/plans.js";
 
 function minutesBetween(start, end) {
   if (!start || !end) return 0;
@@ -34,6 +35,8 @@ export function normalizeStatus(value, fallback = null) {
 }
 
 export function publicUser(user) {
+  const plan = publicPlan(user);
+
   return {
     id: user.id,
     name: user.name,
@@ -41,7 +44,14 @@ export function publicUser(user) {
     role: String(user.role || "USER").toLowerCase(),
     workspaceRole: String(user.workspaceRole || "OWNER").toLowerCase(),
     platformRole: user.platformRole ? String(user.platformRole).toLowerCase() : "",
-    platformPlan: user.platformPlan || "",
+    platformPlan: normalizePlanSlug(user.platformPlan),
+    plan: plan.slug,
+    planLimits: {
+      maxUsers: plan.maxUsers,
+      maxProfessionals: plan.maxProfessionals,
+      maxAdmins: plan.maxAdmins
+    },
+    planFeatures: plan.features,
     accountStatus: String(user.accountStatus || "ACTIVE").toLowerCase(),
     userStatus: String(user.userStatus || "ACTIVE").toLowerCase(),
     subscriptionStatus: String(user.subscriptionStatus || "PAID").toLowerCase(),

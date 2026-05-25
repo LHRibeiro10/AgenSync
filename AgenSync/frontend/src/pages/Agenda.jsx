@@ -19,6 +19,7 @@ import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import { agendaSchedule, defaultWorkingHours } from "../data/agendaConfig.js";
 import {
   DEFAULT_CANCELLATION_MESSAGE,
@@ -120,6 +121,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const location = useLocation();
   const { showToast } = useToast();
   const { user } = useAuth();
+  const { selectedProfessionalId } = useWorkspaceView();
   const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
   const initialSelectedDate = todayInputValue();
   const [viewMode, setViewMode] = useState(() =>
@@ -205,7 +207,8 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
       try {
         const data = await api.listAppointments({
           startDate: formatDateKey(weekStart),
-          endDate: formatDateKey(weekEnd)
+          endDate: formatDateKey(weekEnd),
+          professionalId: selectedProfessionalId || ""
         });
 
         if (active) {
@@ -229,7 +232,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
     return () => {
       active = false;
     };
-  }, [weekStart, weekEnd, reloadKey, markStepComplete]);
+  }, [weekStart, weekEnd, reloadKey, markStepComplete, selectedProfessionalId]);
 
   useEffect(() => {
     const appointmentId = new URLSearchParams(location.search).get("agendamento");

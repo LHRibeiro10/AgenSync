@@ -1,11 +1,17 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { requireWorkspaceManager } from "../utils/accessControl.js";
 import { formatDate, parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicExpense } from "../utils/formatters.js";
 import { optionalString, parsePagination, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
+
+router.use((req, res, next) => {
+  requireWorkspaceManager(req);
+  next();
+});
 
 function nextMonth(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 1);

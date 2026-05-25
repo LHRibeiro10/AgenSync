@@ -3,6 +3,11 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { publicProfessional } from "../utils/formatters.js";
 import {
+  assertCanCreateProfessional,
+  isWorkspaceProfessional,
+  requireWorkspaceManager
+} from "../utils/accessControl.js";
+import {
   optionalEmail,
   optionalString,
   parseBoolean,
@@ -25,6 +30,12 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     const where = { userId: req.user.id };
+    if (isWorkspaceProfessional(req.user)) {
+      if (!req.user.professionalId) {
+        throw new ApiError(403, "Usuario profissional sem profissional vinculado.");
+      }
+      where.id = req.user.professionalId;
+    }
     if (req.query.active === "true") {
       where.isActive = true;
     }
@@ -46,6 +57,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     const name = requiredString(req.body.name, "nome", 2);
     const role = optionalString(req.body.role);
     const email = optionalEmail(req.body.email);
@@ -55,6 +67,8 @@ router.post(
         ? null
         : parsePositiveMoney(req.body.monthlyGoal, "meta mensal");
     const isActive = parseBoolean(req.body.isActive, true);
+
+    await assertCanCreateProfessional(prisma, req.user, { active: isActive });
 
     const professional = await prisma.professional.create({
       data: { userId: req.user.id, name, role, email, phone, monthlyGoal, isActive }
@@ -67,6 +81,9 @@ router.post(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (isWorkspaceProfessional(req.user) && req.params.id !== req.user.professionalId) {
+      throw new ApiError(403, "Voce so pode acessar seu proprio perfil profissional.");
+    }
     const professional = await findProfessionalOrFail(req.user.id, req.params.id);
     res.json({ professional: publicProfessional(professional) });
   })
@@ -75,6 +92,7 @@ router.get(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     await findProfessionalOrFail(req.user.id, req.params.id);
 
     const name = requiredString(req.body.name, "nome", 2);
@@ -86,6 +104,11 @@ router.put(
         ? null
         : parsePositiveMoney(req.body.monthlyGoal, "meta mensal");
     const isActive = parseBoolean(req.body.isActive, true);
+
+    await assertCanCreateProfessional(prisma, req.user, {
+      excludeProfessionalId: req.params.id,
+      active: isActive
+    });
 
     const professional = await prisma.professional.update({
       where: { id: req.params.id },
@@ -99,6 +122,7 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     await findProfessionalOrFail(req.user.id, req.params.id);
 
     const appointments = await prisma.appointment.count({

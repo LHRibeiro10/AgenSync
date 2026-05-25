@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { createPublicKey } from "node:crypto";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "./error.js";
+import { PLAN_SLUGS } from "../config/plans.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { ensureSupabaseAuthUserExists } from "../utils/supabaseAuthAdmin.js";
@@ -410,6 +411,7 @@ async function ensureSupabaseUser(payload, token) {
           email,
           role: roleForEmail(email),
           workspaceRole: "OWNER",
+          platformPlan: PLAN_SLUGS.PADRAO,
           subscriptionStatus: "PAID",
           billingEnabled: false,
           passwordHash: "supabase-auth",

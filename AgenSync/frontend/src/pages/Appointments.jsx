@@ -12,6 +12,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
+import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import { useToast } from "../components/Toast.jsx";
 import {
   durationLabel,
@@ -237,6 +238,7 @@ export default function Appointments() {
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const { markStepComplete } = useOnboarding();
+  const { selectedProfessionalId } = useWorkspaceView();
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === form.serviceId),
@@ -261,7 +263,7 @@ export default function Appointments() {
     setError("");
     try {
       const [appointmentsData, clientsData, professionalsData, servicesData] = await Promise.all([
-        api.listAppointments(),
+        api.listAppointments(selectedProfessionalId ? { professionalId: selectedProfessionalId } : undefined),
         api.listClients(),
         api.listProfessionals(),
         api.listServices()
@@ -282,16 +284,21 @@ export default function Appointments() {
 
   useEffect(() => {
     load();
-  }, [markStepComplete]);
+  }, [markStepComplete, selectedProfessionalId]);
 
   useEffect(() => {
     if (loading || editing || form.professionalId) return;
+
+    if (selectedProfessionalId) {
+      setForm((current) => ({ ...current, professionalId: selectedProfessionalId }));
+      return;
+    }
 
     const activeProfessionals = professionals.filter((professional) => professional.isActive);
     if (activeProfessionals.length === 1) {
       setForm((current) => ({ ...current, professionalId: activeProfessionals[0].id }));
     }
-  }, [professionals, loading, editing, form.professionalId]);
+  }, [professionals, loading, editing, form.professionalId, selectedProfessionalId]);
 
   useEffect(() => {
     if (loading) return;
