@@ -738,30 +738,58 @@ textarea:focus-visible {
   .login-marketing {
     order: 1;
     min-height: 0;
-    max-height: 10.5rem;
+    max-height: 9.5rem;
     flex: 0 0 auto;
-    border-radius: 1rem;
-    padding: 0.85rem 1rem;
+    border-radius: 1.15rem;
+    padding: 0.9rem 1.15rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .login-marketing .login-brand-logo {
-    height: 3.6rem;
-    width: 3.6rem;
+    height: 2.35rem;
+    width: 9.75rem;
+    margin-inline: auto;
+    overflow: hidden;
+  }
+
+  .login-marketing .login-brand-logo img {
+    height: 100%;
+    width: auto;
+    transform: translate(-50%, -50%) scale(2.05);
+    object-fit: contain;
+  }
+
+  .login-marketing .login-dot-grid {
+    right: 1rem;
+    top: 0.85rem;
+    height: 5.9rem;
+    width: 2.2rem;
+    opacity: 0.42;
+    background-size: 0.55rem 0.55rem;
+    mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  }
+
+  .login-marketing .login-marketing-lines {
+    opacity: 0.18;
   }
 
   .login-marketing h1 {
-    margin-top: 0.45rem;
-    font-size: 1.15rem;
+    margin-top: 0.7rem;
+    font-size: 1.32rem;
     line-height: 1.1;
     text-align: center;
+    text-wrap: balance;
   }
 
   .login-marketing p {
-    margin-top: 0.25rem;
-    max-width: 20rem;
-    font-size: 0.72rem;
-    line-height: 1.25;
+    margin-top: 0.32rem;
+    max-width: 18.5rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
     text-align: center;
+    text-wrap: balance;
   }
 
   .login-marketing .mt-10.space-y-4 {

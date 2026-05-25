@@ -218,14 +218,14 @@ export default function Login() {
       <section className="login-shell relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center">
         <div className="login-frame grid w-full gap-5 rounded-[28px] border border-white/10 bg-white/[0.03] p-3 shadow-[0_36px_100px_rgba(6,8,20,0.72)] backdrop-blur-xl lg:grid-cols-[1.08fr_0.92fr] lg:gap-0">
           <aside className="login-marketing order-2 relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#1A0B2E] via-[#2A0F4F] to-[#143C85] p-7 sm:p-10 lg:order-1 lg:min-h-[680px]">
-            <div className="pointer-events-none absolute inset-0 opacity-35">
+            <div className="login-marketing-lines pointer-events-none absolute inset-0 opacity-35">
               <svg viewBox="0 0 860 760" className="h-full w-full">
                 <path d="M-10 105C95 35 215 40 305 105C395 170 390 280 306 340C238 390 134 406 75 470C16 534 30 650 132 760" stroke="white" strokeWidth="1.2" fill="none" />
                 <path d="M655 760C605 700 575 656 548 610C520 562 520 518 550 486C582 452 635 454 672 486C706 514 730 564 744 620C758 676 786 726 846 760" stroke="white" strokeWidth="1.2" fill="none" />
                 <path d="M702 760C652 700 622 656 595 610C567 562 567 518 597 486C629 452 682 454 719 486C753 514 777 564 791 620C805 676 833 726 893 760" stroke="white" strokeWidth="1.2" fill="none" />
               </svg>
             </div>
-            <div className="pointer-events-none absolute right-7 top-8 h-28 w-11 bg-[radial-gradient(circle,rgba(255,255,255,0.9)_2px,transparent_3px)] [background-size:11px_11px]" />
+            <div className="login-dot-grid pointer-events-none absolute right-7 top-8 h-28 w-11 bg-[radial-gradient(circle,rgba(255,255,255,0.9)_2px,transparent_3px)] [background-size:11px_11px]" />
 
             <div className="relative z-10 page-transition">
               <div className="flex w-full justify-center">
