@@ -157,6 +157,20 @@ export function publicAppointment(appointment) {
     client: appointment.client ? publicClient(appointment.client) : undefined,
     service: appointment.service ? publicService(appointment.service) : undefined,
     professional: appointment.professional ? publicProfessional(appointment.professional) : undefined,
+    monthlyPlanId: appointment.monthlyPlanId || "",
+    monthlyPlan: appointment.monthlyPlan
+      ? {
+          id: appointment.monthlyPlan.id,
+          planName: appointment.monthlyPlan.planName,
+          billingType: String(appointment.monthlyPlan.billingType || "FIXED_MONTHLY").toLowerCase(),
+          status:
+            appointment.monthlyPlan.status === "CANCELED"
+              ? "canceled"
+              : appointment.monthlyPlan.status === "PAUSED"
+                ? "paused"
+                : "active"
+        }
+      : null,
     createdAt: appointment.createdAt,
     updatedAt: appointment.updatedAt
   };
@@ -212,24 +226,54 @@ export function publicProductSale(sale) {
 
 export function publicMonthlyPlan(plan) {
   const payments = Array.isArray(plan.payments) ? plan.payments : [];
+  const appointments = Array.isArray(plan.appointments) ? plan.appointments : [];
   return {
     id: plan.id,
     clientId: plan.clientId,
     clientName: plan.client?.name || "Cliente",
+    serviceId: plan.serviceId || "",
+    serviceName: plan.service?.name || "",
+    professionalId: plan.professionalId || "",
+    professionalName: plan.professional?.name || "",
     planName: plan.planName,
     amount: Number(plan.amount),
     dueDay: plan.dueDay,
     startDate: formatDate(plan.startDate),
-    status: plan.status === "CANCELED" ? "canceled" : "active",
+    endDate: plan.endDate ? formatDate(plan.endDate) : "",
+    billingType: String(plan.billingType || "FIXED_MONTHLY").toLowerCase(),
+    priceMode: String(plan.priceMode || "MONTHLY_PRICE").toLowerCase(),
+    monthlyPrice: plan.monthlyPrice === null || plan.monthlyPrice === undefined ? null : Number(plan.monthlyPrice),
+    sessionPrice: plan.sessionPrice === null || plan.sessionPrice === undefined ? null : Number(plan.sessionPrice),
+    sessionsPerMonth: Number(plan.sessionsPerMonth || 1),
+    recurrenceType: String(plan.recurrenceType || "MONTHLY").toLowerCase(),
+    recurrenceConfig: plan.recurrenceConfig || {},
+    defaultStartTime: plan.defaultStartTime || "",
+    durationMinutes: plan.durationMinutes || plan.service?.durationMinutes || null,
+    generateAppointments: Boolean(plan.generateAppointments),
+    generatedUntil: plan.generatedUntil ? formatDate(plan.generatedUntil) : "",
+    status: plan.status === "CANCELED" ? "canceled" : plan.status === "PAUSED" ? "paused" : "active",
+    pausedAt: plan.pausedAt ? formatDate(plan.pausedAt) : "",
     canceledAt: plan.canceledAt ? formatDate(plan.canceledAt) : "",
     notes: plan.notes || "",
     payments: payments.map((payment) => ({
+      id: payment.id || `${plan.id}_${payment.month}`,
       month: payment.month,
-      status: payment.status === "PAID" ? "paid" : "pending",
+      status:
+        payment.status === "PAID"
+          ? "paid"
+          : payment.status === "OVERDUE"
+            ? "overdue"
+            : payment.status === "CANCELED"
+              ? "canceled"
+              : "pending",
+      dueDate: payment.dueDate ? formatDate(payment.dueDate) : "",
       paidAt: payment.paidAt ? formatDate(payment.paidAt) : "",
       amount: Number(payment.amount),
+      paymentMethod: payment.paymentMethod || "",
+      notes: payment.notes || "",
       manual: payment.manual
     })),
+    appointments: appointments.map(publicAppointment),
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt
   };

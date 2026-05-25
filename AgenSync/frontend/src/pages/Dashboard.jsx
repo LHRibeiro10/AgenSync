@@ -501,7 +501,7 @@ export default function Dashboard() {
   const periodSubscriptions = data?.subscriptionCycles || [];
   const isScopedView = Boolean(appliedFilters.professionalId);
   const viewLabel = selectedProfessionalLabel(appliedFilters.professionalId, professionals);
-  const recurring = data?.subscriptionSummary || { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 };
+  const recurring = data?.subscriptionSummary || { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0, pendingAmount: 0 };
   const previousEarned = earnedCompleted(previousAppointments);
   const previousNet =
     previousEarned + sumProductSales(previousSales) + sumPaidSubscriptionCycles(previousSubscriptions) - sumExpenses(previousExpenses);
@@ -692,20 +692,26 @@ export default function Dashboard() {
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Mensalidades ativas</p>
-              <p className="mt-2 text-2xl font-black text-brand">{recurring.activeCount}</p>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Previsto no mes</p>
+              <p className="mt-2 text-2xl font-black text-brand">{money(recurring.expected)}</p>
+              <p className="mt-1 text-xs font-bold text-muted">{recurring.activeCount} mensalista(s) ativo(s)</p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Pendentes</p>
-              <p className="mt-2 text-2xl font-black text-ink">{recurring.pending}</p>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Realizado</p>
+              <p className="mt-2 text-2xl font-black text-success">{money(recurring.received)}</p>
+              <p className="mt-1 text-xs font-bold text-muted">Concluido ou pago</p>
+            </article>
+            <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Pendente</p>
+              <p className="mt-2 text-2xl font-black text-ink">
+                {money(recurring.pendingAmount || Math.max((recurring.expected || 0) - (recurring.received || 0), 0))}
+              </p>
+              <p className="mt-1 text-xs font-bold text-muted">{recurring.pending} competencia(s)</p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Atrasadas</p>
               <p className="mt-2 text-2xl font-black text-red-600">{recurring.overdue}</p>
-            </article>
-            <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Previsto no mês</p>
-              <p className="mt-2 text-2xl font-black text-success">{money(recurring.expected)}</p>
+              <p className="mt-1 text-xs font-bold text-muted">Mensalidades vencidas</p>
             </article>
           </section>
 

@@ -1,43 +1,129 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
+import { syncAppointmentReminders } from "../services/appointmentReminderService.js";
+import {
+  buildMonthlyPlanOccurrences,
+  generationEndDateFromMonths,
+  normalizeRecurrenceConfig
+} from "../services/monthlyPlanSchedule.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { formatDate, parseDateOnly, todayString } from "../utils/dates.js";
-import { publicMonthlyPlan } from "../utils/formatters.js";
-import { optionalString, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
+import { addMinutes, combineDateAndTime, formatDate, parseDateOnly, todayString } from "../utils/dates.js";
+import { publicAppointment, publicMonthlyPlan } from "../utils/formatters.js";
+import { optionalString, parseBoolean, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
+
+const paymentSelect = {
+  id: true,
+  month: true,
+  status: true,
+  dueDate: true,
+  paidAt: true,
+  amount: true,
+  paymentMethod: true,
+  notes: true,
+  manual: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const clientSelect = {
+  id: true,
+  name: true,
+  phone: true,
+  email: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const serviceSelect = {
+  id: true,
+  name: true,
+  priceDefault: true,
+  durationMinutes: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const professionalSelect = {
+  id: true,
+  name: true,
+  role: true,
+  phone: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+const appointmentSelect = {
+  id: true,
+  userId: true,
+  clientId: true,
+  serviceId: true,
+  professionalId: true,
+  monthlyPlanId: true,
+  startsAt: true,
+  endsAt: true,
+  durationMinutes: true,
+  price: true,
+  notes: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  client: { select: clientSelect },
+  service: { select: serviceSelect },
+  professional: { select: professionalSelect },
+  monthlyPlan: {
+    select: {
+      id: true,
+      planName: true,
+      billingType: true,
+      status: true
+    }
+  }
+};
 
 const monthlyPlanSelect = {
   id: true,
   userId: true,
   clientId: true,
+  serviceId: true,
+  professionalId: true,
   planName: true,
   amount: true,
   dueDay: true,
   startDate: true,
+  endDate: true,
+  billingType: true,
+  priceMode: true,
+  monthlyPrice: true,
+  sessionPrice: true,
+  sessionsPerMonth: true,
+  recurrenceType: true,
+  recurrenceConfig: true,
+  defaultStartTime: true,
+  durationMinutes: true,
+  generateAppointments: true,
+  generatedUntil: true,
   status: true,
+  pausedAt: true,
   canceledAt: true,
   notes: true,
   createdAt: true,
   updatedAt: true,
-  client: {
-    select: {
-      id: true,
-      name: true
-    }
-  },
+  client: { select: { id: true, name: true } },
+  service: { select: serviceSelect },
+  professional: { select: professionalSelect },
   payments: {
-    select: {
-      month: true,
-      status: true,
-      paidAt: true,
-      amount: true,
-      manual: true
-    }
+    select: paymentSelect,
+    orderBy: [{ month: "desc" }]
   }
 };
 
 const pad = (value) => String(value).padStart(2, "0");
+const FIXED_BILLING_TYPES = new Set(["FIXED_MONTHLY", "PACKAGE_MONTHLY"]);
 
 function monthKey(value = todayString()) {
   return String(value).slice(0, 7);
@@ -61,8 +147,117 @@ function nextMonth(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 1);
 }
 
+function endOfMonthKey(month) {
+  return `${month}-${pad(monthEndDate(month))}`;
+}
+
+function normalizeEnum(value, map, fallback) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return map[normalized] || fallback;
+}
+
+function normalizeBillingType(value) {
+  return normalizeEnum(
+    value,
+    {
+      per_completed_session: "PER_COMPLETED_SESSION",
+      per_session: "PER_COMPLETED_SESSION",
+      attendance: "PER_COMPLETED_SESSION",
+      fixed_monthly: "FIXED_MONTHLY",
+      fixed: "FIXED_MONTHLY",
+      package_monthly: "PACKAGE_MONTHLY",
+      package: "PACKAGE_MONTHLY"
+    },
+    "FIXED_MONTHLY"
+  );
+}
+
+function normalizePriceMode(value, billingType) {
+  return normalizeEnum(
+    value,
+    {
+      service_price: "SERVICE_PRICE",
+      service: "SERVICE_PRICE",
+      custom_session_price: "CUSTOM_SESSION_PRICE",
+      custom: "CUSTOM_SESSION_PRICE",
+      monthly_price: "MONTHLY_PRICE",
+      monthly: "MONTHLY_PRICE"
+    },
+    billingType === "PER_COMPLETED_SESSION" ? "SERVICE_PRICE" : "MONTHLY_PRICE"
+  );
+}
+
+function normalizeRecurrenceType(value) {
+  return normalizeEnum(
+    value,
+    {
+      weekly: "WEEKLY",
+      semanal: "WEEKLY",
+      biweekly: "BIWEEKLY",
+      quinzenal: "BIWEEKLY",
+      monthly: "MONTHLY",
+      mensal: "MONTHLY",
+      weekdays: "WEEKDAYS",
+      week_days: "WEEKDAYS",
+      every_x_days: "EVERY_X_DAYS",
+      interval: "EVERY_X_DAYS",
+      manual_dates: "MANUAL_DATES",
+      manual: "MANUAL_DATES"
+    },
+    "WEEKLY"
+  );
+}
+
+function normalizePlanStatus(value) {
+  return normalizeEnum(
+    value,
+    {
+      active: "ACTIVE",
+      ativo: "ACTIVE",
+      paused: "PAUSED",
+      pausado: "PAUSED",
+      canceled: "CANCELED",
+      cancelado: "CANCELED"
+    },
+    "ACTIVE"
+  );
+}
+
+function normalizePaymentStatus(value) {
+  return normalizeEnum(
+    value,
+    {
+      paid: "PAID",
+      pago: "PAID",
+      pending: "PENDING",
+      pendente: "PENDING",
+      overdue: "OVERDUE",
+      atrasado: "OVERDUE",
+      canceled: "CANCELED",
+      cancelado: "CANCELED"
+    },
+    "PENDING"
+  );
+}
+
+function optionalDate(value, fieldName) {
+  if (!value) return null;
+  return parseDateOnly(String(value).slice(0, 10), fieldName);
+}
+
+function optionalPositiveInteger(value, fieldName, fallback = null) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return parsePositiveInteger(value, fieldName);
+}
+
+function isFixedBilling(plan) {
+  return FIXED_BILLING_TYPES.has(plan.billingType || "FIXED_MONTHLY");
+}
+
 function shouldIncludePlan(plan, month) {
+  if (!isFixedBilling(plan)) return false;
   if (month < monthKey(formatDate(plan.startDate))) return false;
+  if (plan.endDate && month > monthKey(formatDate(plan.endDate))) return false;
   if (plan.status === "CANCELED" && plan.canceledAt && month > monthKey(formatDate(plan.canceledAt))) return false;
   return true;
 }
@@ -70,23 +265,27 @@ function shouldIncludePlan(plan, month) {
 function cycleForMonth(plan, month) {
   const publicPlan = publicMonthlyPlan(plan);
   const payment = publicPlan.payments.find((item) => item.month === month);
-  const dueDate = dueDateForMonth(month, publicPlan.dueDay);
-  const status = payment?.status === "paid" ? "paid" : dueDate < todayString() ? "overdue" : "pending";
+  const dueDate = payment?.dueDate || dueDateForMonth(month, publicPlan.dueDay);
+  const rawStatus = payment?.status || "pending";
+  const status = rawStatus === "paid" || rawStatus === "canceled" ? rawStatus : dueDate < todayString() ? "overdue" : rawStatus;
 
   return {
-    id: `${publicPlan.id}_${month}`,
+    id: payment?.id || `${publicPlan.id}_${month}`,
     subscriptionId: publicPlan.id,
     clientId: publicPlan.clientId,
     clientName: publicPlan.clientName,
     planName: publicPlan.planName,
-    amount: payment?.amount || publicPlan.amount,
+    billingType: publicPlan.billingType,
+    amount: payment?.amount ?? publicPlan.monthlyPrice ?? publicPlan.amount,
     dueDay: publicPlan.dueDay,
     dueDate,
     month,
     status,
     paidAt: payment?.paidAt || "",
+    paymentMethod: payment?.paymentMethod || "",
+    notes: payment?.notes || "",
     subscriptionStatus: publicPlan.status,
-    notes: publicPlan.notes
+    planNotes: publicPlan.notes
   };
 }
 
@@ -110,13 +309,332 @@ function cyclesForRange(plans, startDate, endDate) {
   return cycles.sort((first, second) => `${second.dueDate}${second.clientName}`.localeCompare(`${first.dueDate}${first.clientName}`));
 }
 
-async function findPlan(userId, id) {
+async function findPlan(userId, id, includeAppointments = false) {
   const plan = await prisma.monthlyPlan.findFirst({
     where: { id, userId },
-    select: monthlyPlanSelect
+    select: includeAppointments
+      ? {
+          ...monthlyPlanSelect,
+          appointments: {
+            select: appointmentSelect,
+            orderBy: [{ startsAt: "desc" }],
+            take: 120
+          }
+        }
+      : monthlyPlanSelect
   });
-  if (!plan) throw new ApiError(404, "Mensalidade não encontrada.");
+  if (!plan) throw new ApiError(404, "Mensalidade nao encontrada.");
   return plan;
+}
+
+async function findClientOrFail(userId, clientId) {
+  const client = await prisma.client.findFirst({ where: { id: clientId, userId }, select: { id: true } });
+  if (!client) throw new ApiError(400, "Cliente invalido para esta mensalidade.");
+  return client;
+}
+
+async function findService(userId, serviceId) {
+  if (!serviceId) return null;
+  const service = await prisma.service.findFirst({
+    where: { id: serviceId, userId },
+    select: serviceSelect
+  });
+  if (!service) throw new ApiError(400, "Servico invalido para esta mensalidade.");
+  return service;
+}
+
+async function resolveProfessional(userId, professionalId) {
+  if (professionalId) {
+    const professional = await prisma.professional.findFirst({
+      where: { id: professionalId, userId },
+      select: professionalSelect
+    });
+    if (!professional) throw new ApiError(400, "Profissional invalido para esta mensalidade.");
+    return professional;
+  }
+
+  const professionals = await prisma.professional.findMany({
+    where: { userId, isActive: true },
+    select: professionalSelect,
+    orderBy: [{ createdAt: "asc" }],
+    take: 2
+  });
+
+  if (professionals.length === 1) return professionals[0];
+  if (professionals.length > 1) throw new ApiError(400, "Selecione um profissional responsavel para este mensalista.");
+  return null;
+}
+
+async function buildPlanDraft(userId, body, currentPlan = null) {
+  const clientId = requiredString(body.clientId ?? currentPlan?.clientId, "cliente");
+  await findClientOrFail(userId, clientId);
+
+  const billingType = normalizeBillingType(body.billingType ?? currentPlan?.billingType);
+  const service = await findService(userId, body.serviceId ?? currentPlan?.serviceId ?? "");
+  const shouldGenerate = parseBoolean(body.generateAppointments ?? currentPlan?.generateAppointments, false);
+
+  if (shouldGenerate && !service) {
+    throw new ApiError(400, "Selecione um servico para gerar atendimentos na agenda.");
+  }
+
+  const professional = await resolveProfessional(userId, body.professionalId ?? currentPlan?.professionalId ?? "");
+  if (shouldGenerate && !professional) {
+    throw new ApiError(400, "Cadastre um profissional antes de gerar atendimentos recorrentes.");
+  }
+
+  const priceMode = normalizePriceMode(body.priceMode ?? currentPlan?.priceMode, billingType);
+  const sessionsPerMonth = Math.max(1, optionalPositiveInteger(body.sessionsPerMonth ?? currentPlan?.sessionsPerMonth, "quantidade de atendimentos", 1));
+  const monthlyPrice = parsePositiveMoney(body.monthlyPrice ?? body.amount ?? currentPlan?.monthlyPrice ?? currentPlan?.amount ?? 0, "valor mensal");
+  const sessionPrice =
+    priceMode === "SERVICE_PRICE" && service
+      ? Number(service.priceDefault)
+      : parsePositiveMoney(body.sessionPrice ?? currentPlan?.sessionPrice ?? service?.priceDefault ?? monthlyPrice, "valor por atendimento");
+  const amount = billingType === "PER_COMPLETED_SESSION" ? Number((sessionPrice * sessionsPerMonth).toFixed(2)) : monthlyPrice;
+  const startDate = optionalDate(body.startDate ?? (currentPlan ? formatDate(currentPlan.startDate) : todayString()), "data de inicio");
+  const endDate = optionalDate(body.endDate ?? (currentPlan?.endDate ? formatDate(currentPlan.endDate) : ""), "data de fim");
+
+  if (endDate && endDate < startDate) {
+    throw new ApiError(400, "A data de fim precisa ser posterior a data de inicio.");
+  }
+
+  const recurrenceType = normalizeRecurrenceType(body.recurrenceType ?? currentPlan?.recurrenceType);
+  const recurrenceConfig = normalizeRecurrenceConfig({
+    recurrenceType,
+    recurrenceConfig: body.recurrenceConfig ?? currentPlan?.recurrenceConfig ?? {},
+    startDate
+  });
+  const durationMinutes =
+    optionalPositiveInteger(body.durationMinutes ?? currentPlan?.durationMinutes ?? service?.durationMinutes, "duracao", null) ||
+    service?.durationMinutes ||
+    60;
+  const defaultStartTime = body.defaultStartTime ?? currentPlan?.defaultStartTime ?? "";
+
+  if (shouldGenerate && !defaultStartTime) {
+    throw new ApiError(400, "Informe o horario padrao para gerar a agenda.");
+  }
+
+  return {
+    userId,
+    clientId,
+    serviceId: service?.id || null,
+    professionalId: professional?.id || null,
+    planName: requiredString(body.planName ?? currentPlan?.planName, "nome do plano", 2),
+    amount,
+    dueDay: Math.min(optionalPositiveInteger(body.dueDay ?? currentPlan?.dueDay, "dia de vencimento", 10), 31),
+    startDate,
+    endDate,
+    billingType,
+    priceMode,
+    monthlyPrice: billingType === "PER_COMPLETED_SESSION" ? null : monthlyPrice,
+    sessionPrice,
+    sessionsPerMonth,
+    recurrenceType,
+    recurrenceConfig,
+    defaultStartTime: defaultStartTime || null,
+    durationMinutes,
+    generateAppointments: shouldGenerate,
+    status: normalizePlanStatus(body.status ?? currentPlan?.status),
+    notes: optionalString(body.notes ?? currentPlan?.notes ?? ""),
+    service,
+    professional
+  };
+}
+
+function publicOccurrence(occurrence) {
+  return {
+    date: occurrence.date,
+    startTime: occurrence.startTime,
+    endTime: `${pad(occurrence.endsAt.getHours())}:${pad(occurrence.endsAt.getMinutes())}`,
+    startsAt: occurrence.startsAt,
+    endsAt: occurrence.endsAt,
+    month: occurrence.month
+  };
+}
+
+function appointmentKey(startsAt, endsAt) {
+  return `${startsAt.getTime()}_${endsAt.getTime()}`;
+}
+
+async function scheduleAnalysis({ userId, professionalId, occurrences, monthlyPlanId = "" }) {
+  if (!occurrences.length || !professionalId) return { conflicts: [], duplicates: new Set() };
+  const starts = occurrences.map((item) => item.startsAt.getTime());
+  const ends = occurrences.map((item) => item.endsAt.getTime());
+  const rangeStart = new Date(Math.min(...starts));
+  const rangeEnd = new Date(Math.max(...ends));
+
+  const existing = await prisma.appointment.findMany({
+    where: {
+      userId,
+      professionalId,
+      status: { not: "CANCELED" },
+      startsAt: { lt: rangeEnd },
+      endsAt: { gt: rangeStart }
+    },
+    select: {
+      id: true,
+      monthlyPlanId: true,
+      startsAt: true,
+      endsAt: true,
+      client: { select: { name: true } },
+      service: { select: { name: true } },
+      professional: { select: { name: true } }
+    }
+  });
+
+  const conflicts = [];
+  const duplicates = new Set();
+
+  occurrences.forEach((occurrence) => {
+    const duplicate = existing.find(
+      (appointment) =>
+        monthlyPlanId &&
+        appointment.monthlyPlanId === monthlyPlanId &&
+        appointment.startsAt.getTime() === occurrence.startsAt.getTime()
+    );
+    if (duplicate) {
+      duplicates.add(appointmentKey(occurrence.startsAt, occurrence.endsAt));
+      return;
+    }
+
+    const conflict = existing.find(
+      (appointment) => appointment.startsAt < occurrence.endsAt && appointment.endsAt > occurrence.startsAt
+    );
+    if (conflict) {
+      conflicts.push({
+        ...publicOccurrence(occurrence),
+        conflict: {
+          id: conflict.id,
+          clientName: conflict.client?.name || "",
+          serviceName: conflict.service?.name || "",
+          professionalName: conflict.professional?.name || ""
+        }
+      });
+    }
+  });
+
+  return { conflicts, duplicates };
+}
+
+async function generateAppointmentsForPlan(plan, options = {}) {
+  if (!plan.serviceId || !plan.professionalId) {
+    throw new ApiError(400, "Mensalidade sem servico ou profissional nao pode gerar agenda.");
+  }
+
+  const startDate =
+    options.startDate ||
+    (plan.generatedUntil
+      ? formatDate(addMinutes(parseDateOnly(formatDate(plan.generatedUntil)), 24 * 60))
+      : formatDate(plan.startDate));
+  const endDate = options.endDate || generationEndDateFromMonths(startDate, options.months || 1);
+  const occurrences = buildMonthlyPlanOccurrences(plan, { startDate, endDate, months: options.months || 1 });
+  const { conflicts, duplicates } = await scheduleAnalysis({
+    userId: plan.userId,
+    professionalId: plan.professionalId,
+    occurrences,
+    monthlyPlanId: plan.id
+  });
+  const conflictKeys = new Set(conflicts.map((item) => appointmentKey(new Date(item.startsAt), new Date(item.endsAt))));
+  const skipConflicts = parseBoolean(options.skipConflicts, true);
+
+  if (conflicts.length && !skipConflicts) {
+    throw new ApiError(409, "Existem conflitos de horario antes de gerar a agenda.", {
+      code: "MONTHLY_PLAN_CONFLICTS",
+      conflicts
+    });
+  }
+
+  const available = occurrences.filter((occurrence) => {
+    const key = appointmentKey(occurrence.startsAt, occurrence.endsAt);
+    return !duplicates.has(key) && !conflictKeys.has(key);
+  });
+
+  if (available.length) {
+    const sessionPrice = plan.billingType === "PER_COMPLETED_SESSION" ? Number(plan.sessionPrice || plan.amount || 0) : 0;
+    await prisma.appointment.createMany({
+      data: available.map((occurrence) => ({
+        userId: plan.userId,
+        clientId: plan.clientId,
+        serviceId: plan.serviceId,
+        professionalId: plan.professionalId,
+        monthlyPlanId: plan.id,
+        startsAt: occurrence.startsAt,
+        endsAt: occurrence.endsAt,
+        durationMinutes: plan.durationMinutes || null,
+        price: sessionPrice,
+        notes: plan.notes ? `Mensalidade: ${plan.planName}\n${plan.notes}` : `Mensalidade: ${plan.planName}`,
+        status: "SCHEDULED"
+      })),
+      skipDuplicates: true
+    });
+
+    const generatedAppointments = await prisma.appointment.findMany({
+      where: {
+        userId: plan.userId,
+        monthlyPlanId: plan.id,
+        startsAt: { in: available.map((item) => item.startsAt) }
+      },
+      select: {
+        id: true,
+        userId: true,
+        startsAt: true,
+        status: true
+      }
+    });
+
+    for (const appointment of generatedAppointments) {
+      await syncAppointmentReminders(appointment);
+    }
+  }
+
+  const generatedUntil = available.length ? available[available.length - 1].startsAt : plan.generatedUntil;
+  if (generatedUntil) {
+    await prisma.monthlyPlan.update({
+      where: { id: plan.id },
+      data: { generatedUntil }
+    });
+  }
+
+  return {
+    generatedCount: available.length,
+    skippedCount: conflicts.length + duplicates.size,
+    conflicts,
+    duplicatesCount: duplicates.size,
+    startDate,
+    endDate
+  };
+}
+
+async function appointmentsForPlans(userId, planIds, startDate, endDate) {
+  if (!planIds.length) return [];
+  return prisma.appointment.findMany({
+    where: {
+      userId,
+      monthlyPlanId: { in: planIds },
+      startsAt: { gte: parseDateOnly(startDate), lt: addMinutes(parseDateOnly(endDate), 24 * 60) }
+    },
+    select: appointmentSelect,
+    orderBy: [{ startsAt: "asc" }]
+  });
+}
+
+function attachMonthMetrics(plans, appointments) {
+  const grouped = new Map();
+  appointments.forEach((appointment) => {
+    const list = grouped.get(appointment.monthlyPlanId) || [];
+    list.push(publicAppointment(appointment));
+    grouped.set(appointment.monthlyPlanId, list);
+  });
+
+  return plans.map((plan) => {
+    const sessions = grouped.get(plan.id) || [];
+    return {
+      ...publicMonthlyPlan(plan),
+      monthSessions: sessions.length,
+      completedSessions: sessions.filter((appointment) => appointment.status === "concluido").length,
+      scheduledSessions: sessions.filter((appointment) => appointment.status === "agendado").length,
+      nextSessions: sessions.filter((appointment) => appointment.status === "agendado").slice(0, 3)
+    };
+  });
 }
 
 router.get(
@@ -125,6 +643,8 @@ router.get(
     const month = monthKey(req.query.month || req.query.endDate || todayString());
     const includeCycles = req.query.includeCycles === "true";
     const includeSummary = req.query.includeSummary === "true";
+    const startDate = req.query.startDate || `${month}-01`;
+    const endDate = req.query.endDate || endOfMonthKey(month);
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
@@ -133,102 +653,247 @@ router.get(
     const plans = await prisma.monthlyPlan.findMany({
       where: {
         userId: req.user.id,
-        ...(req.query.status ? { status: req.query.status === "canceled" ? "CANCELED" : "ACTIVE" } : {})
+        ...(req.query.status ? { status: normalizePlanStatus(req.query.status) } : {}),
+        ...(req.query.billingType ? { billingType: normalizeBillingType(req.query.billingType) } : {}),
+        ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {}),
+        ...(req.query.professionalId ? { professionalId: String(req.query.professionalId) } : {})
       },
-      ...(!includeCycles && !includeSummary && pagination.enabled
-        ? { skip: pagination.skip, take: pagination.take }
-        : {}),
+      ...(!includeCycles && !includeSummary && pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       select: monthlyPlanSelect,
       orderBy: [{ createdAt: "desc" }]
     });
 
     if (includeCycles) {
-      const startDate = req.query.startDate || `${month}-01`;
-      const endDate = req.query.endDate || `${month}-${pad(monthEndDate(month))}`;
       return res.json({ cycles: cyclesForRange(plans, startDate, endDate) });
     }
 
+    const monthAppointments = await appointmentsForPlans(
+      req.user.id,
+      plans.map((plan) => plan.id),
+      startDate,
+      endDate
+    );
+
     if (includeSummary) {
-      const startDate = `${month}-01`;
-      const endDate = `${month}-${pad(monthEndDate(month))}`;
       const cycles = cyclesForRange(plans, startDate, endDate);
+      const perSessionAppointments = monthAppointments.filter(
+        (appointment) => appointment.monthlyPlan?.billingType === "PER_COMPLETED_SESSION" && appointment.status !== "CANCELED"
+      );
+      const completedPerSessionAppointments = perSessionAppointments.filter((appointment) => appointment.status === "COMPLETED");
+      const expectedFromSessions = perSessionAppointments.reduce((total, appointment) => total + Number(appointment.price || 0), 0);
+      const receivedFromSessions = completedPerSessionAppointments.reduce((total, appointment) => total + Number(appointment.price || 0), 0);
+      const expectedFromFixed = cycles.reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
+      const receivedFromFixed = cycles
+        .filter((cycle) => cycle.status === "paid")
+        .reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
+
       return res.json({
         summary: {
           activeCount: plans.filter((plan) => plan.status === "ACTIVE").length,
+          pausedCount: plans.filter((plan) => plan.status === "PAUSED").length,
+          sessionsExpected: monthAppointments.filter((appointment) => appointment.status !== "CANCELED").length,
+          sessionsCompleted: monthAppointments.filter((appointment) => appointment.status === "COMPLETED").length,
           pending: cycles.filter((cycle) => cycle.status === "pending").length,
           overdue: cycles.filter((cycle) => cycle.status === "overdue").length,
           paid: cycles.filter((cycle) => cycle.status === "paid").length,
-          expected: cycles.reduce((total, cycle) => total + Number(cycle.amount || 0), 0),
-          received: cycles.filter((cycle) => cycle.status === "paid").reduce((total, cycle) => total + Number(cycle.amount || 0), 0),
+          expected: expectedFromFixed + expectedFromSessions,
+          received: receivedFromFixed + receivedFromSessions,
+          pendingAmount: Math.max(expectedFromFixed + expectedFromSessions - receivedFromFixed - receivedFromSessions, 0),
           cycles
         }
       });
     }
 
-    const publicPlans = plans.map((plan) => ({
-      ...publicMonthlyPlan(plan),
-      currentCycle: shouldIncludePlan(plan, month) ? cycleForMonth(plan, month) : null
+    const publicPlans = attachMonthMetrics(plans, monthAppointments).map((plan) => ({
+      ...plan,
+      currentCycle: shouldIncludePlan(plans.find((item) => item.id === plan.id), month)
+        ? cycleForMonth(plans.find((item) => item.id === plan.id), month)
+        : null
     }));
 
     res.json({ monthlyPlans: publicPlans });
   })
 );
 
+router.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const plan = await findPlan(req.user.id, req.params.id, true);
+    res.json({ monthlyPlan: publicMonthlyPlan(plan) });
+  })
+);
+
+router.post(
+  "/preview",
+  asyncHandler(async (req, res) => {
+    const draft = await buildPlanDraft(req.user.id, req.body);
+    const endDate = req.body.previewEndDate || generationEndDateFromMonths(formatDate(draft.startDate), req.body.generationMonths || 1);
+    const occurrences = buildMonthlyPlanOccurrences(draft, { startDate: formatDate(draft.startDate), endDate });
+    const analysis = await scheduleAnalysis({
+      userId: req.user.id,
+      professionalId: draft.professionalId,
+      occurrences
+    });
+    const conflictKeys = new Set(analysis.conflicts.map((item) => appointmentKey(new Date(item.startsAt), new Date(item.endsAt))));
+
+    res.json({
+      preview: occurrences.map((occurrence) => ({
+        ...publicOccurrence(occurrence),
+        hasConflict: conflictKeys.has(appointmentKey(occurrence.startsAt, occurrence.endsAt))
+      })),
+      conflicts: analysis.conflicts,
+      availableCount: occurrences.length - analysis.conflicts.length
+    });
+  })
+);
+
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const clientId = requiredString(req.body.clientId, "cliente");
-    const client = await prisma.client.findFirst({ where: { id: clientId, userId: req.user.id }, select: { id: true } });
-    if (!client) throw new ApiError(400, "Cliente inválido para esta mensalidade.");
-
-    const amount = parsePositiveMoney(req.body.amount, "valor mensal");
-    const startDate = parseDateOnly(requiredString(req.body.startDate, "data de início"));
-    const plan = await prisma.monthlyPlan.create({
-      data: {
-        userId: req.user.id,
-        clientId,
-        planName: requiredString(req.body.planName, "nome do plano", 2),
-        amount,
-        dueDay: Math.min(parsePositiveInteger(req.body.dueDay, "dia de vencimento"), 31),
-        startDate,
-        status: req.body.status === "canceled" ? "CANCELED" : "ACTIVE",
-        notes: optionalString(req.body.notes),
-        payments: {
-          create: {
-            month: monthKey(formatDate(startDate)),
-            status: "PENDING",
-            amount
-          }
-        }
-      },
-      select: monthlyPlanSelect
+    const draft = await buildPlanDraft(req.user.id, req.body);
+    const shouldCreateFirstPayment = isFixedBilling(draft);
+    const firstMonth = monthKey(formatDate(draft.startDate));
+    const result = await prisma.$transaction(async (tx) => {
+      const plan = await tx.monthlyPlan.create({
+        data: {
+          userId: req.user.id,
+          clientId: draft.clientId,
+          serviceId: draft.serviceId,
+          professionalId: draft.professionalId,
+          planName: draft.planName,
+          amount: draft.amount,
+          dueDay: draft.dueDay,
+          startDate: draft.startDate,
+          endDate: draft.endDate,
+          billingType: draft.billingType,
+          priceMode: draft.priceMode,
+          monthlyPrice: draft.monthlyPrice,
+          sessionPrice: draft.sessionPrice,
+          sessionsPerMonth: draft.sessionsPerMonth,
+          recurrenceType: draft.recurrenceType,
+          recurrenceConfig: draft.recurrenceConfig,
+          defaultStartTime: draft.defaultStartTime,
+          durationMinutes: draft.durationMinutes,
+          generateAppointments: draft.generateAppointments,
+          status: draft.status,
+          pausedAt: draft.status === "PAUSED" ? new Date() : null,
+          canceledAt: draft.status === "CANCELED" ? new Date() : null,
+          notes: draft.notes,
+          ...(shouldCreateFirstPayment
+            ? {
+                payments: {
+                  create: {
+                    month: firstMonth,
+                    status: "PENDING",
+                    dueDate: parseDateOnly(dueDateForMonth(firstMonth, draft.dueDay)),
+                    amount: draft.monthlyPrice || draft.amount
+                  }
+                }
+              }
+            : {})
+        },
+        select: monthlyPlanSelect
+      });
+      return plan;
     });
 
-    res.status(201).json({ monthlyPlan: publicMonthlyPlan(plan) });
+    const generation = draft.generateAppointments
+      ? await generateAppointmentsForPlan(result, {
+          startDate: formatDate(draft.startDate),
+          months: req.body.generationMonths || 1,
+          skipConflicts: req.body.skipConflicts !== false
+        })
+      : null;
+
+    const plan = await findPlan(req.user.id, result.id);
+    res.status(201).json({ monthlyPlan: publicMonthlyPlan(plan), generation });
   })
 );
 
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findPlan(req.user.id, req.params.id);
-    const amount = parsePositiveMoney(req.body.amount, "valor mensal");
+    const current = await findPlan(req.user.id, req.params.id);
+    const draft = await buildPlanDraft(req.user.id, req.body, current);
 
     const plan = await prisma.monthlyPlan.update({
       where: { id: req.params.id },
       data: {
-        clientId: requiredString(req.body.clientId, "cliente"),
-        planName: requiredString(req.body.planName, "nome do plano", 2),
-        amount,
-        dueDay: Math.min(parsePositiveInteger(req.body.dueDay, "dia de vencimento"), 31),
-        startDate: parseDateOnly(requiredString(req.body.startDate, "data de início")),
-        status: req.body.status === "canceled" ? "CANCELED" : "ACTIVE",
-        notes: optionalString(req.body.notes)
+        clientId: draft.clientId,
+        serviceId: draft.serviceId,
+        professionalId: draft.professionalId,
+        planName: draft.planName,
+        amount: draft.amount,
+        dueDay: draft.dueDay,
+        startDate: draft.startDate,
+        endDate: draft.endDate,
+        billingType: draft.billingType,
+        priceMode: draft.priceMode,
+        monthlyPrice: draft.monthlyPrice,
+        sessionPrice: draft.sessionPrice,
+        sessionsPerMonth: draft.sessionsPerMonth,
+        recurrenceType: draft.recurrenceType,
+        recurrenceConfig: draft.recurrenceConfig,
+        defaultStartTime: draft.defaultStartTime,
+        durationMinutes: draft.durationMinutes,
+        generateAppointments: draft.generateAppointments,
+        status: draft.status,
+        pausedAt: draft.status === "PAUSED" ? current.pausedAt || new Date() : null,
+        canceledAt: draft.status === "CANCELED" ? current.canceledAt || new Date() : null,
+        notes: draft.notes
       },
       select: monthlyPlanSelect
     });
 
     res.json({ monthlyPlan: publicMonthlyPlan(plan) });
+  })
+);
+
+router.post(
+  "/:id/generate",
+  asyncHandler(async (req, res) => {
+    const plan = await findPlan(req.user.id, req.params.id);
+    if (plan.status === "CANCELED") throw new ApiError(400, "Mensalidade cancelada nao pode gerar agenda.");
+
+    const generation = await generateAppointmentsForPlan(plan, {
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      months: req.body.generationMonths || 1,
+      skipConflicts: req.body.skipConflicts !== false
+    });
+    const updated = await findPlan(req.user.id, req.params.id);
+    res.json({ monthlyPlan: publicMonthlyPlan(updated), generation });
+  })
+);
+
+router.post(
+  "/:id/cancel-future-appointments",
+  asyncHandler(async (req, res) => {
+    const plan = await findPlan(req.user.id, req.params.id);
+    const fromDate = optionalDate(req.body.fromDate || todayString(), "data inicial");
+    const result = await prisma.appointment.updateMany({
+      where: {
+        userId: req.user.id,
+        monthlyPlanId: plan.id,
+        status: "SCHEDULED",
+        startsAt: { gte: fromDate }
+      },
+      data: { status: "CANCELED" }
+    });
+
+    const reminders = await prisma.appointment.findMany({
+      where: {
+        userId: req.user.id,
+        monthlyPlanId: plan.id,
+        startsAt: { gte: fromDate }
+      },
+      select: { id: true, userId: true, startsAt: true, status: true }
+    });
+    for (const appointment of reminders) {
+      await syncAppointmentReminders(appointment);
+    }
+
+    res.json({ canceledCount: result.count });
   })
 );
 
@@ -249,8 +914,15 @@ router.post(
   "/:id/payments",
   asyncHandler(async (req, res) => {
     const plan = await findPlan(req.user.id, req.params.id);
+    if (!isFixedBilling(plan)) {
+      throw new ApiError(400, "Pagamentos por competencia sao usados apenas em planos mensais fixos ou pacotes.");
+    }
+
     const month = monthKey(req.body.month || todayString());
-    const status = req.body.status === "paid" ? "PAID" : "PENDING";
+    const status = normalizePaymentStatus(req.body.status);
+    const amount = parsePositiveMoney(req.body.amount ?? plan.monthlyPrice ?? plan.amount, "valor");
+    const dueDate = optionalDate(req.body.dueDate || dueDateForMonth(month, plan.dueDay), "data de vencimento");
+    const paidAt = status === "PAID" ? optionalDate(req.body.paidAt || todayString(), "data de pagamento") : null;
 
     const payment = await prisma.monthlyPlanPayment.upsert({
       where: { monthlyPlanId_month: { monthlyPlanId: plan.id, month } },
@@ -258,23 +930,23 @@ router.post(
         monthlyPlanId: plan.id,
         month,
         status,
-        paidAt: status === "PAID" ? new Date() : null,
-        amount: plan.amount,
-        manual: status !== "PAID"
+        dueDate,
+        paidAt,
+        amount,
+        paymentMethod: optionalString(req.body.paymentMethod),
+        notes: optionalString(req.body.notes),
+        manual: true
       },
       update: {
         status,
-        paidAt: status === "PAID" ? new Date() : null,
-        amount: plan.amount,
-        manual: status !== "PAID"
-      },
-      select: {
-        month: true,
-        status: true,
-        paidAt: true,
-        amount: true,
+        dueDate,
+        paidAt,
+        amount,
+        paymentMethod: optionalString(req.body.paymentMethod),
+        notes: optionalString(req.body.notes),
         manual: true
-      }
+      },
+      select: paymentSelect
     });
 
     const updatedPlan = {

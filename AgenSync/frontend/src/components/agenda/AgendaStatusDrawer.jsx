@@ -26,6 +26,9 @@ export default function AgendaStatusDrawer({
   onSendReminder,
   onConfirmAttendance,
   onSendCancellation,
+  onViewMonthlyPlan,
+  onEditMonthlyPlan,
+  onCancelFutureMonthlyAppointments,
   onSaveStatus,
   onDelete
 }) {
@@ -135,6 +138,30 @@ export default function AgendaStatusDrawer({
               </Button>
             </div>
           </section>
+
+          {appointment.monthlyPlan ? (
+            <section className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <p className="text-xs font-black uppercase text-brand">Mensalidade recorrente</p>
+              <h3 className="mt-2 text-base font-black text-ink">Este atendimento faz parte de uma mensalidade.</h3>
+              <p className="mt-1 text-sm font-bold leading-6 text-muted">{appointment.monthlyPlan.planName}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <Button variant="secondary" onClick={() => onViewMonthlyPlan?.(appointment.monthlyPlan)} disabled={saving}>
+                  Ver mensalidade
+                </Button>
+                <Button variant="secondary" onClick={() => onEditMonthlyPlan?.(appointment.monthlyPlan)} disabled={saving}>
+                  Editar recorrencia
+                </Button>
+                <Button
+                  variant="danger"
+                  className="sm:col-span-2"
+                  onClick={() => onCancelFutureMonthlyAppointments?.(appointment)}
+                  disabled={saving}
+                >
+                  Cancelar proximos atendimentos
+                </Button>
+              </div>
+            </section>
+          ) : null}
 
           <section className="mt-4 rounded-2xl border border-line bg-white p-4">
             <div className="flex items-start justify-between gap-3">

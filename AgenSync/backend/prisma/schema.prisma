@@ -21,12 +21,36 @@ enum ExpenseRecurrence {
 
 enum MonthlyPlanStatus {
   ACTIVE
+  PAUSED
   CANCELED
 }
 
 enum MonthlyPaymentStatus {
   PENDING
   PAID
+  OVERDUE
+  CANCELED
+}
+
+enum MonthlyBillingType {
+  PER_COMPLETED_SESSION
+  FIXED_MONTHLY
+  PACKAGE_MONTHLY
+}
+
+enum MonthlyPriceMode {
+  SERVICE_PRICE
+  CUSTOM_SESSION_PRICE
+  MONTHLY_PRICE
+}
+
+enum MonthlyRecurrenceType {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  WEEKDAYS
+  EVERY_X_DAYS
+  MANUAL_DATES
 }
 
 enum UserRole {
@@ -270,19 +294,40 @@ model MonthlyPlan {
   user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId   String
   client     Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId  String?
+  service    Service?             @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  professionalId String?
+  professional Professional?      @relation(fields: [professionalId], references: [id], onDelete: SetNull)
   planName   String
   amount     Decimal              @db.Decimal(10, 2)
   dueDay     Int
   startDate  DateTime
+  endDate    DateTime?
+  billingType MonthlyBillingType  @default(FIXED_MONTHLY)
+  priceMode  MonthlyPriceMode     @default(MONTHLY_PRICE)
+  monthlyPrice Decimal?           @db.Decimal(10, 2)
+  sessionPrice Decimal?           @db.Decimal(10, 2)
+  sessionsPerMonth Int            @default(1)
+  recurrenceType MonthlyRecurrenceType @default(MONTHLY)
+  recurrenceConfig Json           @default("{}")
+  defaultStartTime String?
+  durationMinutes Int?
+  generateAppointments Boolean    @default(false)
+  generatedUntil DateTime?
   status     MonthlyPlanStatus    @default(ACTIVE)
+  pausedAt   DateTime?
   canceledAt DateTime?
   notes      String?
   payments   MonthlyPlanPayment[]
+  appointments Appointment[]
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
   @@index([userId, status])
   @@index([userId, clientId])
+  @@index([userId, serviceId])
+  @@index([userId, professionalId])
+  @@index([userId, billingType])
   @@index([userId, startDate])
   @@index([userId, status, createdAt])
   @@index([userId, createdAt])
@@ -294,14 +339,18 @@ model MonthlyPlanPayment {
   monthlyPlan   MonthlyPlan          @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
   month         String
   status        MonthlyPaymentStatus @default(PENDING)
+  dueDate       DateTime?
   paidAt        DateTime?
   amount        Decimal              @db.Decimal(10, 2)
+  paymentMethod String?
+  notes         String?
   manual        Boolean              @default(false)
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
   @@unique([monthlyPlanId, month])
   @@index([month, status])
+  @@index([dueDate, status])
 }
 
 model ClientCareRecord {
@@ -327,6 +376,7 @@ model Service {
   durationMinutes Int
   isActive        Boolean       @default(true)
   appointments    Appointment[]
+  monthlyPlans    MonthlyPlan[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -347,6 +397,7 @@ model Professional {
   monthlyGoal  Decimal?      @db.Decimal(10, 2)
   isActive     Boolean       @default(true)
   appointments Appointment[]
+  monthlyPlans MonthlyPlan[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -368,6 +419,8 @@ model Appointment {
   service         Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   professionalId  String?
   professional    Professional?     @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  monthlyPlanId   String?
+  monthlyPlan     MonthlyPlan?      @relation(fields: [monthlyPlanId], references: [id], onDelete: SetNull)
   startsAt        DateTime
   endsAt          DateTime
   durationMinutes Int?
@@ -382,6 +435,7 @@ model Appointment {
   @@index([userId, status, startsAt])
   @@index([userId, clientId])
   @@index([userId, professionalId, startsAt])
+  @@index([userId, monthlyPlanId, startsAt])
   @@index([userId, createdAt])
 }
 

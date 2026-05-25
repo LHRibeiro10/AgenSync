@@ -26,6 +26,7 @@ import {
   DEFAULT_REMINDER_MESSAGE
 } from "../services/appointmentWhatsApp.js";
 import { getNotificationSettings } from "../services/notificationService.js";
+import { cancelFutureSubscriptionAppointments } from "../services/subscriptions.js";
 import { todayInputValue } from "../utils.js";
 
 const workingHoursStorageKey = "agensync_working_hours_v1";
@@ -132,6 +133,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingCancelFuturePlan, setPendingCancelFuturePlan] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusSaving, setStatusSaving] = useState(false);
@@ -299,6 +301,11 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
     setWhatsAppAction({ mode, appointment });
   }
 
+  function openMonthlyPlan(plan) {
+    if (!plan?.id) return;
+    navigate(`/mensalidades?plano=${plan.id}`);
+  }
+
   function createAppointment(date, startTime) {
     navigate(`/agendamentos?data=${date}&hora=${startTime}`, {
       state: { prefill: { date, startTime } }
@@ -350,6 +357,28 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
       if (selectedAppointment?.id === pendingDelete.id) setSelectedAppointment(null);
       setPendingDelete(null);
       showToast("Agendamento excluído.");
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function confirmCancelFutureMonthlyAppointments() {
+    if (!pendingCancelFuturePlan?.appointment?.monthlyPlanId) return;
+
+    setStatusSaving(true);
+    setError("");
+
+    try {
+      const result = await cancelFutureSubscriptionAppointments(pendingCancelFuturePlan.appointment.monthlyPlanId, {
+        fromDate: pendingCancelFuturePlan.appointment.date || todayInputValue()
+      });
+      setPendingCancelFuturePlan(null);
+      setSelectedAppointment(null);
+      setReloadKey((current) => current + 1);
+      showToast(`${result.canceledCount || 0} atendimento(s) futuro(s) cancelado(s).`);
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
@@ -533,6 +562,9 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
         onSendReminder={(appointment) => openWhatsAppAction("reminder", appointment)}
         onConfirmAttendance={(appointment) => openWhatsAppAction("confirmation", appointment)}
         onSendCancellation={(appointment) => openWhatsAppAction("cancellation", appointment)}
+        onViewMonthlyPlan={openMonthlyPlan}
+        onEditMonthlyPlan={openMonthlyPlan}
+        onCancelFutureMonthlyAppointments={(appointment) => setPendingCancelFuturePlan({ appointment })}
         onSaveStatus={saveAppointmentStatus}
         onDelete={setPendingDelete}
       />
@@ -559,6 +591,20 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
         danger
         onConfirm={confirmDeleteAppointment}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingCancelFuturePlan)}
+        title="Cancelar próximos atendimentos?"
+        description={
+          pendingCancelFuturePlan
+            ? "Os agendamentos futuros desta mensalidade serão cancelados, sem alterar atendimentos já concluídos."
+            : ""
+        }
+        confirmLabel="Cancelar futuros"
+        danger
+        onConfirm={confirmCancelFutureMonthlyAppointments}
+        onCancel={() => setPendingCancelFuturePlan(null)}
       />
     </div>
   );

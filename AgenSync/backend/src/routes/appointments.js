@@ -50,6 +50,7 @@ const appointmentSelect = {
   clientId: true,
   serviceId: true,
   professionalId: true,
+  monthlyPlanId: true,
   startsAt: true,
   endsAt: true,
   price: true,
@@ -59,7 +60,15 @@ const appointmentSelect = {
   updatedAt: true,
   client: { select: clientSelect },
   service: { select: serviceSelect },
-  professional: { select: professionalSelect }
+  professional: { select: professionalSelect },
+  monthlyPlan: {
+    select: {
+      id: true,
+      planName: true,
+      billingType: true,
+      status: true
+    }
+  }
 };
 
 async function findAppointmentOrFail(userId, id) {
@@ -130,6 +139,7 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
       clientId: true,
       serviceId: true,
       professionalId: true,
+      monthlyPlanId: true,
       startsAt: true,
       endsAt: true,
       price: true,
@@ -139,7 +149,8 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
       updatedAt: true,
       client: { select: { name: true } },
       service: { select: { id: true, name: true, priceDefault: true, durationMinutes: true, isActive: true } },
-      professional: { select: { name: true } }
+      professional: { select: { name: true } },
+      monthlyPlan: { select: { id: true, planName: true, billingType: true, status: true } }
     }
   });
 

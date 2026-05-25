@@ -1,8 +1,12 @@
 import {
   cancelMonthlyPlanApi,
+  cancelFutureMonthlyPlanAppointmentsApi,
   createMonthlyPlanApi,
+  generateMonthlyPlanAppointmentsApi,
+  getMonthlyPlanApi,
   listMonthlyPlansApi,
   markMonthlyPlanPaymentApi,
+  previewMonthlyPlanScheduleApi,
   updateMonthlyPlanApi
 } from "../api/modules/monthlyPlansApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
@@ -22,6 +26,7 @@ export function subscriptionStatusLabel(status) {
   if (status === "paid") return "Pago";
   if (status === "overdue") return "Atrasado";
   if (status === "canceled") return "Cancelada";
+  if (status === "paused") return "Pausada";
   return "Pendente";
 }
 
@@ -41,6 +46,14 @@ export async function listSubscriptions(filters = {}) {
     remote: () => listMonthlyPlansApi(filters)
   });
   return asList(response, "monthlyPlans");
+}
+
+export async function getSubscription(subscriptionId) {
+  const response = await executeDataSource({
+    feature: "subscriptions.monthlyPlans.get",
+    remote: () => getMonthlyPlanApi(subscriptionId)
+  });
+  return asItem(response, "monthlyPlan");
 }
 
 export async function listSubscriptionCycles(filters = {}) {
@@ -71,6 +84,13 @@ export async function createSubscription(payload) {
   return asItem(response, "monthlyPlan");
 }
 
+export async function previewSubscriptionSchedule(payload) {
+  return executeDataSource({
+    feature: "subscriptions.monthlyPlans.preview",
+    remote: () => previewMonthlyPlanScheduleApi(payload)
+  });
+}
+
 export async function updateSubscription(subscriptionId, payload) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.update",
@@ -87,10 +107,25 @@ export async function cancelSubscription(subscriptionId) {
   return asItem(response, "monthlyPlan");
 }
 
-export async function markSubscriptionPayment(subscriptionId, month, status) {
+export async function generateSubscriptionAppointments(subscriptionId, payload) {
+  const response = await executeDataSource({
+    feature: "subscriptions.monthlyPlans.generate",
+    remote: () => generateMonthlyPlanAppointmentsApi(subscriptionId, payload)
+  });
+  return response;
+}
+
+export async function cancelFutureSubscriptionAppointments(subscriptionId, payload = {}) {
+  return executeDataSource({
+    feature: "subscriptions.monthlyPlans.cancelFutureAppointments",
+    remote: () => cancelFutureMonthlyPlanAppointmentsApi(subscriptionId, payload)
+  });
+}
+
+export async function markSubscriptionPayment(subscriptionId, month, status, extra = {}) {
   const response = await executeDataSource({
     feature: "subscriptions.monthlyPlans.payments",
-    remote: () => markMonthlyPlanPaymentApi(subscriptionId, { month, status })
+    remote: () => markMonthlyPlanPaymentApi(subscriptionId, { month, status, ...extra })
   });
   return asItem(response, "cycle");
 }
