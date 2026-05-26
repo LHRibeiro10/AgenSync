@@ -8,6 +8,17 @@ export const endpoints = Object.freeze({
     resetPassword: "/auth/reset-password",
     deleteAccount: "/auth/me"
   },
+  workspace: {
+    members: "/workspace/members",
+    memberById: (id) => `/workspace/members/${id}`,
+    disableMember: (id) => `/workspace/members/${id}/disable`,
+    enableMember: (id) => `/workspace/members/${id}/enable`,
+    invites: "/workspace/invites",
+    inviteById: (id) => `/workspace/invites/${id}`,
+    cancelInvite: (id) => `/workspace/invites/${id}/cancel`,
+    validateInvite: (token) => `/workspace/invites/validate/${encodeURIComponent(token)}`,
+    acceptInvite: "/workspace/invites/accept"
+  },
   onboarding: {
     status: "/onboarding/status",
     business: "/onboarding/business",

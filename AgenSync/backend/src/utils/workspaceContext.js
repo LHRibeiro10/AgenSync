@@ -158,12 +158,27 @@ export async function resolveWorkspaceContext(user, options = {}) {
         orderBy: [{ role: "asc" }, { createdAt: "asc" }]
       }));
 
-    if (requestedWorkspaceId && !member) {
+    if (member?.workspace) {
+      return { workspace: member.workspace, member, legacy: false };
+    }
+
+    if (requestedWorkspaceId) {
+      const inactiveMember = await prisma.workspaceMember.findFirst({
+        where: { userId: user.id, workspaceId: requestedWorkspaceId },
+        select: { status: true }
+      });
+      if (inactiveMember) {
+        throw new ApiError(403, "Seu acesso a este workspace esta inativo.");
+      }
       throw new ApiError(403, "Voce nao faz parte deste workspace.");
     }
 
-    if (member?.workspace) {
-      return { workspace: member.workspace, member, legacy: false };
+    const inactiveMember = await prisma.workspaceMember.findFirst({
+      where: { userId: user.id },
+      select: { status: true }
+    });
+    if (inactiveMember) {
+      throw new ApiError(403, "Seu acesso a este workspace esta inativo.");
     }
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -197,6 +212,15 @@ export async function ensureDefaultWorkspaceForUser(user, client = prisma) {
         });
         return { ...user, currentWorkspaceId: existingMember.workspaceId };
       }
+      return user;
+    }
+
+    const inactiveMember = await client.workspaceMember.findFirst({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+
+    if (inactiveMember) {
       return user;
     }
 

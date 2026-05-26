@@ -30,8 +30,15 @@ const defaultWorkspacePermissions = {
   canManageClients: true,
   canManageServices: true,
   canViewGeneralFinance: true,
+  canManageTeamSchedule: true,
+  canViewReports: true,
+  canExportReports: true,
   canManageProducts: true,
   canManageInventory: true,
+  canManageDocuments: true,
+  canManageBudgets: true,
+  canManageSubscriptions: true,
+  canViewTeamGoals: true,
   canCreateSales: true,
   canViewSalesReports: true
 };
@@ -54,8 +61,15 @@ const professionalPermissions = {
   canManageClients: false,
   canManageServices: false,
   canViewGeneralFinance: false,
+  canManageTeamSchedule: false,
+  canViewReports: false,
+  canExportReports: false,
   canManageProducts: false,
   canManageInventory: false,
+  canManageDocuments: false,
+  canManageBudgets: false,
+  canManageSubscriptions: false,
+  canViewTeamGoals: false,
   canCreateSales: false,
   canViewSalesReports: false
 };

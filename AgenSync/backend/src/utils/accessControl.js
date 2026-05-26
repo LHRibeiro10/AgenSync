@@ -52,8 +52,15 @@ const specialWorkspacePermissions = new Set([
   "canManageClients",
   "canManageServices",
   "canViewGeneralFinance",
+  "canManageTeamSchedule",
+  "canViewReports",
+  "canExportReports",
   "canManageProducts",
   "canManageInventory",
+  "canManageDocuments",
+  "canManageBudgets",
+  "canManageSubscriptions",
+  "canViewTeamGoals",
   "canCreateSales",
   "canViewSalesReports"
 ]);

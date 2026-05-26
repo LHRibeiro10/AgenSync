@@ -82,6 +82,14 @@ export function AuthProvider({ children }) {
     return result;
   }, []);
 
+  const acceptInvite = useCallback(async (payload) => {
+    const result = await authService.acceptInvite(payload);
+    setUser(result.user || null);
+    setSession(result.session || null);
+    setToken(result.token || result.session?.access_token || "");
+    return result;
+  }, []);
+
   const updateUserSettings = useCallback(async (payload) => {
     const result = await authService.updateUserSettings(payload);
     setUser(result.user || null);
@@ -160,6 +168,7 @@ export function AuthProvider({ children }) {
       refreshSession,
       login,
       register,
+      acceptInvite,
       logout,
       deleteAccount,
       updateUserSettings,
@@ -188,6 +197,7 @@ export function AuthProvider({ children }) {
       refreshSession,
       login,
       register,
+      acceptInvite,
       logout,
       deleteAccount,
       updateUserSettings,

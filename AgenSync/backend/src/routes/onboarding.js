@@ -216,9 +216,37 @@ router.post(
     }
 
     const [primary, ...extraProfessionals] = professionals;
+    const existingProfessionals = await prisma.professional.findMany({
+      where: workspaceWhere(req),
+      select: { id: true, name: true, email: true, isActive: true },
+      orderBy: { createdAt: "asc" }
+    });
     const existingPrimary = req.user.professionalId
-      ? await prisma.professional.findFirst({ where: workspaceWhere(req, { id: req.user.professionalId }) })
-      : await prisma.professional.findFirst({ where: workspaceWhere(req), orderBy: { createdAt: "asc" } });
+      ? existingProfessionals.find((professional) => professional.id === req.user.professionalId) || null
+      : existingProfessionals[0] || null;
+    const existingKeys = new Set(
+      existingProfessionals.flatMap((professional) => [
+        normalizeNameKey(professional.name),
+        professional.email ? `email:${professional.email}` : ""
+      ]).filter(Boolean)
+    );
+    const toCreate = extraProfessionals.filter((professional) => {
+      const keys = [
+        normalizeNameKey(professional.name),
+        professional.email ? `email:${professional.email}` : ""
+      ].filter(Boolean);
+      if (keys.some((key) => existingKeys.has(key))) return false;
+      keys.forEach((key) => existingKeys.add(key));
+      return true;
+    });
+    const projectedActiveProfessionals =
+      existingProfessionals.filter((professional) => professional.isActive && professional.id !== existingPrimary?.id).length +
+      (primary.isActive !== false ? 1 : 0) +
+      toCreate.filter((professional) => professional.isActive !== false).length;
+
+    if (projectedActiveProfessionals > plan.maxProfessionals) {
+      throw new ApiError(409, `Seu plano permite ate ${plan.maxProfessionals} profissionais.`);
+    }
 
     const primaryProfessional = existingPrimary
       ? await prisma.professional.update({
@@ -229,32 +257,10 @@ router.post(
           data: { workspaceId: req.workspaceId || null, userId: req.user.id, ...primary, role: primary.role || "Profissional principal" }
         });
 
-    if (extraProfessionals.length) {
-      const existing = await prisma.professional.findMany({
-        where: workspaceWhere(req),
-        select: { name: true, email: true }
+    if (toCreate.length) {
+      await prisma.professional.createMany({
+        data: toCreate.map((professional) => ({ workspaceId: req.workspaceId || null, userId: req.user.id, ...professional }))
       });
-      const existingKeys = new Set(
-        existing.flatMap((professional) => [
-          normalizeNameKey(professional.name),
-          professional.email ? `email:${professional.email}` : ""
-        ]).filter(Boolean)
-      );
-      const toCreate = extraProfessionals.filter((professional) => {
-        const keys = [
-          normalizeNameKey(professional.name),
-          professional.email ? `email:${professional.email}` : ""
-        ].filter(Boolean);
-        if (keys.some((key) => existingKeys.has(key))) return false;
-        keys.forEach((key) => existingKeys.add(key));
-        return true;
-      });
-
-      if (toCreate.length) {
-        await prisma.professional.createMany({
-          data: toCreate.map((professional) => ({ workspaceId: req.workspaceId || null, userId: req.user.id, ...professional }))
-        });
-      }
     }
 
     const user = await prisma.user.update({

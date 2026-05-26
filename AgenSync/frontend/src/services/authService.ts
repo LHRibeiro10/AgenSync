@@ -1,5 +1,5 @@
 import { env } from "../config/env.js";
-import { clearAccessToken, isLikelyOversizedAuthToken, setAccessToken } from "../lib/auth/tokenStorage.js";
+import { clearAccessToken, getAccessToken, isLikelyOversizedAuthToken, setAccessToken } from "../lib/auth/tokenStorage.js";
 import { supabase, supabaseConfigError } from "../lib/supabase.ts";
 
 function publicSupabaseUser(user: any) {
@@ -115,6 +115,75 @@ async function requestBackendMe(token: string, authEvent = "") {
   } catch {
     return null;
   }
+}
+
+async function requestBackendLogin(payload: any) {
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl) return null;
+
+  const response = await fetch(`${apiBaseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: String(payload.email || "").trim(),
+      password: payload.password || ""
+    })
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw authError(data?.message || "Email ou senha invalidos.");
+  }
+
+  const token = safeTokenForAuthHeader(data?.token || "");
+  if (token) setAccessToken(token);
+
+  return {
+    user: data?.user || null,
+    session: null,
+    token
+  };
+}
+
+async function requestBackendAcceptInvite(payload: any) {
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl) throw authError("Backend nao configurado para aceitar convites.");
+
+  const currentToken = safeTokenForAuthHeader(getAccessToken() || "");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (currentToken) headers.Authorization = `Bearer ${currentToken}`;
+
+  const response = await fetch(`${apiBaseUrl}/workspace/invites/accept`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload || {})
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw authError(data?.message || "Nao foi possivel aceitar o convite.");
+  }
+
+  const token = safeTokenForAuthHeader(data?.token || "");
+  if (token) setAccessToken(token);
+
+  return {
+    user: data?.user || null,
+    session: null,
+    token
+  };
 }
 
 async function requestBackendSettingsUpdate(token: string, payload: any) {
@@ -259,7 +328,15 @@ async function enrichAuthResultWithBackend(result: any, authEvent = "") {
 }
 
 export async function getSession() {
+  const storedToken = safeTokenForAuthHeader(getAccessToken() || "");
+
   if (!supabase) {
+    if (storedToken) {
+      const backendUser = await requestBackendMe(storedToken);
+      if (backendUser) {
+        return { user: backendUser, session: null, token: storedToken };
+      }
+    }
     clearAccessToken();
     return { user: null, session: null, token: "" };
   }
@@ -268,6 +345,12 @@ export async function getSession() {
   if (error) throw friendlyError(error, "Nao foi possivel restaurar a sessao.");
 
   if (!data.session) {
+    if (storedToken) {
+      const backendUser = await requestBackendMe(storedToken);
+      if (backendUser) {
+        return { user: backendUser, session: null, token: storedToken };
+      }
+    }
     clearAccessToken();
     return { user: null, session: null, token: "" };
   }
@@ -306,23 +389,38 @@ export function onAuthStateChange(callback: (event: string, session: any) => voi
 }
 
 export async function signIn(emailOrPayload: any, maybePassword?: string) {
-  const client = requireSupabase();
   const payload = typeof emailOrPayload === "object"
     ? emailOrPayload
     : { email: emailOrPayload, password: maybePassword };
 
-  const { data, error } = await client.auth.signInWithPassword({
-    email: String(payload.email || "").trim(),
-    password: payload.password || ""
-  });
+  let supabaseError = null;
 
-  if (error) throw friendlyError(error, "Email ou senha invalidos.");
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client.auth.signInWithPassword({
+      email: String(payload.email || "").trim(),
+      password: payload.password || ""
+    });
 
-  const safeSession = await maybeShrinkOversizedTokenSession(data.session);
-  return enrichAuthResultWithBackend(
-    authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }),
-    "login_success"
-  );
+    if (error) throw friendlyError(error, "Email ou senha invalidos.");
+
+    const safeSession = await maybeShrinkOversizedTokenSession(data.session);
+    return enrichAuthResultWithBackend(
+      authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }),
+      "login_success"
+    );
+  } catch (error) {
+    supabaseError = error;
+  }
+
+  try {
+    const backendResult = await requestBackendLogin(payload);
+    if (backendResult?.token) return backendResult;
+  } catch {
+    // Keep the Supabase-facing error when both strategies fail.
+  }
+
+  throw supabaseError;
 }
 
 export async function login(payload: any) {
@@ -368,6 +466,10 @@ export async function signUp(emailOrPayload: any, maybePassword?: string) {
 
 export async function register(payload: any) {
   return signUp(payload);
+}
+
+export async function acceptInvite(payload: any) {
+  return requestBackendAcceptInvite(payload);
 }
 
 export async function signOut() {

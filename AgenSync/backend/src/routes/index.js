@@ -21,6 +21,7 @@ import platformRouter from "./platform.js";
 import productsRouter from "./products.js";
 import salesRouter from "./sales.js";
 import servicesRouter from "./services.js";
+import workspaceRouter from "./workspace.js";
 
 const router = Router();
 
@@ -58,6 +59,7 @@ router.post(
 );
 
 router.use("/auth", authRouter);
+router.use("/workspace", workspaceRouter);
 router.use("/admin", requireAuth, requireAdmin, adminRouter);
 router.use("/platform", requireAuth, requirePlatformRole(["DEVELOPER", "PLATFORM_OWNER"]), platformRouter);
 router.use("/clients", requireAuth, workspaceRoute, clientsRouter);

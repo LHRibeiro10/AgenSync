@@ -25,6 +25,15 @@ import {
   testNotification,
   updateNotificationSettings
 } from "../services/notificationService.js";
+import {
+  cancelWorkspaceInvite,
+  createWorkspaceInvite,
+  disableWorkspaceMember,
+  enableWorkspaceMember,
+  listWorkspaceInvites,
+  listWorkspaceMembers,
+  updateWorkspaceMember
+} from "../services/workspaceTeamService.js";
 import { money } from "../utils.js";
 
 const normalizeName = (value) =>
@@ -211,9 +220,481 @@ function MessageEditor({ title, value, onChange, onRestore, preview }) {
   );
 }
 
+const teamInviteInitial = {
+  name: "",
+  email: "",
+  role: "professional",
+  professionalId: "",
+  permissions: {}
+};
+
+const invitePermissionOptions = [
+  ["canViewGeneralFinance", "Ver financeiro geral"],
+  ["canManageTeamSchedule", "Gerenciar agenda da equipe"],
+  ["canManageClients", "Gerenciar clientes"],
+  ["canManageServices", "Gerenciar servicos"],
+  ["canViewReports", "Ver relatorios"],
+  ["canExportReports", "Exportar relatorios"],
+  ["canManageProducts", "Gerenciar produtos"],
+  ["canManageInventory", "Gerenciar estoque"],
+  ["canCreateSales", "Criar vendas"],
+  ["canViewSalesReports", "Ver relatorios de vendas"]
+];
+
+function roleLabel(role) {
+  if (role === "owner") return "Owner";
+  if (role === "admin") return "Admin";
+  if (role === "professional") return "Profissional";
+  return "Membro";
+}
+
+function statusLabel(status) {
+  if (status === "active") return "Ativo";
+  if (status === "disabled") return "Desativado";
+  if (status === "accepted") return "Aceito";
+  if (status === "pending") return "Pendente";
+  if (status === "expired") return "Expirado";
+  if (status === "canceled") return "Cancelado";
+  return status || "Status";
+}
+
+function TeamSection({ user, workspaceRole, showToast, onError }) {
+  const isManager = workspaceRole === "owner" || workspaceRole === "admin";
+  const plan = user?.plan || user?.platformPlan || user?.currentWorkspace?.plan || "padrao";
+  const planLimits = user?.planLimits || user?.currentWorkspace?.planLimits || {};
+  const planFeatures = user?.planFeatures || user?.currentWorkspace?.planFeatures || [];
+  const canInvite = isManager && plan !== "padrao";
+  const canUseSpecialPermissions = planFeatures.includes("permissoes_especiais");
+  const [members, setMembers] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [professionals, setProfessionals] = useState([]);
+  const [inviteForm, setInviteForm] = useState(teamInviteInitial);
+  const [editingMemberId, setEditingMemberId] = useState("");
+  const [memberDraft, setMemberDraft] = useState({ role: "professional", professionalId: "", permissions: {} });
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [createdLink, setCreatedLink] = useState("");
+
+  useEffect(() => {
+    if (!isManager) return;
+    let active = true;
+
+    async function loadTeam() {
+      setTeamLoading(true);
+      try {
+        const [membersData, invitesData, professionalsData] = await Promise.all([
+          listWorkspaceMembers(),
+          listWorkspaceInvites(),
+          api.listProfessionals({ active: "true" })
+        ]);
+        if (!active) return;
+        setMembers(membersData.members || []);
+        setInvites(invitesData.invites || []);
+        setProfessionals(professionalsData.professionals || []);
+      } catch (err) {
+        if (active) onError?.(err.message || "Nao foi possivel carregar equipe.");
+      } finally {
+        if (active) setTeamLoading(false);
+      }
+    }
+
+    loadTeam();
+    return () => {
+      active = false;
+    };
+  }, [isManager, onError]);
+
+  async function reloadTeam() {
+    const [membersData, invitesData, professionalsData] = await Promise.all([
+      listWorkspaceMembers(),
+      listWorkspaceInvites(),
+      api.listProfessionals({ active: "true" })
+    ]);
+    setMembers(membersData.members || []);
+    setInvites(invitesData.invites || []);
+    setProfessionals(professionalsData.professionals || []);
+  }
+
+  function updateInvite(field, value) {
+    setInviteForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleInvitePermission(permission) {
+    setInviteForm((current) => ({
+      ...current,
+      permissions: {
+        ...current.permissions,
+        [permission]: !current.permissions?.[permission]
+      }
+    }));
+  }
+
+  function startMemberEdit(member) {
+    setEditingMemberId(member.id);
+    setMemberDraft({
+      role: member.role || "professional",
+      professionalId: member.professionalId || "",
+      permissions: member.permissions || {}
+    });
+  }
+
+  function updateMemberDraft(field, value) {
+    setMemberDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleMemberPermission(permission) {
+    setMemberDraft((current) => ({
+      ...current,
+      permissions: {
+        ...current.permissions,
+        [permission]: !current.permissions?.[permission]
+      }
+    }));
+  }
+
+  async function handleSaveMember(member) {
+    try {
+      await updateWorkspaceMember(member.id, {
+        role: memberDraft.role,
+        professionalId: memberDraft.professionalId || "",
+        permissions: canUseSpecialPermissions ? memberDraft.permissions : {}
+      });
+      setEditingMemberId("");
+      await reloadTeam();
+      showToast("Membro atualizado.");
+    } catch (err) {
+      onError?.(err.message || "Nao foi possivel atualizar o membro.");
+      showToast(err.message || "Nao foi possivel atualizar o membro.", "error");
+    }
+  }
+
+  async function handleCreateInvite() {
+    setCreatingInvite(true);
+    setCreatedLink("");
+    onError?.("");
+
+    try {
+      const payload = {
+        name: inviteForm.name.trim(),
+        email: inviteForm.email.trim(),
+        role: inviteForm.role,
+        professionalId: inviteForm.professionalId || "",
+        permissions: canUseSpecialPermissions ? inviteForm.permissions : {}
+      };
+      const data = await createWorkspaceInvite(payload);
+      setCreatedLink(data.invite?.inviteUrl || "");
+      setInviteForm(teamInviteInitial);
+      await reloadTeam();
+      showToast("Convite criado. Copie o link para enviar manualmente.");
+    } catch (err) {
+      onError?.(err.message || "Nao foi possivel criar o convite.");
+      showToast(err.message || "Nao foi possivel criar o convite.", "error");
+    } finally {
+      setCreatingInvite(false);
+    }
+  }
+
+  async function handleCopyLink(link) {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast("Link copiado.");
+    } catch {
+      setCreatedLink(link);
+      showToast("Copie o link exibido manualmente.", "error");
+    }
+  }
+
+  async function handleCancelInvite(inviteId) {
+    try {
+      await cancelWorkspaceInvite(inviteId);
+      await reloadTeam();
+      showToast("Convite cancelado.");
+    } catch (err) {
+      onError?.(err.message || "Nao foi possivel cancelar o convite.");
+      showToast(err.message || "Nao foi possivel cancelar o convite.", "error");
+    }
+  }
+
+  async function handleMemberStatus(member) {
+    try {
+      if (member.status === "disabled") {
+        await enableWorkspaceMember(member.id);
+        showToast("Membro reativado.");
+      } else {
+        await disableWorkspaceMember(member.id);
+        showToast("Membro desativado.");
+      }
+      await reloadTeam();
+    } catch (err) {
+      onError?.(err.message || "Nao foi possivel atualizar o membro.");
+      showToast(err.message || "Nao foi possivel atualizar o membro.", "error");
+    }
+  }
+
+  if (!isManager) return null;
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
+      <SectionHeader
+        eyebrow="Equipe"
+        title="Usuarios, convites e limites"
+        description="Gerencie quem acessa este workspace. As permissoes finais continuam validadas pelo backend."
+        icon="user"
+      />
+
+      <div className="space-y-5 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Plano</p>
+            <p className="mt-1 text-xl font-black capitalize text-ink">{plan}</p>
+          </div>
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Usuarios</p>
+            <p className="mt-1 text-xl font-black text-ink">
+              {members.filter((member) => member.status === "active").length}/{planLimits.maxUsers || 1}
+            </p>
+          </div>
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Profissionais</p>
+            <p className="mt-1 text-xl font-black text-ink">
+              {professionals.filter((professional) => professional.isActive !== false).length}/{planLimits.maxProfessionals || 1}
+            </p>
+          </div>
+        </div>
+
+        {plan === "padrao" ? (
+          <Message>
+            Convites de equipe estao disponiveis nos planos Equipe e Pro.
+          </Message>
+        ) : null}
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-ink">Convidar usuario</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">Gere um link seguro para copiar e enviar manualmente.</p>
+              </div>
+              <Icon name="mail" className="h-5 w-5 text-brand" />
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <input
+                value={inviteForm.name}
+                onChange={(event) => updateInvite("name", event.target.value)}
+                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
+                placeholder="Nome do convidado"
+                disabled={!canInvite}
+              />
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(event) => updateInvite("email", event.target.value)}
+                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
+                placeholder="email@empresa.com"
+                disabled={!canInvite}
+              />
+              <select
+                value={inviteForm.role}
+                onChange={(event) => updateInvite("role", event.target.value)}
+                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
+                disabled={!canInvite}
+              >
+                <option value="professional">Profissional</option>
+                <option value="admin">Admin</option>
+              </select>
+
+              <select
+                value={inviteForm.professionalId}
+                onChange={(event) => updateInvite("professionalId", event.target.value)}
+                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
+                disabled={!canInvite}
+              >
+                <option value="">Criar/vincular automaticamente ao aceitar</option>
+                {professionals.map((professional) => (
+                  <option key={professional.id} value={professional.id}>
+                    {professional.name}
+                  </option>
+                ))}
+              </select>
+
+              {canUseSpecialPermissions ? (
+                <div className="grid gap-2 rounded-lg border border-blue-100 bg-white p-3 sm:grid-cols-2">
+                  {invitePermissionOptions.map(([key, label]) => (
+                    <label key={key} className="flex cursor-pointer items-start gap-2 text-xs font-bold text-muted">
+                      <input
+                        type="checkbox"
+                        checked={inviteForm.permissions?.[key] === true}
+                        onChange={() => toggleInvitePermission(key)}
+                        className="mt-0.5 h-4 w-4 accent-brand"
+                        disabled={!canInvite}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+
+              <Button
+                type="button"
+                className="w-full rounded-lg"
+                loading={creatingInvite}
+                loadingLabel="Criando..."
+                disabled={!canInvite || !inviteForm.email.trim()}
+                onClick={handleCreateInvite}
+              >
+                <Icon name="mail" className="h-5 w-5" />
+                Criar convite
+              </Button>
+
+              {createdLink ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-success">Link do convite</p>
+                  <input
+                    readOnly
+                    value={createdLink}
+                    className="mt-2 min-h-10 w-full rounded-lg border border-green-200 bg-white px-3 text-xs font-bold text-ink"
+                  />
+                  <Button type="button" variant="success" size="sm" className="mt-2 rounded-lg" onClick={() => handleCopyLink(createdLink)}>
+                    Copiar link
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black text-ink">Usuarios</h3>
+                {teamLoading ? <span className="text-xs font-black text-muted">Carregando...</span> : null}
+              </div>
+              <div className="mt-3 space-y-2">
+                {members.map((member) => (
+                  <div key={member.id} className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                    <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-ink">{member.name || member.email}</p>
+                      <p className="truncate text-xs font-bold text-muted">{member.email}</p>
+                      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-brand">
+                        {roleLabel(member.role)} · {statusLabel(member.status)}
+                        {member.professionalName ? ` · ${member.professionalName}` : ""}
+                      </p>
+                    </div>
+                    {member.role !== "owner" && member.userId !== user?.id ? (
+                      <div className="flex flex-wrap gap-2 md:justify-end">
+                        {workspaceRole === "owner" ? (
+                          <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => startMemberEdit(member)}>
+                            Editar
+                          </Button>
+                        ) : null}
+                        <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleMemberStatus(member)}>
+                          {member.status === "disabled" ? "Reativar" : "Desativar"}
+                        </Button>
+                      </div>
+                    ) : null}
+                    </div>
+                    {editingMemberId === member.id ? (
+                      <div className="mt-3 grid gap-3 rounded-lg border border-blue-100 bg-white p-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <select
+                            value={memberDraft.role}
+                            onChange={(event) => updateMemberDraft("role", event.target.value)}
+                            className="min-h-11 rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink"
+                          >
+                            <option value="professional">Profissional</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          <select
+                            value={memberDraft.professionalId}
+                            onChange={(event) => updateMemberDraft("professionalId", event.target.value)}
+                            className="min-h-11 rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink"
+                          >
+                            <option value="">Sem profissional vinculado</option>
+                            {professionals.map((professional) => (
+                              <option key={professional.id} value={professional.id}>
+                                {professional.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {canUseSpecialPermissions ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {invitePermissionOptions.map(([key, label]) => (
+                              <label key={key} className="flex cursor-pointer items-start gap-2 text-xs font-bold text-muted">
+                                <input
+                                  type="checkbox"
+                                  checked={memberDraft.permissions?.[key] === true}
+                                  onChange={() => toggleMemberPermission(key)}
+                                  className="mt-0.5 h-4 w-4 accent-brand"
+                                />
+                                <span>{label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" className="rounded-lg" onClick={() => handleSaveMember(member)}>
+                            Salvar
+                          </Button>
+                          <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => setEditingMemberId("")}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                {!members.length && !teamLoading ? (
+                  <p className="rounded-lg border border-dashed border-[#D8E0EA] px-4 py-3 text-sm font-bold text-muted">
+                    Nenhum membro carregado.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+              <h3 className="text-lg font-black text-ink">Convites</h3>
+              <div className="mt-3 space-y-2">
+                {invites.map((invite) => (
+                  <div key={invite.id} className="grid gap-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3 md:grid-cols-[1fr_auto] md:items-center">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-ink">{invite.name || invite.email}</p>
+                      <p className="truncate text-xs font-bold text-muted">{invite.email}</p>
+                      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-brand">
+                        {roleLabel(invite.role)} · {statusLabel(invite.status)}
+                      </p>
+                    </div>
+                    {invite.status === "pending" ? (
+                      <div className="flex flex-wrap gap-2 md:justify-end">
+                        <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleCopyLink(invite.inviteUrl)}>
+                          Copiar
+                        </Button>
+                        <Button type="button" variant="danger" size="sm" className="rounded-lg" onClick={() => handleCancelInvite(invite.id)}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                {!invites.length && !teamLoading ? (
+                  <p className="rounded-lg border border-dashed border-[#D8E0EA] px-4 py-3 text-sm font-bold text-muted">
+                    Nenhum convite criado ainda.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, updateUserSettings, refreshSession, deleteAccount } = useAuth();
+  const { user, workspaceRole, updateUserSettings, refreshSession, deleteAccount } = useAuth();
   const { showToast } = useToast();
   const { startTour } = useOnboarding();
   const [businessName, setBusinessName] = useState(user?.businessName || "");
@@ -566,6 +1047,8 @@ export default function Settings() {
               </div>
             </div>
           </section>
+
+          <TeamSection user={user} workspaceRole={workspaceRole} showToast={showToast} onError={setError} />
 
           <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
             <SectionHeader

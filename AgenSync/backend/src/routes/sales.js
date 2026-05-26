@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
+import { clientAccessWhere, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicProductSale } from "../utils/formatters.js";
 import { optionalString, parsePagination, parsePositiveInteger, requiredString } from "../utils/validation.js";
@@ -85,7 +85,7 @@ router.post(
     const sale = await prisma.$transaction(async (tx) => {
       const [product, client] = await Promise.all([
         tx.product.findFirst({ where: workspaceWhere(req, { id: productId }) }),
-        clientId ? tx.client.findFirst({ where: workspaceWhere(req, { id: clientId }) }) : Promise.resolve(null)
+        clientId ? tx.client.findFirst({ where: clientAccessWhere(req, { id: clientId }) }) : Promise.resolve(null)
       ]);
 
       if (!product) throw new ApiError(404, "Produto não encontrado.");

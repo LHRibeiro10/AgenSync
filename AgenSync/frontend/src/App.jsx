@@ -8,6 +8,7 @@ import { canUsePlanFeature } from "./config/plans.js";
 import { useAuth } from "./contexts/AuthContext.jsx";
 
 const Agenda = lazy(() => import("./pages/Agenda.jsx"));
+const AcceptInvite = lazy(() => import("./pages/AcceptInvite.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const Appointments = lazy(() => import("./pages/Appointments.jsx"));
 const Clients = lazy(() => import("./pages/Clients.jsx"));
@@ -132,6 +133,22 @@ export default function App() {
           element={
             <PageTransition>
               <ResetPassword />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/accept-invite/:token"
+          element={
+            <PageTransition>
+              <AcceptInvite />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/convite/:token"
+          element={
+            <PageTransition>
+              <AcceptInvite />
             </PageTransition>
           }
         />

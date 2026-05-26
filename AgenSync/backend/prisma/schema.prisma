@@ -96,6 +96,13 @@ enum WorkspaceMemberStatus {
   DISABLED
 }
 
+enum WorkspaceInviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELED
+}
+
 enum ReminderType {
   TEN_MINUTES_BEFORE
   FIFTEEN_MINUTES_BEFORE
@@ -129,6 +136,7 @@ model User {
   billingEnabled Boolean @default(false)
   currentWorkspaceId String?
   currentWorkspace Workspace? @relation("CurrentWorkspace", fields: [currentWorkspaceId], references: [id], onDelete: SetNull)
+  sentWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInvitesSent")
   businessName  String
   businessLogo  String?
   businessType  String
@@ -417,6 +425,7 @@ model Workspace {
   monthlyPlans   MonthlyPlan[]
   careRecords    ClientCareRecord[]
   notifications  Notification[]
+  invites        WorkspaceInvite[]
   createdAt      DateTime                  @default(now())
   updatedAt      DateTime                  @updatedAt
 
@@ -445,6 +454,32 @@ model WorkspaceMember {
   @@index([workspaceId, status])
   @@index([userId, status])
   @@index([professionalId])
+}
+
+model WorkspaceInvite {
+  id             String                @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email          String
+  name           String?
+  role           WorkspaceRole
+  permissions    Json                  @default("{}")
+  professionalId String?
+  professional   Professional?         @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  token          String                @unique
+  status         WorkspaceInviteStatus @default(PENDING)
+  invitedById    String?
+  invitedBy      User?                 @relation("WorkspaceInvitesSent", fields: [invitedById], references: [id], onDelete: SetNull)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, email])
+  @@index([professionalId])
+  @@index([invitedById])
+  @@index([expiresAt])
 }
 
 model ClientCareRecord {
@@ -504,6 +539,7 @@ model Professional {
   appointments Appointment[]
   monthlyPlans MonthlyPlan[]
   workspaceMembers WorkspaceMember[]
+  workspaceInvites WorkspaceInvite[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
