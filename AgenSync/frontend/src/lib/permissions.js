@@ -74,6 +74,11 @@ const professionalPermissions = {
   canViewSalesReports: false
 };
 
+const alwaysAllowedProfessionalPermissions = new Set([
+  "clients",
+  "canManageClients"
+]);
+
 function normalizeRole(value, fallback = "") {
   return String(value || fallback).trim().toLowerCase();
 }
@@ -112,6 +117,8 @@ export function canAccessPermission(user, permission) {
       : {};
   const customPermissions = user?.permissions && typeof user.permissions === "object" ? user.permissions : memberPermissions;
   const basePermissions = role === workspaceRoles.PROFESSIONAL ? professionalPermissions : defaultWorkspacePermissions;
+
+  if (role === workspaceRoles.PROFESSIONAL && alwaysAllowedProfessionalPermissions.has(permission)) return true;
 
   return customPermissions[permission] ?? basePermissions[permission] ?? false;
 }

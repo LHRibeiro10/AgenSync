@@ -49,7 +49,6 @@ const planLimitLabels = Object.freeze({
 });
 
 const specialWorkspacePermissions = new Set([
-  "canManageClients",
   "canManageServices",
   "canViewGeneralFinance",
   "canManageTeamSchedule",
@@ -63,6 +62,11 @@ const specialWorkspacePermissions = new Set([
   "canViewTeamGoals",
   "canCreateSales",
   "canViewSalesReports"
+]);
+
+const alwaysAllowedProfessionalPermissions = new Set([
+  "clients",
+  "canManageClients"
 ]);
 
 function planFromContext(subject) {
@@ -120,6 +124,7 @@ export function hasWorkspacePermission(req, permission) {
   if (!permission) return true;
   const role = getWorkspaceRole(req.user);
   if (role === WORKSPACE_ROLES.OWNER || role === WORKSPACE_ROLES.ADMIN) return true;
+  if (role === WORKSPACE_ROLES.PROFESSIONAL && alwaysAllowedProfessionalPermissions.has(permission)) return true;
 
   if (specialWorkspacePermissions.has(permission) && !canAccessFeature(req, PLAN_FEATURES.SPECIAL_PERMISSIONS)) {
     return false;
