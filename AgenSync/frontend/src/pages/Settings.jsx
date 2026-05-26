@@ -223,6 +223,7 @@ function MessageEditor({ title, value, onChange, onRestore, preview }) {
 const teamInviteInitial = {
   name: "",
   email: "",
+  phone: "",
   role: "professional",
   professionalId: "",
   permissions: {}
@@ -258,11 +259,28 @@ function statusLabel(status) {
   return status || "Status";
 }
 
+function normalizeWhatsAppPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("55") || digits.length > 11 ? digits : `55${digits}`;
+}
+
+function buildInviteWhatsAppUrl(invite, workspaceName = "AgenSync") {
+  const phone = normalizeWhatsAppPhone(invite?.phone);
+  const link = invite?.inviteUrl || "";
+  if (!phone || !link) return "";
+
+  const greeting = invite?.name ? `Oi, ${invite.name}!` : "Oi!";
+  const message = `${greeting} Voce recebeu um convite para acessar ${workspaceName} no AgenSync. Abra o link para criar seu acesso: ${link}`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
 function TeamSection({ user, workspaceRole, showToast, onError }) {
   const isManager = workspaceRole === "owner" || workspaceRole === "admin";
   const plan = user?.plan || user?.platformPlan || user?.currentWorkspace?.plan || "padrao";
   const planLimits = user?.planLimits || user?.currentWorkspace?.planLimits || {};
   const planFeatures = user?.planFeatures || user?.currentWorkspace?.planFeatures || [];
+  const workspaceName = user?.businessName || user?.currentWorkspace?.name || "AgenSync";
   const canInvite = isManager && plan !== "padrao";
   const canUseSpecialPermissions = planFeatures.includes("permissoes_especiais");
   const [members, setMembers] = useState([]);
@@ -274,6 +292,7 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
   const [teamLoading, setTeamLoading] = useState(false);
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [createdLink, setCreatedLink] = useState("");
+  const [createdInvite, setCreatedInvite] = useState(null);
 
   useEffect(() => {
     if (!isManager) return;
@@ -371,21 +390,27 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
   async function handleCreateInvite() {
     setCreatingInvite(true);
     setCreatedLink("");
+    setCreatedInvite(null);
     onError?.("");
 
     try {
       const payload = {
         name: inviteForm.name.trim(),
         email: inviteForm.email.trim(),
+        phone: inviteForm.phone.trim(),
         role: inviteForm.role,
         professionalId: inviteForm.professionalId || "",
         permissions: canUseSpecialPermissions ? inviteForm.permissions : {}
       };
       const data = await createWorkspaceInvite(payload);
-      setCreatedLink(data.invite?.inviteUrl || "");
+      const invite = data.invite || null;
+      setCreatedInvite(invite);
+      setCreatedLink(invite?.inviteUrl || "");
       setInviteForm(teamInviteInitial);
       await reloadTeam();
-      showToast("Convite criado. Copie o link para enviar manualmente.");
+      showToast("Convite criado. Envie pelo WhatsApp.");
+      const whatsappUrl = buildInviteWhatsAppUrl(invite, workspaceName);
+      if (whatsappUrl) window.open(whatsappUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       onError?.(err.message || "Nao foi possivel criar o convite.");
       showToast(err.message || "Nao foi possivel criar o convite.", "error");
@@ -403,6 +428,15 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
       setCreatedLink(link);
       showToast("Copie o link exibido manualmente.", "error");
     }
+  }
+
+  function handleSendWhatsApp(invite) {
+    const whatsappUrl = buildInviteWhatsAppUrl(invite, workspaceName);
+    if (!whatsappUrl) {
+      showToast("Telefone ou link do convite indisponivel.", "error");
+      return;
+    }
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   }
 
   async function handleCancelInvite(inviteId) {
@@ -474,9 +508,9 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-ink">Convidar usuario</h3>
-                <p className="mt-1 text-sm leading-6 text-muted">Gere um link seguro para copiar e enviar manualmente.</p>
+                <p className="mt-1 text-sm leading-6 text-muted">Gere o acesso e envie o link pelo WhatsApp.</p>
               </div>
-              <Icon name="mail" className="h-5 w-5 text-brand" />
+              <Icon name="message" className="h-5 w-5 text-brand" />
             </div>
 
             <div className="mt-4 space-y-3">
@@ -493,6 +527,14 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
                 onChange={(event) => updateInvite("email", event.target.value)}
                 className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
                 placeholder="email@empresa.com"
+                disabled={!canInvite}
+              />
+              <input
+                type="tel"
+                value={inviteForm.phone}
+                onChange={(event) => updateInvite("phone", event.target.value)}
+                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
+                placeholder="WhatsApp do profissional"
                 disabled={!canInvite}
               />
               <select
@@ -541,11 +583,11 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
                 className="w-full rounded-lg"
                 loading={creatingInvite}
                 loadingLabel="Criando..."
-                disabled={!canInvite || !inviteForm.email.trim()}
+                disabled={!canInvite || !inviteForm.email.trim() || !inviteForm.phone.trim()}
                 onClick={handleCreateInvite}
               >
-                <Icon name="mail" className="h-5 w-5" />
-                Criar convite
+                <Icon name="message" className="h-5 w-5" />
+                Criar e enviar no WhatsApp
               </Button>
 
               {createdLink ? (
@@ -556,9 +598,14 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
                     value={createdLink}
                     className="mt-2 min-h-10 w-full rounded-lg border border-green-200 bg-white px-3 text-xs font-bold text-ink"
                   />
-                  <Button type="button" variant="success" size="sm" className="mt-2 rounded-lg" onClick={() => handleCopyLink(createdLink)}>
-                    Copiar link
-                  </Button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button type="button" variant="success" size="sm" className="rounded-lg" onClick={() => handleSendWhatsApp(createdInvite)}>
+                      Enviar no WhatsApp
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleCopyLink(createdLink)}>
+                      Copiar link
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -662,12 +709,16 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-ink">{invite.name || invite.email}</p>
                       <p className="truncate text-xs font-bold text-muted">{invite.email}</p>
+                      {invite.phone ? <p className="truncate text-xs font-bold text-muted">{invite.phone}</p> : null}
                       <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-brand">
                         {roleLabel(invite.role)} · {statusLabel(invite.status)}
                       </p>
                     </div>
                     {invite.status === "pending" ? (
                       <div className="flex flex-wrap gap-2 md:justify-end">
+                        <Button type="button" variant="success" size="sm" className="rounded-lg" onClick={() => handleSendWhatsApp(invite)}>
+                          WhatsApp
+                        </Button>
                         <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleCopyLink(invite.inviteUrl)}>
                           Copiar
                         </Button>

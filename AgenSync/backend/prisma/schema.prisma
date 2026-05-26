@@ -466,6 +466,7 @@ model WorkspaceInvite {
   workspaceId    String
   workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   email          String
+  phone          String?
   name           String?
   role           WorkspaceRole
   permissions    Json                  @default("{}")
@@ -482,6 +483,7 @@ model WorkspaceInvite {
 
   @@index([workspaceId, status])
   @@index([workspaceId, email])
+  @@index([workspaceId, phone])
   @@index([professionalId])
   @@index([invitedById])
   @@index([expiresAt])

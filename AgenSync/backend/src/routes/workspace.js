@@ -111,6 +111,14 @@ function normalizePermissions(plan, rawPermissions) {
   );
 }
 
+function normalizeInvitePhone(value) {
+  const phone = requiredString(value, "telefone", 8).replace(/\D/g, "");
+  if (phone.length < 10 || phone.length > 15) {
+    throw new ApiError(400, "Telefone do WhatsApp invalido.");
+  }
+  return phone;
+}
+
 function expiresAtFromNow() {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + INVITE_TTL_DAYS);
@@ -146,6 +154,7 @@ function publicInvite(invite, req) {
     workspaceId: invite.workspaceId,
     workspaceName: invite.workspace?.name || "",
     email: invite.email,
+    phone: invite.phone || "",
     name: invite.name || "",
     role: String(invite.role || "PROFESSIONAL").toLowerCase(),
     permissions: invite.permissions && typeof invite.permissions === "object" ? invite.permissions : {},
@@ -371,6 +380,7 @@ router.get(
         status: String(expired && invite.status === "PENDING" ? "EXPIRED" : invite.status).toLowerCase(),
         workspaceName: invite.workspace?.name || "",
         email: invite.email,
+        phone: invite.phone || "",
         name: invite.name || "",
         role: String(invite.role || "PROFESSIONAL").toLowerCase(),
         professionalName: invite.professional?.name || "",
@@ -475,6 +485,7 @@ router.post(
             name: invite.name || acceptedUser.name,
             role: "Profissional",
             email: invite.email,
+            phone: invite.phone || "",
             isActive: true
           },
           select: { id: true }
@@ -585,6 +596,7 @@ router.post(
     }
 
     const email = validateEmail(req.body.email);
+    const phone = normalizeInvitePhone(req.body.phone);
     const name = optionalString(req.body.name);
     const role = normalizeInviteRole(req.body.role);
     const professionalId = optionalString(req.body.professionalId);
@@ -635,6 +647,7 @@ router.post(
       data: {
         workspaceId: req.workspaceId,
         email,
+        phone,
         name: name || null,
         role,
         permissions,

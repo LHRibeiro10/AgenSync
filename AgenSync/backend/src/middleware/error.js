@@ -27,6 +27,12 @@ export function errorHandler(error, req, res, next) {
     return res.status(409).json({ message: "Não foi possível excluir: existem registros vinculados." });
   }
 
+  if (error.code === "P2021" || error.code === "P2022") {
+    return res.status(503).json({
+      message: "Banco de dados ainda nao foi atualizado. Rode as migrations do backend e tente novamente."
+    });
+  }
+
   const statusCode = error.statusCode || 500;
   const message = statusCode === 500 ? "Erro interno do servidor." : error.message;
   const response = { message };
