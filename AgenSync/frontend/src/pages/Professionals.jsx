@@ -13,8 +13,8 @@ import { getCurrentPlan } from "../config/plans.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { money } from "../utils.js";
 
-const emptyForm = { name: "", role: "", phone: "", isActive: true };
-const emptyAccessForm = { email: "", password: "", role: "professional" };
+const emptyForm = { name: "", role: "", email: "", phone: "", isActive: true };
+const emptyAccessForm = { name: "", email: "", password: "", role: "professional" };
 
 function initials(name) {
   return String(name || "P")
@@ -107,9 +107,21 @@ export default function Professionals() {
   function startAccess(professional) {
     setAccessProfessionalId(professional.id);
     setAccessForm({
+      name: professional.name || "",
       email: professional.email || "",
       password: "",
       role: "professional"
+    });
+    setError("");
+  }
+
+  function startEditAccess(professional) {
+    setAccessProfessionalId(professional.id);
+    setAccessForm({
+      name: professional.access?.name || professional.name || "",
+      email: professional.access?.email || professional.email || "",
+      password: "",
+      role: professional.access?.role || "professional"
     });
     setError("");
   }
@@ -119,6 +131,7 @@ export default function Professionals() {
     setForm({
       name: professional.name,
       role: professional.role || "",
+      email: professional.email || "",
       phone: professional.phone || "",
       isActive: professional.isActive
     });
@@ -166,8 +179,13 @@ export default function Professionals() {
     setError("");
 
     try {
-      await api.createProfessionalAccess(professional.id, accessForm);
-      showToast("Usuario afiliado criado.");
+      if (professional.access) {
+        await api.updateProfessionalAccess(professional.id, accessForm);
+        showToast("Usuario afiliado atualizado.");
+      } else {
+        await api.createProfessionalAccess(professional.id, accessForm);
+        showToast("Usuario afiliado criado.");
+      }
       resetAccessForm();
       await loadProfessionalsOnly();
     } catch (err) {
@@ -192,6 +210,7 @@ export default function Professionals() {
       await api.updateProfessional(professional.id, {
         name: professional.name,
         role: professional.role,
+        email: professional.email || "",
         phone: professional.phone,
         isActive: !professional.isActive
       });
@@ -265,6 +284,16 @@ export default function Professionals() {
               onChange={(event) => update("role", event.target.value)}
               className={inputClass}
               placeholder="Manicure, barbeiro, fisioterapeuta"
+            />
+          </Field>
+
+          <Field label="Email">
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => update("email", event.target.value)}
+              className={inputClass}
+              placeholder="profissional@empresa.com"
             />
           </Field>
 
@@ -392,6 +421,11 @@ export default function Professionals() {
                               Criar acesso
                             </Button>
                           ) : null}
+                          {canManageAccess && professional.access ? (
+                            <Button variant="secondary" onClick={() => startEditAccess(professional)}>
+                              Editar acesso
+                            </Button>
+                          ) : null}
                           <Button variant="secondary" onClick={() => toggleActive(professional)}>
                             {professional.isActive ? "Inativar" : "Ativar"}
                           </Button>
@@ -406,8 +440,18 @@ export default function Professionals() {
                         {accessProfessionalId === professional.id ? (
                           <form
                             onSubmit={(event) => handleCreateAccess(event, professional)}
-                            className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 sm:col-span-2 md:grid-cols-[1fr_1fr_180px_auto]"
+                            className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 sm:col-span-2 md:grid-cols-[1fr_1fr_1fr_160px_auto]"
                           >
+                            <Field label="Nome do acesso">
+                              <input
+                                required
+                                minLength={2}
+                                value={accessForm.name}
+                                onChange={(event) => updateAccess("name", event.target.value)}
+                                className={inputClass}
+                                placeholder="Nome do profissional"
+                              />
+                            </Field>
                             <Field label="Email do acesso">
                               <input
                                 required
@@ -420,13 +464,13 @@ export default function Professionals() {
                             </Field>
                             <Field label="Senha inicial">
                               <input
-                                required
+                                required={!professional.access}
                                 minLength={6}
                                 type="password"
                                 value={accessForm.password}
                                 onChange={(event) => updateAccess("password", event.target.value)}
                                 className={inputClass}
-                                placeholder="Minimo 6 caracteres"
+                                placeholder={professional.access ? "Deixe em branco para manter" : "Minimo 6 caracteres"}
                               />
                             </Field>
                             <Field label="Funcao">
@@ -441,7 +485,7 @@ export default function Professionals() {
                             </Field>
                             <div className="flex items-end gap-2">
                               <Button type="submit" loading={creatingAccess} loadingLabel="Criando...">
-                                Criar
+                                {professional.access ? "Salvar" : "Criar"}
                               </Button>
                               <Button type="button" variant="secondary" onClick={resetAccessForm}>
                                 Cancelar

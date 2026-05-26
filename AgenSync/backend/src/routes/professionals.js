@@ -65,6 +65,15 @@ function publicAccessMember(member) {
   };
 }
 
+async function ownerIdForWorkspace(workspaceId, fallbackUserId) {
+  if (!workspaceId) return fallbackUserId;
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { ownerId: true }
+  });
+  return workspace?.ownerId || fallbackUserId;
+}
+
 async function assertCanCreateWorkspaceAccess(req, role) {
   const plan = req.plan || getPlanConfig(req.workspace?.plan);
   const now = new Date();
@@ -158,7 +167,7 @@ router.post(
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
     const professional = await findProfessionalOrFail(req, req.params.id);
-    const existingAccess = professional.workspaceMembers?.find((member) => member.status !== "DISABLED");
+    const existingAccess = professional.workspaceMembers?.find((member) => member.userId);
     if (existingAccess) {
       throw new ApiError(409, "Este profissional ja possui um usuario afiliado ativo.");
     }
@@ -201,7 +210,7 @@ router.post(
           role,
           permissions: {},
           professionalId: professional.id,
-          status: "ACTIVE"
+          status: professional.isActive ? "ACTIVE" : "DISABLED"
         },
         include: {
           user: { select: { id: true, name: true, email: true } }
@@ -246,6 +255,100 @@ router.post(
   })
 );
 
+router.put(
+  "/:id/access",
+  asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
+    const professional = await findProfessionalOrFail(req, req.params.id);
+    const currentAccess = professional.workspaceMembers?.find((member) => member.userId);
+    if (!currentAccess) {
+      throw new ApiError(404, "Este profissional ainda nao possui usuario afiliado.");
+    }
+
+    const name = optionalString(req.body.name);
+    const email = req.body.email === undefined ? undefined : validateEmail(req.body.email);
+    const password =
+      req.body.password === undefined || req.body.password === null || req.body.password === ""
+        ? ""
+        : requiredString(req.body.password, "senha", 6);
+    const role =
+      req.body.role === undefined && req.body.workspaceRole === undefined
+        ? String(currentAccess.role || "PROFESSIONAL").toUpperCase()
+        : normalizeAccessRole(req.body.role || req.body.workspaceRole);
+
+    if (email && email !== currentAccess.user?.email) {
+      const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (existingUser && existingUser.id !== currentAccess.userId) {
+        throw new ApiError(409, "Ja existe uma conta com esse email.");
+      }
+    }
+
+    const passwordHash = password ? await bcrypt.hash(password, 10) : "";
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: currentAccess.userId },
+        data: {
+          ...(name ? { name } : {}),
+          ...(email ? { email } : {}),
+          ...(passwordHash ? { passwordHash } : {}),
+          workspaceRole: role,
+          professionalId: professional.id
+        }
+      });
+
+      const updatedMember = await tx.workspaceMember.update({
+        where: { id: currentAccess.id },
+        data: {
+          role,
+          professionalId: professional.id,
+          status: professional.isActive ? "ACTIVE" : "DISABLED"
+        },
+        include: {
+          user: { select: { id: true, name: true, email: true } }
+        }
+      });
+
+      const updatedProfessional = await tx.professional.update({
+        where: { id: professional.id },
+        data: {
+          ...(name ? { name } : {}),
+          ...(email ? { email } : {})
+        },
+        include: {
+          workspaceMembers: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+            orderBy: { createdAt: "asc" }
+          }
+        }
+      });
+
+      return { user: updatedUser, member: updatedMember, professional: updatedProfessional };
+    });
+
+    invalidateAuthUserCache(result.user.id);
+    await recordAuditEvent({
+      req,
+      userId: req.user.id,
+      email: req.user.email,
+      eventType: "workspace.professional_access_updated",
+      message: "Usuario afiliado do profissional atualizado.",
+      metadata: {
+        workspaceId: req.workspaceId,
+        professionalId: professional.id,
+        memberId: result.member.id,
+        targetUserId: result.user.id,
+        targetEmail: result.user.email,
+        role
+      }
+    });
+
+    res.json({
+      member: publicAccessMember(result.member),
+      professional: publicProfessional(result.professional)
+    });
+  })
+);
+
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
@@ -261,7 +364,7 @@ router.put(
   "/:id",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
-    await findProfessionalOrFail(req, req.params.id);
+    const current = await findProfessionalOrFail(req, req.params.id);
 
     const name = requiredString(req.body.name, "nome", 2);
     const role = optionalString(req.body.role);
@@ -278,10 +381,57 @@ router.put(
       active: isActive
     });
 
-    const professional = await prisma.professional.update({
-      where: { id: req.params.id },
-      data: { name, role, email, phone, monthlyGoal, isActive }
+    if (email && email !== current.email) {
+      const accessUserIds = current.workspaceMembers.map((member) => member.userId).filter(Boolean);
+      const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (existingUser && !accessUserIds.includes(existingUser.id)) {
+        throw new ApiError(409, "Ja existe uma conta com esse email.");
+      }
+    }
+
+    const professional = await prisma.$transaction(async (tx) => {
+      const updatedProfessional = await tx.professional.update({
+        where: { id: req.params.id },
+        data: { name, role, email, phone, monthlyGoal, isActive },
+        include: {
+          workspaceMembers: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+            orderBy: { createdAt: "asc" }
+          }
+        }
+      });
+
+      const memberIds = updatedProfessional.workspaceMembers.map((member) => member.id);
+      if (memberIds.length) {
+        await tx.workspaceMember.updateMany({
+          where: { id: { in: memberIds } },
+          data: { status: isActive ? "ACTIVE" : "DISABLED" }
+        });
+      }
+
+      const accessUser = updatedProfessional.workspaceMembers.find((member) => member.userId);
+      if (accessUser?.userId && (name || email)) {
+        await tx.user.update({
+          where: { id: accessUser.userId },
+          data: {
+            ...(name ? { name } : {}),
+            ...(email ? { email } : {})
+          }
+        });
+      }
+
+      return tx.professional.findUnique({
+        where: { id: req.params.id },
+        include: {
+          workspaceMembers: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+            orderBy: { createdAt: "asc" }
+          }
+        }
+      });
     });
+
+    professional.workspaceMembers.forEach((member) => invalidateAuthUserCache(member.userId));
 
     res.json({ professional: publicProfessional(professional) });
   })
@@ -291,7 +441,43 @@ router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
-    await findProfessionalOrFail(req, req.params.id);
+    const professional = await findProfessionalOrFail(req, req.params.id);
+    const ownerId = await ownerIdForWorkspace(req.workspaceId, req.user.id);
+    const accessUserIds = professional.workspaceMembers.map((member) => member.userId).filter(Boolean);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.appointment.updateMany({
+        where: workspaceWhere(req, { professionalId: req.params.id }),
+        data: {
+          userId: ownerId,
+          professionalId: null
+        }
+      });
+
+      await tx.monthlyPlan.updateMany({
+        where: workspaceWhere(req, { professionalId: req.params.id }),
+        data: { professionalId: null }
+      });
+
+      await tx.workspaceMember.updateMany({
+        where: { professionalId: req.params.id },
+        data: {
+          professionalId: null,
+          status: "DISABLED"
+        }
+      });
+
+      await tx.workspaceInvite.updateMany({
+        where: { professionalId: req.params.id },
+        data: { professionalId: null }
+      });
+
+      await tx.professional.delete({ where: { id: req.params.id } });
+    });
+
+    accessUserIds.forEach((userId) => invalidateAuthUserCache(userId));
+    res.status(204).send();
+    return;
 
     const appointments = await prisma.appointment.count({
       where: workspaceWhere(req, { professionalId: req.params.id })

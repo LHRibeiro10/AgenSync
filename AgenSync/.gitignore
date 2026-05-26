@@ -5,6 +5,8 @@ dist
 build
 coverage
 *.log
+*.out
+tmp_*.js
 .DS_Store
 backend/.postgres-data
 backend/postgres.log

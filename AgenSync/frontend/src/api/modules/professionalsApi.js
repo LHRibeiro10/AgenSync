@@ -17,6 +17,10 @@ export function createProfessionalAccessApi(professionalId, payload) {
   return httpClient.post(endpoints.professionals.access(professionalId), { body: payload });
 }
 
+export function updateProfessionalAccessApi(professionalId, payload) {
+  return httpClient.put(endpoints.professionals.access(professionalId), { body: payload });
+}
+
 export function deleteProfessionalApi(professionalId) {
   return httpClient.delete(endpoints.professionals.byId(professionalId));
 }

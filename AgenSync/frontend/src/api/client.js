@@ -36,6 +36,7 @@ export const api = {
   listProfessionals: (params) => professionalService.listProfessionals(params),
   createProfessional: (payload) => professionalService.createProfessional(payload),
   createProfessionalAccess: (id, payload) => professionalService.createProfessionalAccess(id, payload),
+  updateProfessionalAccess: (id, payload) => professionalService.updateProfessionalAccess(id, payload),
   updateProfessional: (id, payload) => professionalService.updateProfessional(id, payload),
   deleteProfessional: (id) => professionalService.deleteProfessional(id),
 

@@ -142,7 +142,9 @@ export function publicService(service) {
 
 export function publicProfessional(professional) {
   const accessMember = Array.isArray(professional.workspaceMembers)
-    ? professional.workspaceMembers.find((member) => member.status !== "DISABLED") || null
+    ? professional.workspaceMembers.find((member) => member.status !== "DISABLED") ||
+      professional.workspaceMembers.find((member) => member.userId) ||
+      null
     : null;
 
   return {

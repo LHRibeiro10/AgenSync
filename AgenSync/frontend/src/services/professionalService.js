@@ -3,6 +3,7 @@ import {
   createProfessionalApi,
   deleteProfessionalApi,
   listProfessionalsApi,
+  updateProfessionalAccessApi,
   updateProfessionalApi
 } from "../api/modules/professionalsApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
@@ -25,6 +26,13 @@ export function createProfessionalAccess(professionalId, payload) {
   return executeDataSource({
     feature: "professionals.access.create",
     remote: () => createProfessionalAccessApi(professionalId, payload)
+  });
+}
+
+export function updateProfessionalAccess(professionalId, payload) {
+  return executeDataSource({
+    feature: "professionals.access.update",
+    remote: () => updateProfessionalAccessApi(professionalId, payload)
   });
 }
 

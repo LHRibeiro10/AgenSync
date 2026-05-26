@@ -45,7 +45,7 @@ const defaultWorkspacePermissions = {
 
 const professionalPermissions = {
   ...defaultWorkspacePermissions,
-  clients: false,
+  clients: true,
   services: false,
   professionals: false,
   products: false,
@@ -58,7 +58,7 @@ const professionalPermissions = {
   settings: false,
   admin: false,
   exports: false,
-  canManageClients: false,
+  canManageClients: true,
   canManageServices: false,
   canViewGeneralFinance: false,
   canManageTeamSchedule: false,
