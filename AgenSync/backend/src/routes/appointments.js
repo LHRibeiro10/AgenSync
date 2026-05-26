@@ -5,9 +5,11 @@ import { PLAN_FEATURES, planHasFeature } from "../config/plans.js";
 import { addMinutes, combineDateAndTime, dateRangeFromQuery } from "../utils/dates.js";
 import {
   assertProfessionalBelongsToUser,
+  clientAccessWhere,
   isWorkspaceProfessional,
   professionalWhere,
-  resolveProfessionalScope
+  resolveProfessionalScope,
+  workspaceWhere
 } from "../utils/accessControl.js";
 import { normalizeStatus, publicAppointment } from "../utils/formatters.js";
 import { syncAppointmentReminders } from "../services/appointmentReminderService.js";
@@ -53,6 +55,7 @@ const professionalSelect = {
 
 const appointmentSelect = {
   id: true,
+  workspaceId: true,
   userId: true,
   clientId: true,
   serviceId: true,
@@ -83,7 +86,7 @@ async function findAppointmentOrFail(user, id) {
     ? { professionalId: user.professionalId || "__missing_professional__" }
     : {};
   const appointment = await prisma.appointment.findFirst({
-    where: { id, userId: user.id, ...scope },
+    where: { ...workspaceWhere(user), id, ...scope },
     select: appointmentSelect
   });
 
@@ -94,9 +97,9 @@ async function findAppointmentOrFail(user, id) {
   return appointment;
 }
 
-async function findClientOrFail(userId, clientId) {
+async function findClientOrFail(req, clientId) {
   const client = await prisma.client.findFirst({
-    where: { id: clientId, userId },
+    where: clientAccessWhere(req, { id: clientId }),
     select: { id: true }
   });
   if (!client) {
@@ -105,9 +108,9 @@ async function findClientOrFail(userId, clientId) {
   return client;
 }
 
-async function findServiceOrFail(userId, serviceId) {
+async function findServiceOrFail(user, serviceId) {
   const service = await prisma.service.findFirst({
-    where: { id: serviceId, userId },
+    where: workspaceWhere(user, { id: serviceId }),
     select: {
       id: true,
       priceDefault: true,
@@ -121,11 +124,11 @@ async function findServiceOrFail(userId, serviceId) {
   return service;
 }
 
-async function findProfessionalOrFail(userId, professionalId) {
+async function findProfessionalOrFail(user, professionalId) {
   if (!professionalId) return null;
 
   const professional = await prisma.professional.findFirst({
-    where: { id: professionalId, userId },
+    where: workspaceWhere(user, { id: professionalId }),
     select: { id: true, isActive: true }
   });
   if (!professional) {
@@ -134,10 +137,10 @@ async function findProfessionalOrFail(userId, professionalId) {
   return professional;
 }
 
-async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null, professionalId = null, confirmConflict = false }) {
+async function assertNoConflict({ user, startsAt, endsAt, appointmentId = null, professionalId = null, confirmConflict = false }) {
   const conflict = await prisma.appointment.findFirst({
     where: {
-      userId,
+      ...workspaceWhere(user),
       ...(appointmentId ? { id: { not: appointmentId } } : {}),
       ...(professionalId ? { professionalId } : {}),
       status: { not: "CANCELED" },
@@ -190,7 +193,8 @@ async function assertNoConflict({ userId, startsAt, endsAt, appointmentId = null
   return null;
 }
 
-async function buildWhereFromQuery(user, query) {
+async function buildWhereFromQuery(req, query) {
+  const user = req.user;
   const canFilterProfessionals =
     isWorkspaceProfessional(user) || planHasFeature(user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
   const scope = await resolveProfessionalScope(
@@ -198,7 +202,7 @@ async function buildWhereFromQuery(user, query) {
     user,
     canFilterProfessionals ? query.professionalId : ""
   );
-  const where = { userId: user.id, ...professionalWhere(scope) };
+  const where = { ...workspaceWhere(req), ...professionalWhere(scope) };
   const range = dateRangeFromQuery(query);
 
   if (range) {
@@ -223,7 +227,7 @@ router.get(
       defaultPageSize: 120,
       maxPageSize: 300
     });
-    const where = await buildWhereFromQuery(req.user, req.query);
+    const where = await buildWhereFromQuery(req, req.query);
 
     const appointments = await prisma.appointment.findMany({
       where,
@@ -257,9 +261,9 @@ router.post(
     const confirmConflict = parseBoolean(req.body.confirmConflict, false);
 
     const [, service, professional] = await Promise.all([
-      findClientOrFail(req.user.id, clientId),
-      findServiceOrFail(req.user.id, serviceId),
-      findProfessionalOrFail(req.user.id, professionalId)
+      findClientOrFail(req, clientId),
+      findServiceOrFail(req.user, serviceId),
+      findProfessionalOrFail(req.user, professionalId)
     ]);
 
     if (!service.isActive) {
@@ -279,7 +283,7 @@ router.post(
         : parsePositiveMoney(req.body.price, "valor");
 
     if (status !== "CANCELED") {
-      await assertNoConflict({ userId: req.user.id, startsAt, endsAt, professionalId, confirmConflict });
+      await assertNoConflict({ user: req.user, startsAt, endsAt, professionalId, confirmConflict });
     }
 
     const appointment = await prisma.appointment.create({
@@ -356,9 +360,9 @@ router.put(
       req.body.durationMinutes !== undefined;
 
     const [, service, professional] = await Promise.all([
-      findClientOrFail(req.user.id, clientId),
-      findServiceOrFail(req.user.id, serviceId),
-      findProfessionalOrFail(req.user.id, professionalId)
+      findClientOrFail(req, clientId),
+      findServiceOrFail(req.user, serviceId),
+      findProfessionalOrFail(req.user, professionalId)
     ]);
 
     if (serviceId !== current.serviceId && !service.isActive) {
@@ -385,7 +389,7 @@ router.put(
 
     if (shouldCheckConflict) {
       await assertNoConflict({
-        userId: req.user.id,
+        user: req.user,
         startsAt,
         endsAt,
         appointmentId: req.params.id,

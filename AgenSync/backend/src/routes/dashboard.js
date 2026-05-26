@@ -11,7 +11,7 @@ import {
   startOfMonth,
   todayString
 } from "../utils/dates.js";
-import { isWorkspaceProfessional, professionalWhere, resolveProfessionalScope } from "../utils/accessControl.js";
+import { isWorkspaceProfessional, professionalWhere, resolveProfessionalScope, workspaceWhere } from "../utils/accessControl.js";
 import { publicAppointment, publicExpense, publicMonthlyPlan, publicProductSale } from "../utils/formatters.js";
 
 const router = Router();
@@ -302,10 +302,10 @@ function expandRecurringExpense(expense, startDate, endDate) {
   return items;
 }
 
-async function listAppointmentsForRange(userId, { startDate, endDate, professionalId = "", status = "" }) {
+async function listAppointmentsForRange(reqOrUser, { startDate, endDate, professionalId = "", status = "" }) {
   return prisma.appointment.findMany({
     where: {
-      userId,
+      ...workspaceWhere(reqOrUser),
       ...(professionalId ? { professionalId } : {}),
       ...(status ? { status } : {}),
       startsAt: {
@@ -318,10 +318,10 @@ async function listAppointmentsForRange(userId, { startDate, endDate, profession
   });
 }
 
-async function listSalesForRange(userId, { startDate, endDate }) {
+async function listSalesForRange(reqOrUser, { startDate, endDate }) {
   const sales = await prisma.productSale.findMany({
     where: {
-      userId,
+      ...workspaceWhere(reqOrUser),
       date: {
         gte: startOfDay(parseDateOnly(startDate, "data inicial")),
         lt: endOfDay(parseDateOnly(endDate, "data final"))
@@ -334,12 +334,12 @@ async function listSalesForRange(userId, { startDate, endDate }) {
   return sales.map(publicProductSale);
 }
 
-async function listExpensesForRange(userId, { startDate, endDate }) {
+async function listExpensesForRange(reqOrUser, { startDate, endDate }) {
   const rangeStart = startOfDay(parseDateOnly(startDate, "data inicial"));
   const rangeEnd = startOfDay(parseDateOnly(endDate, "data final"));
   const expenses = await prisma.expense.findMany({
     where: {
-      userId,
+      ...workspaceWhere(reqOrUser),
       OR: [
         { recurrence: "MONTHLY", date: { lte: rangeEnd } },
         { recurrence: "ONCE", date: { gte: rangeStart, lte: rangeEnd } }
@@ -439,10 +439,10 @@ router.get(
     const monthRange = { startDate: `${selectedMonth}-01`, endDate };
     const summaryRange = { startDate: `${selectedMonth}-01`, endDate: endOfMonthKey(selectedMonth) };
     const scopedProfessionalWhere = professionalWhere(scope);
-    const isProfessionalScope = Boolean(professionalId);
+    const isRestrictedProfessional = scope.restricted === true;
     const cacheKey = [
       "overview",
-      req.user.id,
+      req.workspaceId || req.user.id,
       startDate,
       endDate,
       comparison.startDate,
@@ -474,7 +474,7 @@ router.get(
     ] = await Promise.all([
       prisma.appointment.findMany({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           startsAt: { gte: dayStart, lt: dayEnd }
         },
@@ -483,7 +483,7 @@ router.get(
       }),
       prisma.appointment.aggregate({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           status: "COMPLETED",
           startsAt: { gte: dayStart, lt: dayEnd }
@@ -492,7 +492,7 @@ router.get(
       }),
       prisma.appointment.aggregate({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           status: "COMPLETED",
           startsAt: { gte: monthStart, lt: monthEnd }
@@ -501,7 +501,7 @@ router.get(
       }),
       prisma.appointment.findFirst({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           status: "SCHEDULED",
           startsAt: { gte: new Date() }
@@ -509,27 +509,28 @@ router.get(
         select: appointmentSelect,
         orderBy: [{ startsAt: "asc" }]
       }),
-      listAppointmentsForRange(req.user.id, { startDate, endDate, professionalId }),
-      listAppointmentsForRange(req.user.id, {
+      listAppointmentsForRange(req, { startDate, endDate, professionalId }),
+      listAppointmentsForRange(req, {
         startDate: comparison.startDate,
         endDate: comparison.endDate,
         professionalId,
         status: "COMPLETED"
       }),
-      listAppointmentsForRange(req.user.id, { startDate: tomorrow, endDate: tomorrow, professionalId }),
-      includeTeam && professionalId ? listAppointmentsForRange(req.user.id, { startDate, endDate }) : Promise.resolve(null),
-      isProfessionalScope
+      listAppointmentsForRange(req, { startDate: tomorrow, endDate: tomorrow, professionalId }),
+      includeTeam && professionalId ? listAppointmentsForRange(req, { startDate, endDate }) : Promise.resolve(null),
+      isRestrictedProfessional
         ? Promise.resolve([])
         : prisma.monthlyPlan.findMany({
-            where: { userId: req.user.id },
+            where: { ...workspaceWhere(req), ...scopedProfessionalWhere },
             select: monthlyPlanSelect,
             orderBy: [{ createdAt: "desc" }]
           }),
-      isProfessionalScope
+      isRestrictedProfessional
         ? Promise.resolve([])
         : prisma.appointment.findMany({
             where: {
-              userId: req.user.id,
+              ...workspaceWhere(req),
+              ...scopedProfessionalWhere,
               monthlyPlanId: { not: null },
               startsAt: {
                 gte: startOfDay(parseDateOnly(summaryRange.startDate)),
@@ -545,21 +546,21 @@ router.get(
               monthlyPlan: { select: { billingType: true } }
             }
           }),
-      isProfessionalScope ? Promise.resolve([]) : listSalesForRange(req.user.id, { startDate, endDate }),
-      isProfessionalScope ? Promise.resolve([]) : listSalesForRange(req.user.id, monthRange),
-      isProfessionalScope ? Promise.resolve([]) : listSalesForRange(req.user.id, comparison),
-      isProfessionalScope ? Promise.resolve([]) : listExpensesForRange(req.user.id, { startDate, endDate }),
-      isProfessionalScope ? Promise.resolve([]) : listExpensesForRange(req.user.id, monthRange),
-      isProfessionalScope ? Promise.resolve([]) : listExpensesForRange(req.user.id, comparison)
+      isRestrictedProfessional ? Promise.resolve([]) : listSalesForRange(req, { startDate, endDate }),
+      isRestrictedProfessional ? Promise.resolve([]) : listSalesForRange(req, monthRange),
+      isRestrictedProfessional ? Promise.resolve([]) : listSalesForRange(req, comparison),
+      isRestrictedProfessional ? Promise.resolve([]) : listExpensesForRange(req, { startDate, endDate }),
+      isRestrictedProfessional ? Promise.resolve([]) : listExpensesForRange(req, monthRange),
+      isRestrictedProfessional ? Promise.resolve([]) : listExpensesForRange(req, comparison)
     ]);
 
-    const periodSubscriptions = isProfessionalScope ? [] : cyclesForRange(monthlyPlans, startDate, endDate);
-    const daySubscriptions = isProfessionalScope ? [] : cyclesForRange(monthlyPlans, endDate, endDate);
-    const monthSubscriptions = isProfessionalScope ? [] : cyclesForRange(monthlyPlans, monthRange.startDate, monthRange.endDate);
-    const comparisonSubscriptions = isProfessionalScope
+    const periodSubscriptions = isRestrictedProfessional ? [] : cyclesForRange(monthlyPlans, startDate, endDate);
+    const daySubscriptions = isRestrictedProfessional ? [] : cyclesForRange(monthlyPlans, endDate, endDate);
+    const monthSubscriptions = isRestrictedProfessional ? [] : cyclesForRange(monthlyPlans, monthRange.startDate, monthRange.endDate);
+    const comparisonSubscriptions = isRestrictedProfessional
       ? []
       : cyclesForRange(monthlyPlans, comparison.startDate, comparison.endDate);
-    const summaryCycles = isProfessionalScope
+    const summaryCycles = isRestrictedProfessional
       ? []
       : cyclesForRange(monthlyPlans, summaryRange.startDate, summaryRange.endDate);
 
@@ -602,7 +603,7 @@ router.get(
         day: daySubscriptions,
         month: monthSubscriptions,
         comparison: comparisonSubscriptions,
-        summary: isProfessionalScope
+        summary: isRestrictedProfessional
           ? emptySubscriptionSummary
           : buildSubscriptionSummary(monthlyPlans, monthlyPlanAppointments, summaryCycles)
       }
@@ -625,7 +626,7 @@ router.get(
       canFilterProfessionals ? req.query.professionalId : ""
     );
     const professionalId = scope.professionalId;
-    const cacheKey = `${req.user.id}:${dateParam}:${professionalId || "all"}`;
+    const cacheKey = `${req.workspaceId || req.user.id}:${dateParam}:${professionalId || "all"}`;
     const cached = getCachedDashboard(cacheKey);
     if (cached) return res.json(cached);
 
@@ -639,7 +640,7 @@ router.get(
     const [todayAppointments, todayRevenue, monthRevenue, nextAppointment] = await Promise.all([
       prisma.appointment.findMany({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           startsAt: { gte: dayStart, lt: dayEnd }
         },
@@ -648,7 +649,7 @@ router.get(
       }),
       prisma.appointment.aggregate({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           status: "COMPLETED",
           startsAt: { gte: dayStart, lt: dayEnd }
@@ -657,7 +658,7 @@ router.get(
       }),
       prisma.appointment.aggregate({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           status: "COMPLETED",
           startsAt: { gte: monthStart, lt: monthEnd }
@@ -666,7 +667,7 @@ router.get(
       }),
       prisma.appointment.findFirst({
         where: {
-          userId: req.user.id,
+          ...workspaceWhere(req),
           ...scopedProfessionalWhere,
           status: "SCHEDULED",
           startsAt: { gte: new Date() }

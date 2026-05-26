@@ -5,6 +5,7 @@ import { ApiError, asyncHandler } from "../middleware/error.js";
 import { getCurrentPlan } from "../config/plans.js";
 import { businessTypes, findBusinessType, getSuggestedServices } from "../utils/businessOnboarding.js";
 import { publicUser } from "../utils/formatters.js";
+import { workspaceWhere } from "../utils/accessControl.js";
 import {
   optionalEmail,
   optionalString,
@@ -38,12 +39,12 @@ function normalizeNameKey(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-async function onboardingCounts(userId) {
+async function onboardingCounts(req) {
   const [services, professionals, clients, appointments] = await Promise.all([
-    prisma.service.count({ where: { userId } }),
-    prisma.professional.count({ where: { userId } }),
-    prisma.client.count({ where: { userId } }),
-    prisma.appointment.count({ where: { userId } })
+    prisma.service.count({ where: workspaceWhere(req) }),
+    prisma.professional.count({ where: workspaceWhere(req) }),
+    prisma.client.count({ where: workspaceWhere(req) }),
+    prisma.appointment.count({ where: workspaceWhere(req) })
   ]);
 
   return { services, professionals, clients, appointments };
@@ -56,8 +57,8 @@ function shouldRequireOnboarding(user) {
   return user.onboardingCompleted !== true;
 }
 
-async function statusPayload(user) {
-  const counts = await onboardingCounts(user.id);
+async function statusPayload(req, user = req.user) {
+  const counts = await onboardingCounts(req);
   return {
     onboardingRequired: shouldRequireOnboarding(user),
     onboardingCompleted: user.onboardingCompleted === true,
@@ -112,7 +113,7 @@ function normalizeClientList(rawClients) {
 router.get(
   "/status",
   asyncHandler(async (req, res) => {
-    res.json(await statusPayload(req.user));
+    res.json(await statusPayload(req));
   })
 );
 
@@ -132,7 +133,7 @@ router.post(
     });
 
     invalidateAuthUserCache(user.id);
-    res.json(await statusPayload(user));
+    res.json(await statusPayload(req, user));
   })
 );
 
@@ -157,7 +158,7 @@ router.post(
 
     invalidateAuthUserCache(user.id);
     res.json({
-      ...(await statusPayload(user)),
+      ...(await statusPayload(req, user)),
       suggestedServices: getSuggestedServices(selectedType.id)
     });
   })
@@ -168,7 +169,7 @@ router.post(
   asyncHandler(async (req, res) => {
     ensureWorkspaceOwner(req.user);
     if (req.body.skip === true) {
-      return res.json({ createdCount: 0, skipped: true, ...(await statusPayload(req.user)) });
+      return res.json({ createdCount: 0, skipped: true, ...(await statusPayload(req)) });
     }
 
     const services = normalizeServiceList(req.body.services);
@@ -177,7 +178,7 @@ router.post(
     }
 
     const existing = await prisma.service.findMany({
-      where: { userId: req.user.id },
+      where: workspaceWhere(req),
       select: { name: true }
     });
     const existingKeys = new Set(existing.map((service) => normalizeNameKey(service.name)));
@@ -196,7 +197,7 @@ router.post(
       createdCount = result.count;
     }
 
-    res.status(201).json({ createdCount, ...(await statusPayload(req.user)) });
+    res.status(201).json({ createdCount, ...(await statusPayload(req)) });
   })
 );
 
@@ -211,13 +212,13 @@ router.post(
     const plan = getCurrentPlan(req.user);
     const activeRequested = professionals.filter((professional) => professional.isActive !== false).length;
     if (activeRequested > plan.maxProfessionals) {
-      throw new ApiError(409, `Seu plano atual permite ate ${plan.maxProfessionals} profissional(is).`);
+      throw new ApiError(409, `Seu plano permite ate ${plan.maxProfessionals} profissionais.`);
     }
 
     const [primary, ...extraProfessionals] = professionals;
     const existingPrimary = req.user.professionalId
-      ? await prisma.professional.findFirst({ where: { id: req.user.professionalId, userId: req.user.id } })
-      : await prisma.professional.findFirst({ where: { userId: req.user.id }, orderBy: { createdAt: "asc" } });
+      ? await prisma.professional.findFirst({ where: workspaceWhere(req, { id: req.user.professionalId }) })
+      : await prisma.professional.findFirst({ where: workspaceWhere(req), orderBy: { createdAt: "asc" } });
 
     const primaryProfessional = existingPrimary
       ? await prisma.professional.update({
@@ -230,7 +231,7 @@ router.post(
 
     if (extraProfessionals.length) {
       const existing = await prisma.professional.findMany({
-        where: { userId: req.user.id },
+        where: workspaceWhere(req),
         select: { name: true, email: true }
       });
       const existingKeys = new Set(
@@ -268,7 +269,7 @@ router.post(
     }
 
     invalidateAuthUserCache(user.id);
-    res.status(201).json({ primaryProfessionalId: primaryProfessional.id, ...(await statusPayload(user)) });
+    res.status(201).json({ primaryProfessionalId: primaryProfessional.id, ...(await statusPayload(req, user)) });
   })
 );
 
@@ -277,16 +278,16 @@ router.post(
   asyncHandler(async (req, res) => {
     ensureWorkspaceOwner(req.user);
     if (req.body.skip === true) {
-      return res.json({ createdCount: 0, skipped: true, ...(await statusPayload(req.user)) });
+      return res.json({ createdCount: 0, skipped: true, ...(await statusPayload(req)) });
     }
 
     const clients = normalizeClientList(req.body.clients);
     if (!clients.length) {
-      return res.json({ createdCount: 0, ...(await statusPayload(req.user)) });
+      return res.json({ createdCount: 0, ...(await statusPayload(req)) });
     }
 
     const existing = await prisma.client.findMany({
-      where: { userId: req.user.id },
+      where: workspaceWhere(req),
       select: { name: true, phone: true, email: true }
     });
     const existingKeys = new Set(
@@ -317,7 +318,7 @@ router.post(
       createdCount = result.count;
     }
 
-    res.status(201).json({ createdCount, ...(await statusPayload(req.user)) });
+    res.status(201).json({ createdCount, ...(await statusPayload(req)) });
   })
 );
 
@@ -326,7 +327,7 @@ router.post(
   asyncHandler(async (req, res) => {
     ensureWorkspaceOwner(req.user);
 
-    const counts = await onboardingCounts(req.user.id);
+    const counts = await onboardingCounts(req);
     let professionalId = req.user.professionalId || "";
 
     if (!counts.professionals) {
@@ -344,7 +345,7 @@ router.post(
 
     if (!professionalId) {
       const primary = await prisma.professional.findFirst({
-        where: { userId: req.user.id },
+        where: workspaceWhere(req),
         orderBy: { createdAt: "asc" }
       });
       professionalId = primary?.id || "";
@@ -366,7 +367,7 @@ router.post(
     }
 
     invalidateAuthUserCache(user.id);
-    res.json(await statusPayload(user));
+    res.json(await statusPayload(req, user));
   })
 );
 

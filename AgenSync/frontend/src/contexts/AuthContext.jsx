@@ -124,6 +124,16 @@ export function AuthProvider({ children }) {
 
   const workspaceRole = getWorkspaceRole(user);
   const platformRole = getPlatformRole(user);
+  const currentWorkspace = user?.currentWorkspace || null;
+  const workspaceMember = user?.workspaceMember || null;
+  const workspacePermissions =
+    workspaceMember?.permissions && typeof workspaceMember.permissions === "object"
+      ? workspaceMember.permissions
+      : user?.permissions && typeof user.permissions === "object"
+        ? user.permissions
+        : {};
+  const plan = user?.plan || user?.platformPlan || currentWorkspace?.plan || "padrao";
+  const professionalId = workspaceMember?.professionalId || user?.professionalId || "";
   const isAdmin = canAccessAdmin(user);
   const hasPlatformAccess = isPlatformOwner(user);
   const canAccess = useCallback((permission) => canAccessPermission(user, permission), [user]);
@@ -139,6 +149,12 @@ export function AuthProvider({ children }) {
       isAdmin,
       workspaceRole,
       platformRole,
+      currentWorkspace,
+      workspaceMember,
+      workspacePermissions,
+      permissions: workspacePermissions,
+      plan,
+      professionalId,
       hasPlatformAccess,
       canAccess,
       refreshSession,
@@ -162,6 +178,11 @@ export function AuthProvider({ children }) {
       isAdmin,
       workspaceRole,
       platformRole,
+      currentWorkspace,
+      workspaceMember,
+      workspacePermissions,
+      plan,
+      professionalId,
       hasPlatformAccess,
       canAccess,
       refreshSession,

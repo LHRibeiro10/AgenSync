@@ -9,6 +9,7 @@ import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { recordAuditEvent } from "../utils/audit.js";
 import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
+import { requireWorkspaceManager } from "../utils/accessControl.js";
 import { hydrateUserWorkspace } from "../utils/workspaceContext.js";
 import { requiredString, validateEmail } from "../utils/validation.js";
 
@@ -294,6 +295,7 @@ router.put(
   "/me",
   requireAuth,
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     const businessType =
       req.body.businessType === undefined ? undefined : requiredString(req.body.businessType, "tipo de negocio", 2);
     const businessName =

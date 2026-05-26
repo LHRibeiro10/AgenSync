@@ -1,5 +1,5 @@
 import { prisma } from "../prisma.js";
-import { normalizePlanSlug, publicPlan } from "../config/plans.js";
+import { getPlanConfig, normalizePlanSlug, publicPlan } from "../config/plans.js";
 import { ApiError } from "../middleware/error.js";
 
 const workspaceSelect = {
@@ -269,16 +269,20 @@ export async function attachWorkspaceContext(req) {
   req.workspace = context.workspace;
   req.currentWorkspace = context.workspace;
   req.workspaceId = context.workspace?.id || "";
+  req.workspaceLegacy = context.legacy === true;
   req.workspaceMember = context.member;
   req.workspaceRole = context.member?.role || req.user?.workspaceRole || "";
   req.workspacePermissions = context.member?.permissions || {};
   req.professionalId = context.member?.professionalId || req.user?.professionalId || "";
+  req.plan = context.workspace ? getPlanConfig(context.workspace.plan) : null;
 
   if (req.user && context.workspace && context.member) {
     req.user.currentWorkspaceId = context.workspace.id;
+    req.user.workspaceLegacy = context.legacy === true;
     req.user.workspaceRole = context.member.role;
     req.user.professionalId = context.member.professionalId || req.user.professionalId || "";
     req.user.platformPlan = normalizePlanSlug(context.workspace.plan || req.user.platformPlan);
+    req.user.plan = normalizePlanSlug(context.workspace.plan || req.user.platformPlan);
     req.user.currentWorkspace = publicWorkspace(context.workspace);
     req.user.workspaceMember = publicWorkspaceMember(context.member);
   }

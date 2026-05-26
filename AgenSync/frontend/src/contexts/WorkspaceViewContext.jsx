@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
-import { getWorkspaceRole, workspaceRoles } from "../lib/permissions.js";
+import { workspaceRoles } from "../lib/permissions.js";
 
 const WorkspaceViewContext = createContext(null);
 const STORAGE_PREFIX = "agensync_workspace_view";
@@ -21,11 +21,11 @@ function readStoredView(userId) {
 }
 
 export function WorkspaceViewProvider({ children }) {
-  const { user } = useAuth();
+  const { user, workspaceRole, professionalId } = useAuth();
   const [selectedProfessionalId, setSelectedProfessionalIdState] = useState("");
   const [period, setPeriodState] = useState("today");
 
-  const role = getWorkspaceRole(user);
+  const role = workspaceRole || workspaceRoles.OWNER;
   const isProfessional = role === workspaceRoles.PROFESSIONAL;
   const canManageWorkspace = role === workspaceRoles.OWNER || role === workspaceRoles.ADMIN;
 
@@ -61,7 +61,8 @@ export function WorkspaceViewProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      selectedProfessionalId: isProfessional ? user?.professionalId || selectedProfessionalId : selectedProfessionalId,
+      selectedProfessionalId: isProfessional ? professionalId || selectedProfessionalId : selectedProfessionalId,
+      professionalId,
       setSelectedProfessionalId,
       period,
       setPeriod,
@@ -78,7 +79,7 @@ export function WorkspaceViewProvider({ children }) {
       selectedProfessionalId,
       setPeriod,
       setSelectedProfessionalId,
-      user?.professionalId
+      professionalId
     ]
   );
 

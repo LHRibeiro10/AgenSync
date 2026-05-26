@@ -5,7 +5,8 @@ import { publicProfessional } from "../utils/formatters.js";
 import {
   assertCanCreateProfessional,
   isWorkspaceProfessional,
-  requireWorkspaceManager
+  requireWorkspaceManager,
+  workspaceWhere
 } from "../utils/accessControl.js";
 import {
   optionalEmail,
@@ -18,8 +19,8 @@ import {
 
 const router = Router();
 
-async function findProfessionalOrFail(userId, id) {
-  const professional = await prisma.professional.findFirst({ where: { id, userId } });
+async function findProfessionalOrFail(req, id) {
+  const professional = await prisma.professional.findFirst({ where: workspaceWhere(req, { id }) });
   if (!professional) {
     throw new ApiError(404, "Profissional não encontrado.");
   }
@@ -29,7 +30,7 @@ async function findProfessionalOrFail(userId, id) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const where = { userId: req.user.id };
+    const where = workspaceWhere(req);
     if (isWorkspaceProfessional(req.user)) {
       if (!req.user.professionalId) {
         throw new ApiError(403, "Usuario profissional sem profissional vinculado.");
@@ -84,7 +85,7 @@ router.get(
     if (isWorkspaceProfessional(req.user) && req.params.id !== req.user.professionalId) {
       throw new ApiError(403, "Voce so pode acessar seu proprio perfil profissional.");
     }
-    const professional = await findProfessionalOrFail(req.user.id, req.params.id);
+    const professional = await findProfessionalOrFail(req, req.params.id);
     res.json({ professional: publicProfessional(professional) });
   })
 );
@@ -93,7 +94,7 @@ router.put(
   "/:id",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
-    await findProfessionalOrFail(req.user.id, req.params.id);
+    await findProfessionalOrFail(req, req.params.id);
 
     const name = requiredString(req.body.name, "nome", 2);
     const role = optionalString(req.body.role);
@@ -123,10 +124,10 @@ router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
-    await findProfessionalOrFail(req.user.id, req.params.id);
+    await findProfessionalOrFail(req, req.params.id);
 
     const appointments = await prisma.appointment.count({
-      where: { userId: req.user.id, professionalId: req.params.id }
+      where: workspaceWhere(req, { professionalId: req.params.id })
     });
 
     if (appointments > 0) {

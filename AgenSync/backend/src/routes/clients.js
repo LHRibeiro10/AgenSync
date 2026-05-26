@@ -1,19 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { requireWorkspaceManager } from "../utils/accessControl.js";
+import { clientAccessWhere, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { publicClient, publicClientCareRecord } from "../utils/formatters.js";
 import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
 
-router.use((req, res, next) => {
-  requireWorkspaceManager(req);
-  next();
-});
-
-async function findClientOrFail(userId, id) {
-  const client = await prisma.client.findFirst({ where: { id, userId } });
+async function findClientOrFail(req, id) {
+  const client = await prisma.client.findFirst({ where: clientAccessWhere(req, { id }) });
   if (!client) {
     throw new ApiError(404, "Cliente não encontrado.");
   }
@@ -96,7 +91,7 @@ router.get(
     const includeInactive = parseBoolean(req.query.includeInactive);
     const clients = await prisma.client.findMany({
       where: {
-        userId: req.user.id,
+        ...clientAccessWhere(req),
         ...(includeInactive ? {} : { isActive: true })
       },
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
@@ -110,6 +105,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageClients")(req, res, () => {});
     const name = requiredString(req.body.name, "nome", 2);
     const phone = requiredString(req.body.phone, "telefone", 8);
     const email = optionalEmail(req.body.email);
@@ -126,6 +122,7 @@ router.post(
 router.post(
   "/import",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageClients")(req, res, () => {});
     const rows = Array.isArray(req.body.clients) ? req.body.clients : [];
     const skipDuplicates = req.body.skipDuplicates !== false;
 
@@ -146,7 +143,7 @@ router.post(
       .map((item) => item.client);
 
     const existingClients = await prisma.client.findMany({
-      where: { userId: req.user.id },
+      where: workspaceWhere(req),
       select: { id: true, name: true, phone: true, cpf: true, externalId: true }
     });
 
@@ -207,7 +204,7 @@ router.post(
 router.get(
   "/:id/care-record",
   asyncHandler(async (req, res) => {
-    await findClientOrFail(req.user.id, req.params.id);
+    await findClientOrFail(req, req.params.id);
 
     const record = await prisma.clientCareRecord.findUnique({
       where: { clientId: req.params.id }
@@ -220,7 +217,8 @@ router.get(
 router.put(
   "/:id/care-record",
   asyncHandler(async (req, res) => {
-    await findClientOrFail(req.user.id, req.params.id);
+    await findClientOrFail(req, req.params.id);
+    requireWorkspacePermission("canManageClients")(req, res, () => {});
 
     const payload = {
       anamnesis: jsonObject(req.body.anamnesis, {}),
@@ -234,6 +232,7 @@ router.put(
     const record = await prisma.clientCareRecord.upsert({
       where: { clientId: req.params.id },
       create: {
+        workspaceId: req.workspaceId || null,
         clientId: req.params.id,
         ...payload
       },
@@ -247,7 +246,7 @@ router.put(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const client = await findClientOrFail(req.user.id, req.params.id);
+    const client = await findClientOrFail(req, req.params.id);
     res.json({ client: publicClient(client) });
   })
 );
@@ -255,7 +254,8 @@ router.get(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findClientOrFail(req.user.id, req.params.id);
+    await findClientOrFail(req, req.params.id);
+    requireWorkspacePermission("canManageClients")(req, res, () => {});
 
     const name = requiredString(req.body.name, "nome", 2);
     const phone = requiredString(req.body.phone, "telefone", 8);
@@ -280,10 +280,11 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findClientOrFail(req.user.id, req.params.id);
+    await findClientOrFail(req, req.params.id);
+    requireWorkspacePermission("canManageClients")(req, res, () => {});
 
     const appointments = await prisma.appointment.count({
-      where: { userId: req.user.id, clientId: req.params.id }
+      where: workspaceWhere(req, { clientId: req.params.id })
     });
 
     if (appointments > 0) {

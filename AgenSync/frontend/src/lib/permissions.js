@@ -26,7 +26,14 @@ const defaultWorkspacePermissions = {
   reports: true,
   settings: true,
   admin: true,
-  exports: true
+  exports: true,
+  canManageClients: true,
+  canManageServices: true,
+  canViewGeneralFinance: true,
+  canManageProducts: true,
+  canManageInventory: true,
+  canCreateSales: true,
+  canViewSalesReports: true
 };
 
 const professionalPermissions = {
@@ -43,7 +50,14 @@ const professionalPermissions = {
   reports: false,
   settings: false,
   admin: false,
-  exports: false
+  exports: false,
+  canManageClients: false,
+  canManageServices: false,
+  canViewGeneralFinance: false,
+  canManageProducts: false,
+  canManageInventory: false,
+  canCreateSales: false,
+  canViewSalesReports: false
 };
 
 function normalizeRole(value, fallback = "") {
@@ -78,7 +92,11 @@ export function canAccessPermission(user, permission) {
   if (isPlatformOwner(user)) return false;
 
   const role = getWorkspaceRole(user);
-  const customPermissions = user?.permissions && typeof user.permissions === "object" ? user.permissions : {};
+  const memberPermissions =
+    user?.workspaceMember?.permissions && typeof user.workspaceMember.permissions === "object"
+      ? user.workspaceMember.permissions
+      : {};
+  const customPermissions = user?.permissions && typeof user.permissions === "object" ? user.permissions : memberPermissions;
   const basePermissions = role === workspaceRoles.PROFESSIONAL ? professionalPermissions : defaultWorkspacePermissions;
 
   return customPermissions[permission] ?? basePermissions[permission] ?? false;

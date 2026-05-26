@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { requireWorkspaceManager } from "../utils/accessControl.js";
+import { requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { formatDate, parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicExpense } from "../utils/formatters.js";
 import { optionalString, parsePagination, parsePositiveMoney, requiredString } from "../utils/validation.js";
@@ -9,8 +9,7 @@ import { optionalString, parsePagination, parsePositiveMoney, requiredString } f
 const router = Router();
 
 router.use((req, res, next) => {
-  requireWorkspaceManager(req);
-  next();
+  requireWorkspacePermission("canViewGeneralFinance")(req, res, next);
 });
 
 function nextMonth(date) {
@@ -32,8 +31,8 @@ function occurrenceDateForMonth(startDate, monthDate) {
   return new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
 }
 
-function expenseWhere(userId, query) {
-  const where = { userId };
+function expenseWhere(req, query) {
+  const where = workspaceWhere(req);
   if (query.category) where.category = String(query.category);
   if (query.search) {
     const search = String(query.search).trim();
@@ -83,7 +82,7 @@ router.get(
     const endDate = startOfDay(parseDateOnly(req.query.endDate || formatDate(new Date()), "data final"));
     const expenses = await prisma.expense.findMany({
       where: {
-        ...expenseWhere(req.user.id, req.query),
+        ...expenseWhere(req, req.query),
         OR: [
           { recurrence: "MONTHLY", date: { lte: endDate } },
           { recurrence: "ONCE", date: { gte: startDate, lte: endDate } }
@@ -129,7 +128,7 @@ router.post(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    const exists = await prisma.expense.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+    const exists = await prisma.expense.findFirst({ where: workspaceWhere(req, { id: req.params.id }) });
     if (!exists) throw new ApiError(404, "Despesa não encontrada.");
 
     const expense = await prisma.expense.update({
@@ -151,7 +150,7 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    const exists = await prisma.expense.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+    const exists = await prisma.expense.findFirst({ where: workspaceWhere(req, { id: req.params.id }) });
     if (!exists) throw new ApiError(404, "Despesa não encontrada.");
     await prisma.expense.delete({ where: { id: req.params.id } });
     res.status(204).send();

@@ -127,10 +127,11 @@ export async function syncAppointmentReminders(appointment) {
   });
 }
 
-export async function rescheduleFutureAppointmentRemindersForUser(userId) {
+export async function rescheduleFutureAppointmentRemindersForUser(userId, workspaceId = "") {
   const appointments = await prisma.appointment.findMany({
     where: {
       userId,
+      ...(workspaceId ? { workspaceId } : {}),
       startsAt: { gt: new Date() },
       status: { in: [...NOTIFIABLE_STATUSES] }
     },
@@ -151,10 +152,11 @@ export async function rescheduleFutureAppointmentRemindersForUser(userId) {
   return { rescheduled: appointments.length };
 }
 
-export async function processDueAppointmentReminders({ limit = 50, userId = "" } = {}) {
+export async function processDueAppointmentReminders({ limit = 50, userId = "", workspaceId = "" } = {}) {
   const dueReminders = await prisma.appointmentReminder.findMany({
     where: {
       ...(userId ? { userId } : {}),
+      ...(workspaceId ? { appointment: { is: { workspaceId } } } : {}),
       status: "PENDING",
       scheduledFor: { lte: new Date() },
       sentAt: null
@@ -198,7 +200,7 @@ export async function processDueAppointmentReminders({ limit = 50, userId = "" }
       const appointment = publicAppointment(reminder.appointment);
       const notification = await createInternalNotification({
         userId: reminder.userId,
-        workspaceId: reminder.userId,
+        workspaceId: reminder.appointment.workspaceId || reminder.userId,
         title: `Próximo atendimento em ${offsetLabel(offsetMinutes)}`,
         body: `${appointment.client?.name || "Cliente"} - ${appointment.service?.name || "Serviço"} às ${appointment.startTime}`,
         type: "appointment_reminder",

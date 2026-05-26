@@ -13,7 +13,8 @@ import {
   isWorkspaceProfessional,
   professionalWhere,
   requireWorkspaceManager,
-  resolveProfessionalScope
+  resolveProfessionalScope,
+  workspaceWhere
 } from "../utils/accessControl.js";
 import { publicAppointment, publicMonthlyPlan } from "../utils/formatters.js";
 import { optionalString, parseBoolean, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
@@ -321,7 +322,7 @@ function cyclesForRange(plans, startDate, endDate) {
 async function findPlan(user, id, includeAppointments = false) {
   const scope = await resolveProfessionalScope(prisma, user);
   const plan = await prisma.monthlyPlan.findFirst({
-    where: { id, userId: user.id, ...professionalWhere(scope) },
+    where: { ...workspaceWhere(user), id, ...professionalWhere(scope) },
     select: includeAppointments
       ? {
           ...monthlyPlanSelect,
@@ -337,26 +338,26 @@ async function findPlan(user, id, includeAppointments = false) {
   return plan;
 }
 
-async function findClientOrFail(userId, clientId) {
-  const client = await prisma.client.findFirst({ where: { id: clientId, userId }, select: { id: true } });
+async function findClientOrFail(user, clientId) {
+  const client = await prisma.client.findFirst({ where: workspaceWhere(user, { id: clientId }), select: { id: true } });
   if (!client) throw new ApiError(400, "Cliente invalido para esta mensalidade.");
   return client;
 }
 
-async function findService(userId, serviceId) {
+async function findService(user, serviceId) {
   if (!serviceId) return null;
   const service = await prisma.service.findFirst({
-    where: { id: serviceId, userId },
+    where: workspaceWhere(user, { id: serviceId }),
     select: serviceSelect
   });
   if (!service) throw new ApiError(400, "Servico invalido para esta mensalidade.");
   return service;
 }
 
-async function resolveProfessional(userId, professionalId) {
+async function resolveProfessional(user, professionalId) {
   if (professionalId) {
     const professional = await prisma.professional.findFirst({
-      where: { id: professionalId, userId },
+      where: workspaceWhere(user, { id: professionalId }),
       select: professionalSelect
     });
     if (!professional) throw new ApiError(400, "Profissional invalido para esta mensalidade.");
@@ -364,7 +365,7 @@ async function resolveProfessional(userId, professionalId) {
   }
 
   const professionals = await prisma.professional.findMany({
-    where: { userId, isActive: true },
+    where: workspaceWhere(user, { isActive: true }),
     select: professionalSelect,
     orderBy: [{ createdAt: "asc" }],
     take: 2
@@ -375,19 +376,20 @@ async function resolveProfessional(userId, professionalId) {
   return null;
 }
 
-async function buildPlanDraft(userId, body, currentPlan = null) {
+async function buildPlanDraft(req, body, currentPlan = null) {
+  const user = req.user;
   const clientId = requiredString(body.clientId ?? currentPlan?.clientId, "cliente");
-  await findClientOrFail(userId, clientId);
+  await findClientOrFail(user, clientId);
 
   const billingType = normalizeBillingType(body.billingType ?? currentPlan?.billingType);
-  const service = await findService(userId, body.serviceId ?? currentPlan?.serviceId ?? "");
+  const service = await findService(user, body.serviceId ?? currentPlan?.serviceId ?? "");
   const shouldGenerate = parseBoolean(body.generateAppointments ?? currentPlan?.generateAppointments, false);
 
   if (shouldGenerate && !service) {
     throw new ApiError(400, "Selecione um servico para gerar atendimentos na agenda.");
   }
 
-  const professional = await resolveProfessional(userId, body.professionalId ?? currentPlan?.professionalId ?? "");
+  const professional = await resolveProfessional(user, body.professionalId ?? currentPlan?.professionalId ?? "");
   if (shouldGenerate && !professional) {
     throw new ApiError(400, "Cadastre um profissional antes de gerar atendimentos recorrentes.");
   }
@@ -424,7 +426,7 @@ async function buildPlanDraft(userId, body, currentPlan = null) {
   }
 
   return {
-    userId,
+    userId: user.id,
     clientId,
     serviceId: service?.id || null,
     professionalId: professional?.id || null,
@@ -465,7 +467,7 @@ function appointmentKey(startsAt, endsAt) {
   return `${startsAt.getTime()}_${endsAt.getTime()}`;
 }
 
-async function scheduleAnalysis({ userId, professionalId, occurrences, monthlyPlanId = "" }) {
+async function scheduleAnalysis({ userId, workspaceId = "", professionalId, occurrences, monthlyPlanId = "" }) {
   if (!occurrences.length || !professionalId) return { conflicts: [], duplicates: new Set() };
   const starts = occurrences.map((item) => item.startsAt.getTime());
   const ends = occurrences.map((item) => item.endsAt.getTime());
@@ -474,7 +476,7 @@ async function scheduleAnalysis({ userId, professionalId, occurrences, monthlyPl
 
   const existing = await prisma.appointment.findMany({
     where: {
-      userId,
+      ...(workspaceId ? { workspaceId } : { userId }),
       professionalId,
       status: { not: "CANCELED" },
       startsAt: { lt: rangeEnd },
@@ -539,6 +541,7 @@ async function generateAppointmentsForPlan(plan, options = {}) {
   const occurrences = buildMonthlyPlanOccurrences(plan, { startDate, endDate, months: options.months || 1 });
   const { conflicts, duplicates } = await scheduleAnalysis({
     userId: plan.userId,
+    workspaceId: plan.workspaceId || "",
     professionalId: plan.professionalId,
     occurrences,
     monthlyPlanId: plan.id
@@ -580,7 +583,7 @@ async function generateAppointmentsForPlan(plan, options = {}) {
 
     const generatedAppointments = await prisma.appointment.findMany({
       where: {
-        userId: plan.userId,
+        ...(plan.workspaceId ? { workspaceId: plan.workspaceId } : { userId: plan.userId }),
         monthlyPlanId: plan.id,
         startsAt: { in: available.map((item) => item.startsAt) }
       },
@@ -615,11 +618,11 @@ async function generateAppointmentsForPlan(plan, options = {}) {
   };
 }
 
-async function appointmentsForPlans(userId, planIds, startDate, endDate) {
+async function appointmentsForPlans(reqOrUser, planIds, startDate, endDate) {
   if (!planIds.length) return [];
   return prisma.appointment.findMany({
     where: {
-      userId,
+      ...workspaceWhere(reqOrUser),
       monthlyPlanId: { in: planIds },
       startsAt: { gte: parseDateOnly(startDate), lt: addMinutes(parseDateOnly(endDate), 24 * 60) }
     },
@@ -670,7 +673,7 @@ router.get(
 
     const plans = await prisma.monthlyPlan.findMany({
       where: {
-        userId: req.user.id,
+        ...workspaceWhere(req),
         ...professionalWhere(scope),
         ...(req.query.status ? { status: normalizePlanStatus(req.query.status) } : {}),
         ...(req.query.billingType ? { billingType: normalizeBillingType(req.query.billingType) } : {}),
@@ -686,7 +689,7 @@ router.get(
     }
 
     const monthAppointments = await appointmentsForPlans(
-      req.user.id,
+      req,
       plans.map((plan) => plan.id),
       startDate,
       endDate
@@ -745,11 +748,12 @@ router.post(
   "/preview",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
-    const draft = await buildPlanDraft(req.user.id, req.body);
+    const draft = await buildPlanDraft(req, req.body);
     const endDate = req.body.previewEndDate || generationEndDateFromMonths(formatDate(draft.startDate), req.body.generationMonths || 1);
     const occurrences = buildMonthlyPlanOccurrences(draft, { startDate: formatDate(draft.startDate), endDate });
     const analysis = await scheduleAnalysis({
       userId: req.user.id,
+      workspaceId: req.workspaceId || "",
       professionalId: draft.professionalId,
       occurrences
     });
@@ -770,7 +774,7 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
-    const draft = await buildPlanDraft(req.user.id, req.body);
+    const draft = await buildPlanDraft(req, req.body);
     const shouldCreateFirstPayment = isFixedBilling(draft);
     const firstMonth = monthKey(formatDate(draft.startDate));
     const result = await prisma.$transaction(async (tx) => {
@@ -836,7 +840,7 @@ router.put(
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
     const current = await findPlan(req.user, req.params.id);
-    const draft = await buildPlanDraft(req.user.id, req.body, current);
+    const draft = await buildPlanDraft(req, req.body, current);
 
     const plan = await prisma.monthlyPlan.update({
       where: { id: req.params.id },
@@ -897,7 +901,7 @@ router.post(
     const fromDate = optionalDate(req.body.fromDate || todayString(), "data inicial");
     const result = await prisma.appointment.updateMany({
       where: {
-        userId: req.user.id,
+        ...workspaceWhere(req),
         monthlyPlanId: plan.id,
         status: "SCHEDULED",
         startsAt: { gte: fromDate }
@@ -907,7 +911,7 @@ router.post(
 
     const reminders = await prisma.appointment.findMany({
       where: {
-        userId: req.user.id,
+        ...workspaceWhere(req),
         monthlyPlanId: plan.id,
         startsAt: { gte: fromDate }
       },

@@ -119,7 +119,7 @@ export function getPlanConfig(plan) {
 }
 
 export function getCurrentPlan(user) {
-  return getPlanConfig(user?.plan || user?.platformPlan);
+  return getPlanConfig(user?.currentWorkspace?.plan || user?.plan || user?.platformPlan);
 }
 
 export function canUsePlanFeature(user, featureKey) {

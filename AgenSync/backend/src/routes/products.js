@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { requireWorkspaceManager } from "../utils/accessControl.js";
+import {
+  hasWorkspacePermission,
+  requireAnyWorkspacePermission,
+  requireWorkspacePermission,
+  workspaceWhere
+} from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicProduct, publicProductSale } from "../utils/formatters.js";
 import {
@@ -14,11 +19,6 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
-
-router.use((req, res, next) => {
-  requireWorkspaceManager(req);
-  next();
-});
 
 const clientSelect = {
   id: true,
@@ -54,15 +54,17 @@ const productSelect = {
   updatedAt: true
 };
 
-async function findProductOrFail(userId, id) {
-  const product = await prisma.product.findFirst({ where: { id, userId } });
+async function findProductOrFail(req, id) {
+  const product = await prisma.product.findFirst({ where: workspaceWhere(req, { id }) });
   if (!product) throw new ApiError(404, "Produto não encontrado.");
   return product;
 }
 
-function productWhere(userId, query) {
-  const where = { userId };
-  if (query.activeOnly === "true" || query.active === "true") where.isActive = true;
+function productWhere(req, query) {
+  const where = workspaceWhere(req);
+  if (query.activeOnly === "true" || query.active === "true" || !hasWorkspacePermission(req, "canManageProducts")) {
+    where.isActive = true;
+  }
   if (query.category) where.category = String(query.category);
   if (query.stock === "out") where.stockQty = { lte: 0 };
   if (query.stock === "low") where.stockQty = { gt: 0, lte: prisma.product.fields.minStock };
@@ -82,13 +84,14 @@ function productWhere(userId, query) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    requireAnyWorkspacePermission(["canManageProducts", "canCreateSales"])(req, res, () => {});
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
     });
 
     const products = await prisma.product.findMany({
-      where: productWhere(req.user.id, req.query),
+      where: productWhere(req, req.query),
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       select: productSelect,
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
@@ -101,6 +104,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
     const product = await prisma.product.create({
       data: {
         workspaceId: req.workspaceId || null,
@@ -123,7 +127,8 @@ router.post(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findProductOrFail(req.user.id, req.params.id);
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    await findProductOrFail(req, req.params.id);
     const product = await prisma.product.update({
       where: { id: req.params.id },
       data: {
@@ -145,16 +150,17 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findProductOrFail(req.user.id, req.params.id);
-    const sales = await prisma.productSale.count({ where: { userId: req.user.id, productId: req.params.id } });
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    await findProductOrFail(req, req.params.id);
+    const sales = await prisma.productSale.count({ where: workspaceWhere(req, { productId: req.params.id }) });
     if (sales) throw new ApiError(409, "Produto com vendas registradas deve ser inativado.");
     await prisma.product.delete({ where: { id: req.params.id } });
     res.status(204).send();
   })
 );
 
-function saleWhere(userId, query) {
-  const where = { userId };
+function saleWhere(req, query) {
+  const where = workspaceWhere(req);
   if (query.productId) where.productId = String(query.productId);
   if (query.clientId) where.clientId = String(query.clientId);
   if (query.startDate || query.endDate) {
@@ -180,13 +186,14 @@ function saleWhere(userId, query) {
 router.get(
   "/sales/list",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canViewSalesReports")(req, res, () => {});
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
     });
 
     const sales = await prisma.productSale.findMany({
-      where: saleWhere(req.user.id, req.query),
+      where: saleWhere(req, req.query),
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       select: productSaleSelect,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }]
@@ -199,6 +206,7 @@ router.get(
 router.post(
   "/sales/list",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canCreateSales")(req, res, () => {});
     const productId = requiredString(req.body.productId, "produto");
     const quantity = parsePositiveInteger(req.body.quantity, "quantidade");
     const date = parseDateOnly(requiredString(req.body.date, "data"));
@@ -207,8 +215,8 @@ router.post(
 
     const sale = await prisma.$transaction(async (tx) => {
       const [product, client] = await Promise.all([
-        tx.product.findFirst({ where: { id: productId, userId: req.user.id } }),
-        clientId ? tx.client.findFirst({ where: { id: clientId, userId: req.user.id } }) : Promise.resolve(null)
+        tx.product.findFirst({ where: workspaceWhere(req, { id: productId }) }),
+        clientId ? tx.client.findFirst({ where: workspaceWhere(req, { id: clientId }) }) : Promise.resolve(null)
       ]);
 
       if (!product) throw new ApiError(404, "Produto não encontrado.");
@@ -217,7 +225,7 @@ router.post(
       if (clientId && !client) throw new ApiError(400, "Cliente inválido para esta venda.");
 
       const stockUpdate = await tx.product.updateMany({
-        where: { id: product.id, userId: req.user.id, stockQty: { gte: quantity } },
+        where: workspaceWhere(req, { id: product.id, stockQty: { gte: quantity } }),
         data: { stockQty: { decrement: quantity } }
       });
       if (stockUpdate.count !== 1) throw new ApiError(400, "Quantidade maior que o estoque disponivel.");

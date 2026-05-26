@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { requireWorkspaceManager } from "../utils/accessControl.js";
+import { isWorkspaceProfessional, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { publicService } from "../utils/formatters.js";
 import {
   parseBoolean,
@@ -13,13 +13,8 @@ import {
 
 const router = Router();
 
-router.use((req, res, next) => {
-  requireWorkspaceManager(req);
-  next();
-});
-
-async function findServiceOrFail(userId, id) {
-  const service = await prisma.service.findFirst({ where: { id, userId } });
+async function findServiceOrFail(req, id) {
+  const service = await prisma.service.findFirst({ where: workspaceWhere(req, { id }) });
   if (!service) {
     throw new ApiError(404, "Serviço não encontrado.");
   }
@@ -29,8 +24,8 @@ async function findServiceOrFail(userId, id) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const where = { userId: req.user.id };
-    if (req.query.active === "true") {
+    const where = workspaceWhere(req);
+    if (req.query.active === "true" || isWorkspaceProfessional(req.user)) {
       where.isActive = true;
     }
     const pagination = parsePagination(req.query, {
@@ -51,6 +46,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageServices")(req, res, () => {});
     const name = requiredString(req.body.name, "nome", 2);
     const priceDefault = parsePositiveMoney(req.body.priceDefault, "preço padrão");
     const durationMinutes = parsePositiveInteger(req.body.durationMinutes, "duração");
@@ -67,7 +63,10 @@ router.post(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const service = await findServiceOrFail(req.user.id, req.params.id);
+    const service = await findServiceOrFail(req, req.params.id);
+    if (isWorkspaceProfessional(req.user) && !service.isActive) {
+      throw new ApiError(404, "Servico nao encontrado.");
+    }
     res.json({ service: publicService(service) });
   })
 );
@@ -75,7 +74,8 @@ router.get(
 router.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findServiceOrFail(req.user.id, req.params.id);
+    requireWorkspacePermission("canManageServices")(req, res, () => {});
+    await findServiceOrFail(req, req.params.id);
 
     const name = requiredString(req.body.name, "nome", 2);
     const priceDefault = parsePositiveMoney(req.body.priceDefault, "preço padrão");
@@ -94,10 +94,11 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await findServiceOrFail(req.user.id, req.params.id);
+    requireWorkspacePermission("canManageServices")(req, res, () => {});
+    await findServiceOrFail(req, req.params.id);
 
     const appointments = await prisma.appointment.count({
-      where: { userId: req.user.id, serviceId: req.params.id }
+      where: workspaceWhere(req, { serviceId: req.params.id })
     });
 
     if (appointments > 0) {

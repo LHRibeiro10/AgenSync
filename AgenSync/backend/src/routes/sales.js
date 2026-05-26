@@ -1,17 +1,12 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { requireWorkspaceManager } from "../utils/accessControl.js";
+import { requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicProductSale } from "../utils/formatters.js";
 import { optionalString, parsePagination, parsePositiveInteger, requiredString } from "../utils/validation.js";
 
 const router = Router();
-
-router.use((req, res, next) => {
-  requireWorkspaceManager(req);
-  next();
-});
 
 const productSaleSelect = {
   id: true,
@@ -33,8 +28,8 @@ const productSaleSelect = {
   }
 };
 
-function saleWhere(userId, query) {
-  const where = { userId };
+function saleWhere(req, query) {
+  const where = workspaceWhere(req);
   if (query.productId) where.productId = String(query.productId);
   if (query.clientId) where.clientId = String(query.clientId);
   if (query.startDate || query.endDate) {
@@ -60,13 +55,14 @@ function saleWhere(userId, query) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canViewSalesReports")(req, res, () => {});
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
     });
 
     const sales = await prisma.productSale.findMany({
-      where: saleWhere(req.user.id, req.query),
+      where: saleWhere(req, req.query),
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       select: productSaleSelect,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }]
@@ -79,6 +75,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canCreateSales")(req, res, () => {});
     const productId = requiredString(req.body.productId, "produto");
     const quantity = parsePositiveInteger(req.body.quantity, "quantidade");
     const date = parseDateOnly(requiredString(req.body.date, "data"));
@@ -87,8 +84,8 @@ router.post(
 
     const sale = await prisma.$transaction(async (tx) => {
       const [product, client] = await Promise.all([
-        tx.product.findFirst({ where: { id: productId, userId: req.user.id } }),
-        clientId ? tx.client.findFirst({ where: { id: clientId, userId: req.user.id } }) : Promise.resolve(null)
+        tx.product.findFirst({ where: workspaceWhere(req, { id: productId }) }),
+        clientId ? tx.client.findFirst({ where: workspaceWhere(req, { id: clientId }) }) : Promise.resolve(null)
       ]);
 
       if (!product) throw new ApiError(404, "Produto não encontrado.");
@@ -97,7 +94,7 @@ router.post(
       if (clientId && !client) throw new ApiError(400, "Cliente inválido para esta venda.");
 
       const stockUpdate = await tx.product.updateMany({
-        where: { id: product.id, userId: req.user.id, stockQty: { gte: quantity } },
+        where: workspaceWhere(req, { id: product.id, stockQty: { gte: quantity } }),
         data: { stockQty: { decrement: quantity } }
       });
       if (stockUpdate.count !== 1) throw new ApiError(400, "Quantidade maior que o estoque disponivel.");

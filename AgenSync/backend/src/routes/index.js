@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAdmin, requireAuth, requirePlatformRole } from "../middleware/auth.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { processDueAppointmentReminders } from "../services/appointmentReminderService.js";
+import { requireWorkspaceAccess } from "../utils/accessControl.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import adminRouter from "./admin.js";
 import appointmentsRouter from "./appointments.js";
@@ -36,6 +37,11 @@ function requireCronSecret(req) {
   if (cronSecretFromRequest(req) !== configuredSecret) throw new ApiError(401, "Cron nao autorizado.");
 }
 
+function workspaceRoute(req, res, next) {
+  requireWorkspaceAccess(req);
+  next();
+}
+
 router.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
@@ -54,19 +60,19 @@ router.post(
 router.use("/auth", authRouter);
 router.use("/admin", requireAuth, requireAdmin, adminRouter);
 router.use("/platform", requireAuth, requirePlatformRole(["DEVELOPER", "PLATFORM_OWNER"]), platformRouter);
-router.use("/clients", requireAuth, clientsRouter);
-router.use("/professionals", requireAuth, professionalsRouter);
-router.use("/services", requireAuth, servicesRouter);
-router.use("/appointments", requireAuth, appointmentsRouter);
-router.use("/appointment-reminders", requireAuth, appointmentRemindersRouter);
-router.use("/dashboard", requireAuth, dashboardRouter);
-router.use("/finance", requireAuth, financeRouter);
-router.use("/expenses", requireAuth, expensesRouter);
-router.use("/products", requireAuth, productsRouter);
-router.use("/sales", requireAuth, salesRouter);
-router.use("/subscriptions/monthly-plans", requireAuth, monthlyPlansRouter);
-router.use("/notification-tokens", requireAuth, notificationTokensRouter);
-router.use("/notifications", requireAuth, notificationsRouter);
-router.use("/onboarding", requireAuth, onboardingRouter);
+router.use("/clients", requireAuth, workspaceRoute, clientsRouter);
+router.use("/professionals", requireAuth, workspaceRoute, professionalsRouter);
+router.use("/services", requireAuth, workspaceRoute, servicesRouter);
+router.use("/appointments", requireAuth, workspaceRoute, appointmentsRouter);
+router.use("/appointment-reminders", requireAuth, workspaceRoute, appointmentRemindersRouter);
+router.use("/dashboard", requireAuth, workspaceRoute, dashboardRouter);
+router.use("/finance", requireAuth, workspaceRoute, financeRouter);
+router.use("/expenses", requireAuth, workspaceRoute, expensesRouter);
+router.use("/products", requireAuth, workspaceRoute, productsRouter);
+router.use("/sales", requireAuth, workspaceRoute, salesRouter);
+router.use("/subscriptions/monthly-plans", requireAuth, workspaceRoute, monthlyPlansRouter);
+router.use("/notification-tokens", requireAuth, workspaceRoute, notificationTokensRouter);
+router.use("/notifications", requireAuth, workspaceRoute, notificationsRouter);
+router.use("/onboarding", requireAuth, workspaceRoute, onboardingRouter);
 
 export default router;

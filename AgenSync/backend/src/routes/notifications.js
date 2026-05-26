@@ -4,6 +4,7 @@ import { invalidateAuthUserCache } from "../middleware/auth.js";
 import { prisma } from "../prisma.js";
 import { rescheduleFutureAppointmentRemindersForUser } from "../services/appointmentReminderService.js";
 import { createInternalNotification, publicNotification } from "../services/notificationService.js";
+import { requireWorkspaceManager } from "../utils/accessControl.js";
 
 const router = Router();
 
@@ -19,6 +20,20 @@ function limitFromQuery(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 20;
   return Math.min(Math.max(Math.floor(parsed), 1), 50);
+}
+
+function notificationWhere(req, extra = {}) {
+  const workspaceIds = [req.workspaceId || ""].filter(Boolean);
+  if (req.workspaceLegacy || !workspaceIds.length) workspaceIds.push(req.user.id);
+
+  return {
+    userId: req.user.id,
+    ...extra,
+    OR: [
+      ...(workspaceIds.length ? [{ workspaceId: { in: [...new Set(workspaceIds)] } }] : []),
+      { workspaceId: null }
+    ]
+  };
 }
 
 function notificationSettingsFromUser(user) {
@@ -98,6 +113,7 @@ router.get(
 router.put(
   "/settings",
   asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
     const settings = {
       appointmentNotificationsEnabled: parseBoolean(req.body.appointmentNotificationsEnabled, true),
       appointmentNotificationOffsetMinutes: parseOffset(req.body.appointmentNotificationOffsetMinutes ?? 30),
@@ -174,7 +190,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const notification = await createInternalNotification({
       userId: req.user.id,
-      workspaceId: req.user.id,
+      workspaceId: req.workspaceId || null,
       title: "Notificacao de teste do AgenSync",
       body: "As notificacoes internas estao funcionando neste navegador.",
       type: "test",
@@ -190,11 +206,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const [notifications, unreadCount] = await Promise.all([
       prisma.notification.findMany({
-        where: { userId: req.user.id },
+        where: notificationWhere(req),
         orderBy: [{ createdAt: "desc" }],
         take: limitFromQuery(req.query.limit)
       }),
-      prisma.notification.count({ where: { userId: req.user.id, readAt: null } })
+      prisma.notification.count({ where: notificationWhere(req, { readAt: null }) })
     ]);
 
     res.json({
@@ -208,7 +224,7 @@ router.patch(
   "/read-all",
   asyncHandler(async (req, res) => {
     await prisma.notification.updateMany({
-      where: { userId: req.user.id, readAt: null },
+      where: notificationWhere(req, { readAt: null }),
       data: { readAt: new Date() }
     });
 
@@ -220,7 +236,7 @@ router.delete(
   "/",
   asyncHandler(async (req, res) => {
     const result = await prisma.notification.deleteMany({
-      where: { userId: req.user.id }
+      where: notificationWhere(req)
     });
 
     res.json({ ok: true, deletedCount: result.count });
@@ -231,7 +247,7 @@ router.patch(
   "/:id/read",
   asyncHandler(async (req, res) => {
     const notification = await prisma.notification.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
+      where: notificationWhere(req, { id: req.params.id })
     });
 
     if (!notification) throw new ApiError(404, "Notificacao nao encontrada.");
@@ -249,7 +265,7 @@ router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await prisma.notification.deleteMany({
-      where: { id: req.params.id, userId: req.user.id }
+      where: notificationWhere(req, { id: req.params.id })
     });
 
     if (!result.count) throw new ApiError(404, "Notificacao nao encontrada.");

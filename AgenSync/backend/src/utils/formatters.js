@@ -65,6 +65,7 @@ export function publicUser(user) {
     currentWorkspaceId: currentWorkspace?.id || user.currentWorkspaceId || "",
     currentWorkspace,
     workspaceMember,
+    permissions: workspaceMember?.permissions || {},
     businessName: user.businessName,
     businessLogo: user.businessLogo || "",
     businessType: user.businessType,
