@@ -24,8 +24,15 @@ function safeMetadata(metadata) {
   );
 }
 
+function safeWorkspaceId({ req, workspaceId = "", metadata = null }) {
+  const candidate = String(workspaceId || req?.workspaceId || metadata?.workspaceId || "").trim();
+  if (!candidate || candidate.startsWith("legacy_") || req?.workspaceLegacy === true) return null;
+  return candidate;
+}
+
 export async function recordAuditEvent({
   req,
+  workspaceId = "",
   userId = null,
   email = "",
   eventType,
@@ -38,6 +45,7 @@ export async function recordAuditEvent({
   try {
     await prisma.auditLog.create({
       data: {
+        workspaceId: safeWorkspaceId({ req, workspaceId, metadata }),
         userId,
         email: email || req?.user?.email || null,
         eventType,
@@ -60,6 +68,7 @@ export async function recordAuditEvent({
 export function publicAuditLog(log) {
   return {
     id: log.id,
+    workspaceId: log.workspaceId || "",
     userId: log.userId || "",
     userName: log.user?.name || "",
     email: log.email || log.user?.email || "",

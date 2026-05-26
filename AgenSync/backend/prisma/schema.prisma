@@ -188,6 +188,8 @@ model User {
 
 model AuditLog {
   id        String   @id @default(cuid())
+  workspaceId String?
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   email     String?
@@ -200,6 +202,8 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, eventType, createdAt])
   @@index([eventType, createdAt])
   @@index([userId, createdAt])
 }
@@ -426,6 +430,7 @@ model Workspace {
   careRecords    ClientCareRecord[]
   notifications  Notification[]
   invites        WorkspaceInvite[]
+  auditLogs      AuditLog[]
   createdAt      DateTime                  @default(now())
   updatedAt      DateTime                  @updatedAt
 
