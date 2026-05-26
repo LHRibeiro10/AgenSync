@@ -3,6 +3,7 @@ import { requireAdmin, requireAuth, requirePlatformRole } from "../middleware/au
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { processDueAppointmentReminders } from "../services/appointmentReminderService.js";
 import { requireWorkspaceAccess } from "../utils/accessControl.js";
+import { recordAuditEvent } from "../utils/audit.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import adminRouter from "./admin.js";
 import appointmentsRouter from "./appointments.js";
@@ -40,6 +41,23 @@ function requireCronSecret(req) {
 
 function workspaceRoute(req, res, next) {
   requireWorkspaceAccess(req);
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    res.on("finish", () => {
+      void recordAuditEvent({
+        req,
+        userId: req.user.id,
+        email: req.user.email,
+        eventType: "workspace.action",
+        message: "Acao executada no workspace.",
+        metadata: {
+          workspaceId: req.workspaceId,
+          method: req.method,
+          route: req.originalUrl,
+          statusCode: res.statusCode
+        }
+      });
+    });
+  }
   next();
 }
 

@@ -14,6 +14,7 @@ import { useAuth } from "../contexts/AuthContext.jsx";
 import { money } from "../utils.js";
 
 const emptyForm = { name: "", role: "", phone: "", isActive: true };
+const emptyAccessForm = { email: "", password: "", role: "professional" };
 
 function initials(name) {
   return String(name || "P")
@@ -43,13 +44,16 @@ export default function Professionals() {
   const [professionals, setProfessionals] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [accessProfessionalId, setAccessProfessionalId] = useState("");
+  const [accessForm, setAccessForm] = useState(emptyAccessForm);
   const [editing, setEditing] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [creatingAccess, setCreatingAccess] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, workspaceRole } = useAuth();
 
   const stats = useMemo(() => buildStats(professionals, appointments), [professionals, appointments]);
   const statsByProfessional = useMemo(
@@ -96,6 +100,20 @@ export default function Professionals() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function updateAccess(field, value) {
+    setAccessForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function startAccess(professional) {
+    setAccessProfessionalId(professional.id);
+    setAccessForm({
+      email: professional.email || "",
+      password: "",
+      role: "professional"
+    });
+    setError("");
+  }
+
   function startEdit(professional) {
     setEditing(professional.id);
     setForm({
@@ -111,6 +129,11 @@ export default function Professionals() {
   function resetForm() {
     setEditing(null);
     setForm(emptyForm);
+  }
+
+  function resetAccessForm() {
+    setAccessProfessionalId("");
+    setAccessForm(emptyAccessForm);
   }
 
   async function handleSubmit(event) {
@@ -134,6 +157,24 @@ export default function Professionals() {
       showToast(err.message, "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCreateAccess(event, professional) {
+    event.preventDefault();
+    setCreatingAccess(true);
+    setError("");
+
+    try {
+      await api.createProfessionalAccess(professional.id, accessForm);
+      showToast("Usuario afiliado criado.");
+      resetAccessForm();
+      await loadProfessionalsOnly();
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      setCreatingAccess(false);
     }
   }
 
@@ -180,6 +221,7 @@ export default function Professionals() {
   }
 
   const currentPlan = getCurrentPlan(user);
+  const canManageAccess = workspaceRole === "owner" || workspaceRole === "admin";
   const activeCount = professionals.filter((professional) => professional.isActive).length;
   const professionalLimitReached = !editing && form.isActive && activeCount >= currentPlan.maxProfessionals;
   const totalRevenue = stats.reduce((sum, item) => sum + item.revenue, 0);
@@ -335,11 +377,21 @@ export default function Professionals() {
                               <span className="rounded-full bg-blue-50 px-3 py-1 text-brand">
                                 {money(itemStats.revenue)}
                               </span>
+                              {professional.access ? (
+                                <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">
+                                  Acesso {professional.access.role === "admin" ? "admin" : "profissional"}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                          {canManageAccess && !professional.access ? (
+                            <Button variant="secondary" onClick={() => startAccess(professional)}>
+                              Criar acesso
+                            </Button>
+                          ) : null}
                           <Button variant="secondary" onClick={() => toggleActive(professional)}>
                             {professional.isActive ? "Inativar" : "Ativar"}
                           </Button>
@@ -350,6 +402,53 @@ export default function Professionals() {
                             Excluir
                           </Button>
                         </div>
+
+                        {accessProfessionalId === professional.id ? (
+                          <form
+                            onSubmit={(event) => handleCreateAccess(event, professional)}
+                            className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 sm:col-span-2 md:grid-cols-[1fr_1fr_180px_auto]"
+                          >
+                            <Field label="Email do acesso">
+                              <input
+                                required
+                                type="email"
+                                value={accessForm.email}
+                                onChange={(event) => updateAccess("email", event.target.value)}
+                                className={inputClass}
+                                placeholder="email@empresa.com"
+                              />
+                            </Field>
+                            <Field label="Senha inicial">
+                              <input
+                                required
+                                minLength={6}
+                                type="password"
+                                value={accessForm.password}
+                                onChange={(event) => updateAccess("password", event.target.value)}
+                                className={inputClass}
+                                placeholder="Minimo 6 caracteres"
+                              />
+                            </Field>
+                            <Field label="Funcao">
+                              <select
+                                value={accessForm.role}
+                                onChange={(event) => updateAccess("role", event.target.value)}
+                                className={inputClass}
+                              >
+                                <option value="professional">Profissional</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </Field>
+                            <div className="flex items-end gap-2">
+                              <Button type="submit" loading={creatingAccess} loadingLabel="Criando...">
+                                Criar
+                              </Button>
+                              <Button type="button" variant="secondary" onClick={resetAccessForm}>
+                                Cancelar
+                              </Button>
+                            </div>
+                          </form>
+                        ) : null}
                       </article>
                     );
                   })

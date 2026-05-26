@@ -1,6 +1,10 @@
+import bcrypt from "bcryptjs";
 import { Router } from "express";
+import { getPlanConfig } from "../config/plans.js";
+import { invalidateAuthUserCache } from "../middleware/auth.js";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
+import { recordAuditEvent } from "../utils/audit.js";
 import { publicProfessional } from "../utils/formatters.js";
 import {
   assertCanCreateProfessional,
@@ -14,17 +18,81 @@ import {
   parseBoolean,
   parsePagination,
   parsePositiveMoney,
-  requiredString
+  requiredString,
+  validateEmail
 } from "../utils/validation.js";
 
 const router = Router();
+const accessRoles = new Set(["ADMIN", "PROFESSIONAL"]);
 
 async function findProfessionalOrFail(req, id) {
-  const professional = await prisma.professional.findFirst({ where: workspaceWhere(req, { id }) });
+  const professional = await prisma.professional.findFirst({
+    where: workspaceWhere(req, { id }),
+    include: {
+      workspaceMembers: {
+        include: { user: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: "asc" }
+      }
+    }
+  });
   if (!professional) {
     throw new ApiError(404, "Profissional não encontrado.");
   }
   return professional;
+}
+
+function normalizeAccessRole(value) {
+  const role = String(value || "PROFESSIONAL").trim().toUpperCase();
+  if (!accessRoles.has(role)) {
+    throw new ApiError(400, "Funcao de acesso invalida.");
+  }
+  return role;
+}
+
+function publicAccessMember(member) {
+  if (!member) return null;
+  return {
+    id: member.id,
+    userId: member.userId,
+    name: member.user?.name || "",
+    email: member.user?.email || "",
+    role: String(member.role || "PROFESSIONAL").toLowerCase(),
+    status: String(member.status || "ACTIVE").toLowerCase(),
+    professionalId: member.professionalId || "",
+    permissions: member.permissions && typeof member.permissions === "object" ? member.permissions : {},
+    createdAt: member.createdAt,
+    updatedAt: member.updatedAt
+  };
+}
+
+async function assertCanCreateWorkspaceAccess(req, role) {
+  const plan = req.plan || getPlanConfig(req.workspace?.plan);
+  const now = new Date();
+  const pendingInviteWhere = {
+    workspaceId: req.workspaceId,
+    status: "PENDING",
+    expiresAt: { gt: now }
+  };
+
+  const [activeMembers, pendingInvites] = await Promise.all([
+    prisma.workspaceMember.count({ where: { workspaceId: req.workspaceId, status: "ACTIVE" } }),
+    prisma.workspaceInvite.count({ where: pendingInviteWhere })
+  ]);
+
+  if (activeMembers + pendingInvites >= Number(plan.maxUsers || 0)) {
+    throw new ApiError(409, "Seu plano atual nao permite adicionar mais usuarios.");
+  }
+
+  if (role === "ADMIN") {
+    const [activeAdmins, pendingAdminInvites] = await Promise.all([
+      prisma.workspaceMember.count({ where: { workspaceId: req.workspaceId, role: "ADMIN", status: "ACTIVE" } }),
+      prisma.workspaceInvite.count({ where: { ...pendingInviteWhere, role: "ADMIN" } })
+    ]);
+
+    if (activeAdmins + pendingAdminInvites >= Number(plan.maxAdmins || 0)) {
+      throw new ApiError(409, `Seu plano permite ate ${plan.maxAdmins} administradores.`);
+    }
+  }
 }
 
 router.get(
@@ -47,6 +115,12 @@ router.get(
 
     const professionals = await prisma.professional.findMany({
       where,
+      include: {
+        workspaceMembers: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+          orderBy: { createdAt: "asc" }
+        }
+      },
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
@@ -76,6 +150,99 @@ router.post(
     });
 
     res.status(201).json({ professional: publicProfessional(professional) });
+  })
+);
+
+router.post(
+  "/:id/access",
+  asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
+    const professional = await findProfessionalOrFail(req, req.params.id);
+    const existingAccess = professional.workspaceMembers?.find((member) => member.status !== "DISABLED");
+    if (existingAccess) {
+      throw new ApiError(409, "Este profissional ja possui um usuario afiliado ativo.");
+    }
+
+    const email = validateEmail(req.body.email || professional.email);
+    const password = requiredString(req.body.password, "senha", 6);
+    const role = normalizeAccessRole(req.body.role || req.body.workspaceRole);
+    const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (existingUser) {
+      throw new ApiError(409, "Ja existe uma conta com esse email.");
+    }
+
+    await assertCanCreateWorkspaceAccess(req, role);
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: professional.name,
+          email,
+          passwordHash,
+          role: "USER",
+          workspaceRole: role,
+          platformPlan: "padrao",
+          subscriptionStatus: "PAID",
+          billingEnabled: false,
+          businessName: req.workspace?.name || req.user.businessName || `Agenda de ${professional.name}`,
+          businessType: req.user.businessType || "Outro",
+          currentWorkspaceId: req.workspaceId,
+          professionalId: professional.id,
+          onboardingCompleted: true,
+          onboardingCompletedAt: new Date()
+        }
+      });
+
+      const member = await tx.workspaceMember.create({
+        data: {
+          workspaceId: req.workspaceId,
+          userId: user.id,
+          role,
+          permissions: {},
+          professionalId: professional.id,
+          status: "ACTIVE"
+        },
+        include: {
+          user: { select: { id: true, name: true, email: true } }
+        }
+      });
+
+      const updatedProfessional = await tx.professional.update({
+        where: { id: professional.id },
+        data: { email },
+        include: {
+          workspaceMembers: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+            orderBy: { createdAt: "asc" }
+          }
+        }
+      });
+
+      return { user, member, professional: updatedProfessional };
+    });
+
+    invalidateAuthUserCache(result.user.id);
+    await recordAuditEvent({
+      req,
+      userId: req.user.id,
+      email: req.user.email,
+      eventType: "workspace.professional_access_created",
+      message: "Usuario afiliado criado para profissional.",
+      metadata: {
+        workspaceId: req.workspaceId,
+        professionalId: professional.id,
+        memberId: result.member.id,
+        targetUserId: result.user.id,
+        targetEmail: result.user.email,
+        role
+      }
+    });
+
+    res.status(201).json({
+      member: publicAccessMember(result.member),
+      professional: publicProfessional(result.professional)
+    });
   })
 );
 

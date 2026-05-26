@@ -13,6 +13,7 @@ export const endpoints = Object.freeze({
     memberById: (id) => `/workspace/members/${id}`,
     disableMember: (id) => `/workspace/members/${id}/disable`,
     enableMember: (id) => `/workspace/members/${id}/enable`,
+    auditLogs: "/workspace/audit-logs",
     invites: "/workspace/invites",
     inviteById: (id) => `/workspace/invites/${id}`,
     cancelInvite: (id) => `/workspace/invites/${id}/cancel`,
@@ -65,7 +66,8 @@ export const endpoints = Object.freeze({
   },
   professionals: {
     list: "/professionals",
-    byId: (id) => `/professionals/${id}`
+    byId: (id) => `/professionals/${id}`,
+    access: (id) => `/professionals/${id}/access`
   },
   services: {
     list: "/services",

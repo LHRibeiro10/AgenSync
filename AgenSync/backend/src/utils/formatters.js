@@ -141,6 +141,10 @@ export function publicService(service) {
 }
 
 export function publicProfessional(professional) {
+  const accessMember = Array.isArray(professional.workspaceMembers)
+    ? professional.workspaceMembers.find((member) => member.status !== "DISABLED") || null
+    : null;
+
   return {
     id: professional.id,
     name: professional.name,
@@ -149,6 +153,17 @@ export function publicProfessional(professional) {
     phone: professional.phone || "",
     monthlyGoal: professional.monthlyGoal === null || professional.monthlyGoal === undefined ? null : Number(professional.monthlyGoal),
     isActive: professional.isActive,
+    access: accessMember
+      ? {
+          memberId: accessMember.id,
+          userId: accessMember.userId,
+          name: accessMember.user?.name || "",
+          email: accessMember.user?.email || "",
+          role: String(accessMember.role || "PROFESSIONAL").toLowerCase(),
+          status: String(accessMember.status || "ACTIVE").toLowerCase(),
+          permissions: accessMember.permissions && typeof accessMember.permissions === "object" ? accessMember.permissions : {}
+        }
+      : null,
     createdAt: professional.createdAt,
     updatedAt: professional.updatedAt
   };

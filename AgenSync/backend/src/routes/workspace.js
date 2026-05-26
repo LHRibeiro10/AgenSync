@@ -6,7 +6,7 @@ import { PLAN_FEATURES, PLAN_SLUGS, getPlanConfig, planHasFeature } from "../con
 import { invalidateAuthUserCache, requireAuth } from "../middleware/auth.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { prisma } from "../prisma.js";
-import { recordAuditEvent } from "../utils/audit.js";
+import { publicAuditLog, recordAuditEvent } from "../utils/audit.js";
 import {
   requireWorkspaceAccess,
   requireWorkspaceManager,
@@ -15,7 +15,7 @@ import {
 import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { hydrateUserWorkspace } from "../utils/workspaceContext.js";
-import { optionalString, requiredString, validateEmail } from "../utils/validation.js";
+import { optionalString, parsePagination, requiredString, validateEmail } from "../utils/validation.js";
 
 const router = Router();
 
@@ -47,6 +47,27 @@ const criticalPermissions = new Set([
   "transferOwnership",
   "manageCriticalSettings"
 ]);
+
+const auditSelect = {
+  id: true,
+  workspaceId: true,
+  userId: true,
+  email: true,
+  eventType: true,
+  message: true,
+  ipAddress: true,
+  userAgent: true,
+  route: true,
+  metadata: true,
+  createdAt: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true
+    }
+  }
+};
 
 function jwtSecret() {
   const secret = normalizeEnvValue(process.env.JWT_SECRET);
@@ -561,6 +582,45 @@ router.get(
     });
 
     res.json({ members: members.map(publicMember) });
+  })
+);
+
+router.get(
+  "/audit-logs",
+  asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
+    const plan = req.plan || getPlanConfig(req.workspace?.plan);
+    if (!planHasFeature(plan, PLAN_FEATURES.AUDIT)) {
+      throw new ApiError(403, "Auditoria de acesso esta disponivel no plano Pro.");
+    }
+
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 50,
+      maxPageSize: 200
+    });
+    const where = { workspaceId: req.workspaceId };
+
+    if (req.query.eventType) {
+      where.eventType = String(req.query.eventType);
+    }
+
+    if (req.query.memberId) {
+      const member = await prisma.workspaceMember.findFirst({
+        where: { id: String(req.query.memberId), workspaceId: req.workspaceId },
+        select: { userId: true }
+      });
+      if (!member) throw new ApiError(404, "Membro nao encontrado neste workspace.");
+      where.userId = member.userId;
+    }
+
+    const logs = await prisma.auditLog.findMany({
+      where,
+      ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : { take: 50 }),
+      select: auditSelect,
+      orderBy: [{ createdAt: "desc" }]
+    });
+
+    res.json({ logs: logs.map(publicAuditLog) });
   })
 );
 

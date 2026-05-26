@@ -5,6 +5,7 @@ import {
   deleteWorkspaceMemberApi,
   disableWorkspaceMemberApi,
   enableWorkspaceMemberApi,
+  listWorkspaceAuditLogsApi,
   listWorkspaceInvitesApi,
   listWorkspaceMembersApi,
   updateWorkspaceMemberApi,
@@ -16,6 +17,13 @@ export function listWorkspaceMembers() {
   return executeDataSource({
     feature: "workspace.members.list",
     remote: () => listWorkspaceMembersApi()
+  });
+}
+
+export function listWorkspaceAuditLogs(params) {
+  return executeDataSource({
+    feature: "workspace.auditLogs.list",
+    remote: () => listWorkspaceAuditLogsApi(params)
   });
 }
 

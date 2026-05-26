@@ -26,11 +26,9 @@ import {
   updateNotificationSettings
 } from "../services/notificationService.js";
 import {
-  cancelWorkspaceInvite,
-  createWorkspaceInvite,
   disableWorkspaceMember,
   enableWorkspaceMember,
-  listWorkspaceInvites,
+  listWorkspaceAuditLogs,
   listWorkspaceMembers,
   updateWorkspaceMember
 } from "../services/workspaceTeamService.js";
@@ -220,15 +218,6 @@ function MessageEditor({ title, value, onChange, onRestore, preview }) {
   );
 }
 
-const teamInviteInitial = {
-  name: "",
-  email: "",
-  phone: "",
-  role: "professional",
-  professionalId: "",
-  permissions: {}
-};
-
 const invitePermissionOptions = [
   ["canViewGeneralFinance", "Ver financeiro geral"],
   ["canManageTeamSchedule", "Gerenciar agenda da equipe"],
@@ -259,20 +248,27 @@ function statusLabel(status) {
   return status || "Status";
 }
 
-function normalizeWhatsAppPhone(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (!digits) return "";
-  return digits.startsWith("55") || digits.length > 11 ? digits : `55${digits}`;
+function auditEventLabel(eventType) {
+  const labels = {
+    "auth.login_success": "Login",
+    "workspace.action": "Acao",
+    "workspace.professional_access_created": "Acesso criado",
+    "workspace.member_updated": "Permissoes alteradas",
+    "workspace.member_disabled": "Membro desativado",
+    "workspace.member_enabled": "Membro reativado",
+    "workspace.member_removed": "Membro removido"
+  };
+  return labels[eventType] || eventType || "Evento";
 }
 
-function buildInviteWhatsAppUrl(invite, workspaceName = "AgenSync") {
-  const phone = normalizeWhatsAppPhone(invite?.phone);
-  const link = invite?.inviteUrl || "";
-  if (!phone || !link) return "";
-
-  const greeting = invite?.name ? `Oi, ${invite.name}!` : "Oi!";
-  const message = `${greeting} Voce recebeu um convite para acessar ${workspaceName} no AgenSync. Abra o link para criar seu acesso: ${link}`;
-  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+function formatAuditDate(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function TeamSection({ user, workspaceRole, showToast, onError }) {
@@ -280,19 +276,14 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
   const plan = user?.plan || user?.platformPlan || user?.currentWorkspace?.plan || "padrao";
   const planLimits = user?.planLimits || user?.currentWorkspace?.planLimits || {};
   const planFeatures = user?.planFeatures || user?.currentWorkspace?.planFeatures || [];
-  const workspaceName = user?.businessName || user?.currentWorkspace?.name || "AgenSync";
-  const canInvite = isManager && plan !== "padrao";
   const canUseSpecialPermissions = planFeatures.includes("permissoes_especiais");
+  const canViewAudit = planFeatures.includes("auditoria");
   const [members, setMembers] = useState([]);
-  const [invites, setInvites] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
   const [professionals, setProfessionals] = useState([]);
-  const [inviteForm, setInviteForm] = useState(teamInviteInitial);
   const [editingMemberId, setEditingMemberId] = useState("");
   const [memberDraft, setMemberDraft] = useState({ role: "professional", professionalId: "", permissions: {} });
   const [teamLoading, setTeamLoading] = useState(false);
-  const [creatingInvite, setCreatingInvite] = useState(false);
-  const [createdLink, setCreatedLink] = useState("");
-  const [createdInvite, setCreatedInvite] = useState(null);
 
   useEffect(() => {
     if (!isManager) return;
@@ -301,14 +292,21 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
     async function loadTeam() {
       setTeamLoading(true);
       try {
-        const [membersData, invitesData, professionalsData] = await Promise.all([
+        const [membersData, professionalsData] = await Promise.all([
           listWorkspaceMembers(),
-          listWorkspaceInvites(),
           api.listProfessionals({ active: "true" })
         ]);
+        let auditData = { logs: [] };
+        if (canViewAudit) {
+          try {
+            auditData = await listWorkspaceAuditLogs({ take: 60 });
+          } catch {
+            auditData = { logs: [] };
+          }
+        }
         if (!active) return;
         setMembers(membersData.members || []);
-        setInvites(invitesData.invites || []);
+        setAuditLogs(auditData.logs || []);
         setProfessionals(professionalsData.professionals || []);
       } catch (err) {
         if (active) onError?.(err.message || "Nao foi possivel carregar equipe.");
@@ -321,31 +319,24 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
     return () => {
       active = false;
     };
-  }, [isManager, onError]);
+  }, [canViewAudit, isManager, onError]);
 
   async function reloadTeam() {
-    const [membersData, invitesData, professionalsData] = await Promise.all([
+    const [membersData, professionalsData] = await Promise.all([
       listWorkspaceMembers(),
-      listWorkspaceInvites(),
       api.listProfessionals({ active: "true" })
     ]);
-    setMembers(membersData.members || []);
-    setInvites(invitesData.invites || []);
-    setProfessionals(professionalsData.professionals || []);
-  }
-
-  function updateInvite(field, value) {
-    setInviteForm((current) => ({ ...current, [field]: value }));
-  }
-
-  function toggleInvitePermission(permission) {
-    setInviteForm((current) => ({
-      ...current,
-      permissions: {
-        ...current.permissions,
-        [permission]: !current.permissions?.[permission]
+    let auditData = { logs: [] };
+    if (canViewAudit) {
+      try {
+        auditData = await listWorkspaceAuditLogs({ take: 60 });
+      } catch {
+        auditData = { logs: [] };
       }
-    }));
+    }
+    setMembers(membersData.members || []);
+    setAuditLogs(auditData.logs || []);
+    setProfessionals(professionalsData.professionals || []);
   }
 
   function startMemberEdit(member) {
@@ -387,69 +378,6 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
     }
   }
 
-  async function handleCreateInvite() {
-    setCreatingInvite(true);
-    setCreatedLink("");
-    setCreatedInvite(null);
-    onError?.("");
-
-    try {
-      const payload = {
-        name: inviteForm.name.trim(),
-        email: inviteForm.email.trim(),
-        phone: inviteForm.phone.trim(),
-        role: inviteForm.role,
-        professionalId: inviteForm.professionalId || "",
-        permissions: canUseSpecialPermissions ? inviteForm.permissions : {}
-      };
-      const data = await createWorkspaceInvite(payload);
-      const invite = data.invite || null;
-      setCreatedInvite(invite);
-      setCreatedLink(invite?.inviteUrl || "");
-      setInviteForm(teamInviteInitial);
-      await reloadTeam();
-      showToast("Convite criado. Envie pelo WhatsApp.");
-      const whatsappUrl = buildInviteWhatsAppUrl(invite, workspaceName);
-      if (whatsappUrl) window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      onError?.(err.message || "Nao foi possivel criar o convite.");
-      showToast(err.message || "Nao foi possivel criar o convite.", "error");
-    } finally {
-      setCreatingInvite(false);
-    }
-  }
-
-  async function handleCopyLink(link) {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      showToast("Link copiado.");
-    } catch {
-      setCreatedLink(link);
-      showToast("Copie o link exibido manualmente.", "error");
-    }
-  }
-
-  function handleSendWhatsApp(invite) {
-    const whatsappUrl = buildInviteWhatsAppUrl(invite, workspaceName);
-    if (!whatsappUrl) {
-      showToast("Telefone ou link do convite indisponivel.", "error");
-      return;
-    }
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-  }
-
-  async function handleCancelInvite(inviteId) {
-    try {
-      await cancelWorkspaceInvite(inviteId);
-      await reloadTeam();
-      showToast("Convite cancelado.");
-    } catch (err) {
-      onError?.(err.message || "Nao foi possivel cancelar o convite.");
-      showToast(err.message || "Nao foi possivel cancelar o convite.", "error");
-    }
-  }
-
   async function handleMemberStatus(member) {
     try {
       if (member.status === "disabled") {
@@ -472,7 +400,7 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
     <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
       <SectionHeader
         eyebrow="Equipe"
-        title="Usuarios, convites e limites"
+        title="Usuarios, permissoes e auditoria"
         description="Gerencie quem acessa este workspace. As permissoes finais continuam validadas pelo backend."
         icon="user"
       />
@@ -499,7 +427,7 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
 
         {plan === "padrao" ? (
           <Message>
-            Convites de equipe estao disponiveis nos planos Equipe e Pro.
+            Usuarios afiliados estao disponiveis nos planos Equipe e Pro.
           </Message>
         ) : null}
 
@@ -507,114 +435,31 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
           <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-lg font-black text-ink">Convidar usuario</h3>
-                <p className="mt-1 text-sm leading-6 text-muted">Gere o acesso e envie o link pelo WhatsApp.</p>
+                <h3 className="text-lg font-black text-ink">Permissoes especiais</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">Ajuste o acesso dos usuarios afiliados deste workspace.</p>
               </div>
-              <Icon name="message" className="h-5 w-5 text-brand" />
+              <Icon name="settings" className="h-5 w-5 text-brand" />
             </div>
 
             <div className="mt-4 space-y-3">
-              <input
-                value={inviteForm.name}
-                onChange={(event) => updateInvite("name", event.target.value)}
-                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
-                placeholder="Nome do convidado"
-                disabled={!canInvite}
-              />
-              <input
-                type="email"
-                value={inviteForm.email}
-                onChange={(event) => updateInvite("email", event.target.value)}
-                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
-                placeholder="email@empresa.com"
-                disabled={!canInvite}
-              />
-              <input
-                type="tel"
-                value={inviteForm.phone}
-                onChange={(event) => updateInvite("phone", event.target.value)}
-                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
-                placeholder="WhatsApp do profissional"
-                disabled={!canInvite}
-              />
-              <select
-                value={inviteForm.role}
-                onChange={(event) => updateInvite("role", event.target.value)}
-                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
-                disabled={!canInvite}
-              >
-                <option value="professional">Profissional</option>
-                <option value="admin">Admin</option>
-              </select>
-
-              <select
-                value={inviteForm.professionalId}
-                onChange={(event) => updateInvite("professionalId", event.target.value)}
-                className="min-h-12 w-full rounded-lg border border-[#D8E0EA] bg-white px-3 text-sm font-black text-ink shadow-sm focus:border-brand focus:ring-4 focus:ring-brand/10"
-                disabled={!canInvite}
-              >
-                <option value="">Criar/vincular automaticamente ao aceitar</option>
-                {professionals.map((professional) => (
-                  <option key={professional.id} value={professional.id}>
-                    {professional.name}
-                  </option>
-                ))}
-              </select>
-
               {canUseSpecialPermissions ? (
                 <div className="grid gap-2 rounded-lg border border-blue-100 bg-white p-3 sm:grid-cols-2">
                   {invitePermissionOptions.map(([key, label]) => (
-                    <label key={key} className="flex cursor-pointer items-start gap-2 text-xs font-bold text-muted">
-                      <input
-                        type="checkbox"
-                        checked={inviteForm.permissions?.[key] === true}
-                        onChange={() => toggleInvitePermission(key)}
-                        className="mt-0.5 h-4 w-4 accent-brand"
-                        disabled={!canInvite}
-                      />
-                      <span>{label}</span>
-                    </label>
+                    <span key={key} className="rounded-lg bg-[#F8FAFC] px-3 py-2 text-xs font-bold text-muted">
+                      {label}
+                    </span>
                   ))}
                 </div>
-              ) : null}
-
-              <Button
-                type="button"
-                className="w-full rounded-lg"
-                loading={creatingInvite}
-                loadingLabel="Criando..."
-                disabled={!canInvite || !inviteForm.email.trim() || !inviteForm.phone.trim()}
-                onClick={handleCreateInvite}
-              >
-                <Icon name="message" className="h-5 w-5" />
-                Criar e enviar no WhatsApp
-              </Button>
-
-              {createdLink ? (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-success">Link do convite</p>
-                  <input
-                    readOnly
-                    value={createdLink}
-                    className="mt-2 min-h-10 w-full rounded-lg border border-green-200 bg-white px-3 text-xs font-bold text-ink"
-                  />
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button type="button" variant="success" size="sm" className="rounded-lg" onClick={() => handleSendWhatsApp(createdInvite)}>
-                      Enviar no WhatsApp
-                    </Button>
-                    <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleCopyLink(createdLink)}>
-                      Copiar link
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
+              ) : (
+                <Message>Permissoes especiais estao disponiveis no plano Pro.</Message>
+              )}
             </div>
           </div>
 
           <div className="space-y-4">
             <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-black text-ink">Usuarios</h3>
+                <h3 className="text-lg font-black text-ink">Permissoes e acessos</h3>
                 {teamLoading ? <span className="text-xs font-black text-muted">Carregando...</span> : null}
               </div>
               <div className="mt-3 space-y-2">
@@ -702,39 +547,40 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
             </div>
 
             <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
-              <h3 className="text-lg font-black text-ink">Convites</h3>
-              <div className="mt-3 space-y-2">
-                {invites.map((invite) => (
-                  <div key={invite.id} className="grid gap-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3 md:grid-cols-[1fr_auto] md:items-center">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-ink">{invite.name || invite.email}</p>
-                      <p className="truncate text-xs font-bold text-muted">{invite.email}</p>
-                      {invite.phone ? <p className="truncate text-xs font-bold text-muted">{invite.phone}</p> : null}
-                      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-brand">
-                        {roleLabel(invite.role)} · {statusLabel(invite.status)}
-                      </p>
-                    </div>
-                    {invite.status === "pending" ? (
-                      <div className="flex flex-wrap gap-2 md:justify-end">
-                        <Button type="button" variant="success" size="sm" className="rounded-lg" onClick={() => handleSendWhatsApp(invite)}>
-                          WhatsApp
-                        </Button>
-                        <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleCopyLink(invite.inviteUrl)}>
-                          Copiar
-                        </Button>
-                        <Button type="button" variant="danger" size="sm" className="rounded-lg" onClick={() => handleCancelInvite(invite.id)}>
-                          Cancelar
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-                {!invites.length && !teamLoading ? (
-                  <p className="rounded-lg border border-dashed border-[#D8E0EA] px-4 py-3 text-sm font-bold text-muted">
-                    Nenhum convite criado ainda.
-                  </p>
-                ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black text-ink">Auditoria de acesso</h3>
+                {canViewAudit ? <Icon name="history" className="h-5 w-5 text-brand" /> : null}
               </div>
+              {canViewAudit ? (
+                <div className="mt-3 space-y-2">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-ink">{auditEventLabel(log.eventType)}</p>
+                          <p className="truncate text-xs font-bold text-muted">{log.userName || log.email || "Sistema"}</p>
+                        </div>
+                        <span className="text-xs font-black uppercase tracking-[0.12em] text-brand">
+                          {formatAuditDate(log.createdAt)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs font-bold text-muted">{log.message || log.route || log.eventType}</p>
+                      {log.metadata?.route ? (
+                        <p className="mt-1 truncate text-xs font-bold text-slate-400">
+                          {log.metadata.method || ""} {log.metadata.route} · {log.metadata.statusCode || ""}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                  {!auditLogs.length && !teamLoading ? (
+                    <p className="rounded-lg border border-dashed border-[#D8E0EA] px-4 py-3 text-sm font-bold text-muted">
+                      Nenhum evento registrado ainda.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <Message>Auditoria de acesso esta disponivel no plano Pro.</Message>
+              )}
             </div>
           </div>
         </div>

@@ -188,15 +188,17 @@ router.post(
       throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
     }
 
+    const hydratedUser = await hydrateUserWorkspace(authenticatedUser);
+
     await recordAuditEvent({
       req,
+      workspaceId: hydratedUser.currentWorkspaceId || "",
       userId: authenticatedUser.id,
       email: authenticatedUser.email,
       eventType: "auth.login_success",
       message: "Login realizado com sucesso."
     });
 
-    const hydratedUser = await hydrateUserWorkspace(authenticatedUser);
     res.json({ token: signToken(authenticatedUser.id), user: publicUser(hydratedUser) });
   })
 );

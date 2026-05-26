@@ -1,4 +1,5 @@
 import {
+  createProfessionalAccessApi,
   createProfessionalApi,
   deleteProfessionalApi,
   listProfessionalsApi,
@@ -17,6 +18,13 @@ export function createProfessional(payload) {
   return executeDataSource({
     feature: "professionals.create",
     remote: () => createProfessionalApi(payload)
+  });
+}
+
+export function createProfessionalAccess(professionalId, payload) {
+  return executeDataSource({
+    feature: "professionals.access.create",
+    remote: () => createProfessionalAccessApi(professionalId, payload)
   });
 }
 
