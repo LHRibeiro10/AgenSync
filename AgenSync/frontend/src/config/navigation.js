@@ -48,7 +48,17 @@ export const workspaceNavigation = [
   { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance", permission: "finance" },
   { to: "/despesas", label: "Despesas", icon: "expenses", permission: "expenses" },
   { to: "/admin", label: "Admin", icon: "settings", adminOnly: true, permission: "admin" },
-  { to: "/configuracoes", label: "Configuracoes", icon: "settings", permission: "settings" }
+  {
+    id: "configuracoes",
+    label: "Configuracoes",
+    icon: "settings",
+    permission: "settings",
+    children: [
+      { to: "/configuracoes", label: "Configuracoes gerais", permission: "settings", exact: true },
+      { to: "/configuracoes/permissoes-especiais", label: "Permissoes especiais", permission: "settings" },
+      { to: "/configuracoes/auditoria", label: "Auditoria de acesso", permission: "settings" }
+    ]
+  }
 ];
 
 export const platformNavigation = [

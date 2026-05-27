@@ -198,6 +198,14 @@ export default function App() {
           <Route path="relatorios" element={<PermissionRoute permission="reports"><Finance /></PermissionRoute>} />
           <Route path="despesas" element={<PermissionRoute permission="expenses"><Expenses /></PermissionRoute>} />
           <Route path="configuracoes" element={<PermissionRoute permission="settings"><Settings /></PermissionRoute>} />
+          <Route
+            path="configuracoes/permissoes-especiais"
+            element={<PermissionRoute permission="settings"><Settings section="specialPermissions" /></PermissionRoute>}
+          />
+          <Route
+            path="configuracoes/auditoria"
+            element={<PermissionRoute permission="settings"><Settings section="audit" /></PermissionRoute>}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

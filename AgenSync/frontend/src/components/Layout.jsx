@@ -135,7 +135,13 @@ function SidebarNavigation({ items, openModules, onToggleModule, onNavigate, pat
               <div className="min-h-0 overflow-hidden">
                 <div className="space-y-1 py-1">
                   {item.children.map((child) => (
-                    <NavLink key={child.to} to={child.to} className={childLinkClass} onClick={onNavigate}>
+                    <NavLink
+                      key={child.to}
+                      to={child.to}
+                      end={child.exact || child.to === "/"}
+                      className={childLinkClass}
+                      onClick={onNavigate}
+                    >
                       {child.label}
                     </NavLink>
                   ))}

@@ -271,13 +271,15 @@ function formatAuditDate(value) {
   });
 }
 
-function TeamSection({ user, workspaceRole, showToast, onError }) {
+function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialPermissions" }) {
   const isManager = workspaceRole === "owner" || workspaceRole === "admin";
+  const isAuditPage = mode === "audit";
   const plan = user?.plan || user?.platformPlan || user?.currentWorkspace?.plan || "padrao";
   const planLimits = user?.planLimits || user?.currentWorkspace?.planLimits || {};
   const planFeatures = user?.planFeatures || user?.currentWorkspace?.planFeatures || [];
   const canUseSpecialPermissions = planFeatures.includes("permissoes_especiais");
   const canViewAudit = planFeatures.includes("auditoria");
+  const shouldLoadAudit = isAuditPage && canViewAudit;
   const [members, setMembers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [professionals, setProfessionals] = useState([]);
@@ -297,7 +299,7 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
           api.listProfessionals({ active: "true" })
         ]);
         let auditData = { logs: [] };
-        if (canViewAudit) {
+        if (shouldLoadAudit) {
           try {
             auditData = await listWorkspaceAuditLogs({ take: 60 });
           } catch {
@@ -319,7 +321,7 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
     return () => {
       active = false;
     };
-  }, [canViewAudit, isManager, onError]);
+  }, [isManager, onError, shouldLoadAudit]);
 
   async function reloadTeam() {
     const [membersData, professionalsData] = await Promise.all([
@@ -327,7 +329,7 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
       api.listProfessionals({ active: "true" })
     ]);
     let auditData = { logs: [] };
-    if (canViewAudit) {
+    if (shouldLoadAudit) {
       try {
         auditData = await listWorkspaceAuditLogs({ take: 60 });
       } catch {
@@ -400,9 +402,13 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
     <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
       <SectionHeader
         eyebrow="Equipe"
-        title="Usuarios, permissoes e auditoria"
-        description="Gerencie quem acessa este workspace. As permissoes finais continuam validadas pelo backend."
-        icon="user"
+        title={isAuditPage ? "Auditoria de acesso" : "Permissoes especiais"}
+        description={
+          isAuditPage
+            ? "Consulte eventos importantes de acesso e acoes registradas no workspace."
+            : "Ajuste quem acessa o workspace e quais permissoes extras cada usuario pode receber."
+        }
+        icon={isAuditPage ? "history" : "settings"}
       />
 
       <div className="space-y-5 p-4 sm:p-5">
@@ -431,6 +437,44 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
           </Message>
         ) : null}
 
+        {isAuditPage ? (
+          <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-black text-ink">Auditoria de acesso</h3>
+              {teamLoading ? <span className="text-xs font-black text-muted">Carregando...</span> : null}
+            </div>
+            {canViewAudit ? (
+              <div className="mt-3 space-y-2">
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-ink">{auditEventLabel(log.eventType)}</p>
+                        <p className="truncate text-xs font-bold text-muted">{log.userName || log.email || "Sistema"}</p>
+                      </div>
+                      <span className="text-xs font-black uppercase tracking-[0.12em] text-brand">
+                        {formatAuditDate(log.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs font-bold text-muted">{log.message || log.route || log.eventType}</p>
+                    {log.metadata?.route ? (
+                      <p className="mt-1 truncate text-xs font-bold text-slate-400">
+                        {log.metadata.method || ""} {log.metadata.route} · {log.metadata.statusCode || ""}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+                {!auditLogs.length && !teamLoading ? (
+                  <p className="rounded-lg border border-dashed border-[#D8E0EA] px-4 py-3 text-sm font-bold text-muted">
+                    Nenhum evento registrado ainda.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <Message>Auditoria de acesso esta disponivel no plano Pro.</Message>
+            )}
+          </div>
+        ) : (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
             <div className="flex items-start justify-between gap-3">
@@ -545,53 +589,30 @@ function TeamSection({ user, workspaceRole, showToast, onError }) {
                 ) : null}
               </div>
             </div>
-
-            <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-black text-ink">Auditoria de acesso</h3>
-                {canViewAudit ? <Icon name="history" className="h-5 w-5 text-brand" /> : null}
-              </div>
-              {canViewAudit ? (
-                <div className="mt-3 space-y-2">
-                  {auditLogs.map((log) => (
-                    <div key={log.id} className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-ink">{auditEventLabel(log.eventType)}</p>
-                          <p className="truncate text-xs font-bold text-muted">{log.userName || log.email || "Sistema"}</p>
-                        </div>
-                        <span className="text-xs font-black uppercase tracking-[0.12em] text-brand">
-                          {formatAuditDate(log.createdAt)}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs font-bold text-muted">{log.message || log.route || log.eventType}</p>
-                      {log.metadata?.route ? (
-                        <p className="mt-1 truncate text-xs font-bold text-slate-400">
-                          {log.metadata.method || ""} {log.metadata.route} · {log.metadata.statusCode || ""}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                  {!auditLogs.length && !teamLoading ? (
-                    <p className="rounded-lg border border-dashed border-[#D8E0EA] px-4 py-3 text-sm font-bold text-muted">
-                      Nenhum evento registrado ainda.
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                <Message>Auditoria de acesso esta disponivel no plano Pro.</Message>
-              )}
-            </div>
           </div>
         </div>
+        )}
       </div>
     </section>
   );
 }
 
-export default function Settings() {
+function SettingsTeamPage({ mode }) {
+  const { user, workspaceRole } = useAuth();
+  const { showToast } = useToast();
+  const [error, setError] = useState("");
+
+  return (
+    <div className="space-y-5">
+      <Message type="error">{error}</Message>
+      <TeamSection user={user} workspaceRole={workspaceRole} showToast={showToast} onError={setError} mode={mode} />
+    </div>
+  );
+}
+
+function SettingsGeneral() {
   const navigate = useNavigate();
-  const { user, workspaceRole, updateUserSettings, refreshSession, deleteAccount } = useAuth();
+  const { user, updateUserSettings, refreshSession, deleteAccount } = useAuth();
   const { showToast } = useToast();
   const { startTour } = useOnboarding();
   const [businessName, setBusinessName] = useState(user?.businessName || "");
@@ -945,8 +966,6 @@ export default function Settings() {
             </div>
           </section>
 
-          <TeamSection user={user} workspaceRole={workspaceRole} showToast={showToast} onError={setError} />
-
           <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
             <SectionHeader
               eyebrow="Tipo de negócio"
@@ -1271,5 +1290,12 @@ export default function Settings() {
       </button>
     </form>
   );
+}
+
+export default function Settings({ section = "general" }) {
+  if (section === "specialPermissions") return <SettingsTeamPage mode="specialPermissions" />;
+  if (section === "audit") return <SettingsTeamPage mode="audit" />;
+
+  return <SettingsGeneral />;
 }
 

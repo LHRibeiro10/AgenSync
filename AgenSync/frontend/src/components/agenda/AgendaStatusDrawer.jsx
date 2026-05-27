@@ -204,21 +204,6 @@ export default function AgendaStatusDrawer({
             </div>
           </section>
 
-          <section className="mt-4 rounded-2xl border border-line bg-white p-4">
-            <p className="text-xs font-black uppercase text-slate-500">Ações rápidas</p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <Button variant="secondary" onClick={() => onSaveStatus("concluido")} loading={saving} disabled={appointment.status === "concluido"}>
-                Concluir
-              </Button>
-              <Button variant="secondary" onClick={() => onSaveStatus("cancelado")} loading={saving} disabled={appointment.status === "cancelado"}>
-                Cancelar
-              </Button>
-              <Button variant="secondary" onClick={() => onSaveStatus("nao_compareceu")} loading={saving} disabled={appointment.status === "nao_compareceu"}>
-                Marcar falta
-              </Button>
-            </div>
-          </section>
-
           {appointment.notes ? (
             <section className="mt-4 rounded-2xl border border-line bg-white p-4">
               <p className="text-xs font-black uppercase text-slate-500">Observações</p>
