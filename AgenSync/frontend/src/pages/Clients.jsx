@@ -20,10 +20,6 @@ import {
 import { listProducts } from "../services/products.js";
 
 const emptyForm = { name: "", phone: "", notes: "" };
-const demoClients = [
-  { id: "demo-client-1", name: "Maria Souza", phone: "(11) 99999-1010", notes: "Prefere atendimento as 9h." },
-  { id: "demo-client-2", name: "Lucas Lima", phone: "(11) 98888-2020", notes: "Cliente recorrente de sexta-feira." }
-];
 
 const clientSections = {
   clients: ["Clientes", "Cadastro, status e dados principais dos clientes.", "data", "Cadastro", "Atendimento", "Cadastre, edite e inative clientes sem misturar prontuario e documentos."],
@@ -53,7 +49,7 @@ export default function Clients({ section = "clients" }) {
   const [contactImportSupported, setContactImportSupported] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
-  const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
+  const { markStepComplete } = useOnboarding();
   const selectedClient = clients.find((client) => client.id === selectedClientId);
   const isDocumentsLayout = Boolean(selectedClient && activeTab === "documents");
   const activeClientsCount = clients.filter((client) => client.isActive !== false).length;
@@ -361,30 +357,9 @@ export default function Clients({ section = "clients" }) {
                       title="Voce ainda nao cadastrou clientes."
                       description="Comece adicionando seu primeiro cliente."
                       action={
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Button onClick={focusCreateForm}>Adicionar primeiro cliente</Button>
-                          <Button variant="secondary" onClick={toggleDemoMode}>
-                            {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
-                          </Button>
-                        </div>
+                        <Button onClick={focusCreateForm}>Adicionar primeiro cliente</Button>
                       }
                     />
-                    {progress.demoEnabled ? (
-                      <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
-                          Exemplo de clientes (somente visualizacao)
-                        </p>
-                        <div className="mt-3 space-y-3">
-                          {demoClients.map((client) => (
-                            <article key={client.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-3">
-                              <p className="text-sm font-black text-ink">{client.name}</p>
-                              <p className="mt-1 text-sm text-muted">{client.phone}</p>
-                              <p className="mt-1 text-xs font-medium text-muted">{client.notes}</p>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 )}
               </div>

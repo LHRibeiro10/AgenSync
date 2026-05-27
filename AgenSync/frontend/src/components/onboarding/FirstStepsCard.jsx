@@ -4,13 +4,6 @@ import Card from "../Card.jsx";
 import Icon from "../Icon.jsx";
 import { useOnboarding } from "../../contexts/OnboardingContext.jsx";
 
-const demoHighlights = [
-  "Servicos exemplo: Corte + Escova + Tratamento",
-  "Clientes exemplo: Maria Souza, Lucas Lima",
-  "Agenda exemplo: 5 atendimentos confirmados na semana",
-  "Financeiro exemplo: lucro liquido de R$ 2.480 no mes"
-];
-
 export default function FirstStepsCard() {
   const navigate = useNavigate();
   const {
@@ -18,7 +11,6 @@ export default function FirstStepsCard() {
     checklistLoading,
     progress,
     startTour,
-    toggleDemoMode,
     openWelcomeAndRestart,
     resetOnboarding
   } = useOnboarding();
@@ -27,7 +19,7 @@ export default function FirstStepsCard() {
     <Card className="border-[#DBEAFE] bg-gradient-to-br from-white to-[#F8FBFF] p-4 sm:p-5" data-tour-id="onboarding-checklist">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">Onboarding</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">Guia inicial</p>
           <h2 className="mt-1 text-xl font-black text-ink">Primeiros passos</h2>
           <p className="mt-1 text-sm font-medium text-muted">
             {checklist.completed} de {checklist.total} concluidos
@@ -89,23 +81,9 @@ export default function FirstStepsCard() {
         ))}
       </div>
 
-      {progress.demoEnabled ? (
-        <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">Exemplo preenchido ativo</p>
-          <ul className="mt-2 space-y-1 text-sm font-medium text-blue-900">
-            {demoHighlights.map((line) => (
-              <li key={line}>- {line}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-4">
         <Button size="sm" variant="secondary" onClick={startTour}>
-          {progress.skippedTour || progress.tourCompleted ? "Rever tour" : "Continuar tour"}
-        </Button>
-        <Button size="sm" variant="secondary" onClick={toggleDemoMode}>
-          {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
+          {progress.skippedTour || progress.tourCompleted ? "Rever guia" : "Continuar guia"}
         </Button>
       </div>
 
@@ -114,7 +92,7 @@ export default function FirstStepsCard() {
           Reabrir boas-vindas
         </Button>
         <Button size="sm" variant="ghost" onClick={() => resetOnboarding({ notify: true })}>
-          Resetar onboarding
+          Reiniciar progresso
         </Button>
       </div>
     </Card>

@@ -943,7 +943,7 @@ function SettingsGeneral() {
                       value={businessName}
                       onChange={(event) => setBusinessName(event.target.value)}
                       className={inputClass}
-                      placeholder="Ex: Studio AgenSync"
+                      placeholder="Nome do seu negócio"
                     />
                   </div>
                 </div>

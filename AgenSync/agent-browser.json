@@ -1,0 +1,4 @@
+{
+  "executablePath": "C:\\Users\\luiz.ribeiro\\.agent-browser\\browsers\\chrome-149.0.7827.22\\chrome.exe",
+  "args": "--disable-gpu,--disable-gpu-compositing,--no-sandbox"
+}

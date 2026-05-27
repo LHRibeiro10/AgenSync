@@ -79,6 +79,10 @@ function resolveApiBaseUrl() {
   return String(env.apiUrl || "").trim().replace(/\/$/, "");
 }
 
+function shouldUseBackendAuthOnly() {
+  return env.authProvider === "api" || !supabase;
+}
+
 function mergeUser(primary: any, secondary: any) {
   if (!primary && !secondary) return null;
   return {
@@ -149,6 +153,99 @@ async function requestBackendLogin(payload: any) {
     session: null,
     token
   };
+}
+
+async function requestBackendRegister(payload: any) {
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl) throw authError("Backend nao configurado para criar conta.");
+
+  const response = await fetch(`${apiBaseUrl}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: String(payload.name || "").trim(),
+      email: String(payload.email || "").trim(),
+      password: payload.password || "",
+      businessName: payload.businessName || "",
+      businessType: payload.businessType || "",
+      businessLogo: payload.businessLogo || ""
+    })
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw authError(data?.message || "Nao foi possivel criar a conta.");
+  }
+
+  const token = safeTokenForAuthHeader(data?.token || "");
+  if (token) setAccessToken(token);
+
+  return {
+    user: data?.user || null,
+    session: null,
+    token,
+    emailConfirmationRequired: false,
+    message: "Conta criada com sucesso."
+  };
+}
+
+async function requestBackendForgotPassword(payload: any) {
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl) throw authError("Backend nao configurado para recuperar senha.");
+
+  const response = await fetch(`${apiBaseUrl}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: String(payload.email || "").trim()
+    })
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw authError(data?.message || "Nao foi possivel enviar o link de recuperacao.");
+  }
+
+  return data || { message: "Se o email existir, enviaremos um link de redefinicao." };
+}
+
+async function requestBackendPasswordReset(payload: any) {
+  const apiBaseUrl = resolveApiBaseUrl();
+  if (!apiBaseUrl) throw authError("Backend nao configurado para redefinir senha.");
+
+  const response = await fetch(`${apiBaseUrl}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token: payload.token || "",
+      password: payload.password || ""
+    })
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw authError(data?.message || "Nao foi possivel redefinir a senha.");
+  }
+
+  return data || { message: "Senha atualizada com sucesso." };
 }
 
 async function requestBackendAcceptInvite(payload: any) {
@@ -428,11 +525,15 @@ export async function login(payload: any) {
 }
 
 export async function signUp(emailOrPayload: any, maybePassword?: string) {
-  const client = requireSupabase();
   const payload = typeof emailOrPayload === "object"
     ? emailOrPayload
     : { email: emailOrPayload, password: maybePassword };
 
+  if (shouldUseBackendAuthOnly()) {
+    return requestBackendRegister(payload);
+  }
+
+  const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
     email: String(payload.email || "").trim(),
     password: payload.password || "",
@@ -474,6 +575,7 @@ export async function acceptInvite(payload: any) {
 
 export async function signOut() {
   if (!supabase) {
+    await requestBackendLogout(getAccessToken() || "");
     clearAccessToken();
     return;
   }
@@ -491,6 +593,12 @@ export async function logout() {
 }
 
 export async function deleteAccount() {
+  if (shouldUseBackendAuthOnly()) {
+    await requestBackendDeleteAccount(getAccessToken() || "");
+    clearAccessToken();
+    return { ok: true };
+  }
+
   const client = requireSupabase();
   const { data: currentSessionData } = await client.auth.getSession();
   await requestBackendDeleteAccount(currentSessionData.session?.access_token || "");
@@ -500,8 +608,13 @@ export async function deleteAccount() {
 }
 
 export async function resetPassword(emailOrPayload: any) {
-  const client = requireSupabase();
   const email = typeof emailOrPayload === "object" ? emailOrPayload.email : emailOrPayload;
+
+  if (shouldUseBackendAuthOnly()) {
+    return requestBackendForgotPassword({ email });
+  }
+
+  const client = requireSupabase();
   const { error } = await client.auth.resetPasswordForEmail(String(email || "").trim(), {
     redirectTo: env.supabaseResetPasswordRedirectUrl
   });
@@ -536,9 +649,17 @@ export async function resendConfirmation(emailOrPayload: any) {
 }
 
 export async function applyPasswordResetSessionFromUrl(urlValue = window.location.href) {
-  const client = requireSupabase();
   const url = new URL(urlValue, window.location.origin);
   const code = url.searchParams.get("code");
+  const token = url.searchParams.get("token") || "";
+
+  if (shouldUseBackendAuthOnly()) {
+    return token
+      ? { ready: true, token }
+      : { ready: false, message: "Link de redefinicao sem token valido." };
+  }
+
+  const client = requireSupabase();
 
   if (code) {
     const { error } = await client.auth.exchangeCodeForSession(code);
@@ -569,6 +690,13 @@ export function getPasswordResetTokenFromUrl(urlValue = window.location.href) {
 }
 
 export async function updatePassword(newPasswordOrPayload: any) {
+  if (shouldUseBackendAuthOnly()) {
+    const payload = typeof newPasswordOrPayload === "object"
+      ? newPasswordOrPayload
+      : { password: newPasswordOrPayload };
+    return requestBackendPasswordReset(payload);
+  }
+
   const client = requireSupabase();
   const password = typeof newPasswordOrPayload === "object"
     ? newPasswordOrPayload.password
@@ -584,6 +712,11 @@ export async function updatePassword(newPasswordOrPayload: any) {
 }
 
 export async function updateUserSettings(payload: any) {
+  if (shouldUseBackendAuthOnly()) {
+    const backendUser = await requestBackendSettingsUpdate(getAccessToken() || "", payload);
+    return { user: backendUser };
+  }
+
   const client = requireSupabase();
   const { data: currentSessionData } = await client.auth.getSession();
   const currentUser = currentSessionData.session?.user || null;

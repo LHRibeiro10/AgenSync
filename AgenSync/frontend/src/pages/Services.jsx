@@ -19,11 +19,6 @@ import {
 import { money } from "../utils.js";
 
 const emptyForm = { name: "", priceDefault: "", durationValue: 60, durationUnit: "minutes", isActive: true };
-const demoServices = [
-  { id: "demo-service-1", name: "Corte feminino", priceDefault: 95, durationMinutes: 60 },
-  { id: "demo-service-2", name: "Escova", priceDefault: 70, durationMinutes: 45 },
-  { id: "demo-service-3", name: "Hidratacao", priceDefault: 120, durationMinutes: 70 }
-];
 
 export default function Services() {
   const [services, setServices] = useState([]);
@@ -34,7 +29,7 @@ export default function Services() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
-  const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
+  const { markStepComplete } = useOnboarding();
 
   async function load() {
     setLoading(true);
@@ -299,40 +294,18 @@ export default function Services() {
                     title="Cadastre seus servicos para criar agendamentos mais rapido."
                     description="Voce ainda nao cadastrou servicos."
                     action={
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button
-                          onClick={() => {
-                            window.scrollTo({ top: 0, behavior: "smooth" });
-                            window.setTimeout(() => {
-                              window.document.getElementById("services-create-form")?.querySelector("input")?.focus();
-                            }, 220);
-                          }}
-                        >
-                          Cadastrar primeiro servico
-                        </Button>
-                        <Button variant="secondary" onClick={toggleDemoMode}>
-                          {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
-                        </Button>
-                      </div>
+                      <Button
+                        onClick={() => {
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                          window.setTimeout(() => {
+                            window.document.getElementById("services-create-form")?.querySelector("input")?.focus();
+                          }, 220);
+                        }}
+                      >
+                        Cadastrar primeiro servico
+                      </Button>
                     }
                   />
-                  {progress.demoEnabled ? (
-                    <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] p-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
-                        Exemplo de servicos (somente visualizacao)
-                      </p>
-                      <div className="mt-3 space-y-3">
-                        {demoServices.map((service) => (
-                          <article key={service.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-3">
-                            <p className="text-sm font-black text-ink">{service.name}</p>
-                            <p className="mt-1 text-sm text-muted">
-                              {money(service.priceDefault)} · {durationLabel(service.durationMinutes)}
-                            </p>
-                          </article>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               )}
             </div>

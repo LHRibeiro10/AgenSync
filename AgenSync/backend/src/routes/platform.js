@@ -3,6 +3,7 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { invalidateAuthUserCache } from "../middleware/auth.js";
 import { PLAN_SLUGS, normalizePlanSlug } from "../config/plans.js";
+import { consolidateOwnerWorkspaceForStandardPlan } from "../services/workspacePlanDowngrade.js";
 import { recordAuditEvent } from "../utils/audit.js";
 import { endOfDay, endOfMonth, formatDate, parseDateOnly, startOfDay, startOfMonth, todayString } from "../utils/dates.js";
 
@@ -483,18 +484,55 @@ router.patch(
     if (reason.length < 5) throw new ApiError(400, "Informe um motivo com pelo menos 5 caracteres.");
     const platformPlan = normalizePlan(req.body.plan || req.body.platformPlan);
 
-    const current = await prisma.user.findFirst({ where: { id: req.params.id, ...platformUserWhere() }, select: { id: true } });
+    const current = await prisma.user.findFirst({
+      where: { id: req.params.id, ...platformUserWhere() },
+      select: {
+        id: true,
+        platformPlan: true,
+        ownedWorkspaces: {
+          select: { plan: true },
+          orderBy: [{ createdAt: "asc" }],
+          take: 1
+        }
+      }
+    });
     if (!current) throw new ApiError(404, "Conta nao encontrada.");
-    const user = await prisma.user.update({ where: { id: req.params.id }, data: { platformPlan }, select: workspaceSelect });
-    await syncPrimaryWorkspaceForUser(user.id, { plan: platformPlan });
+
+    const previousPlan = normalizePlan(current.ownedWorkspaces?.[0]?.plan || current.platformPlan);
+    const shouldConsolidateForStandard = platformPlan === PLAN_SLUGS.PADRAO && previousPlan !== PLAN_SLUGS.PADRAO;
+    let downgradeResult = null;
+
+    const user = await prisma.$transaction(async (tx) => {
+      if (shouldConsolidateForStandard) {
+        downgradeResult = await consolidateOwnerWorkspaceForStandardPlan(tx, current.id);
+        return tx.user.findUnique({ where: { id: current.id }, select: workspaceSelect });
+      }
+
+      const updatedUser = await tx.user.update({
+        where: { id: req.params.id },
+        data: { platformPlan },
+        select: workspaceSelect
+      });
+      await tx.workspace.updateMany({ where: { ownerId: updatedUser.id }, data: { plan: platformPlan } });
+      return updatedUser;
+    });
+
     invalidateAuthUserCache(user.id);
+    downgradeResult?.affiliateUserIds?.forEach((userId) => invalidateAuthUserCache(userId));
+
     await recordAuditEvent({
       req,
       userId: req.user.id,
       email: req.user.email,
       eventType: "platform.workspace_plan_changed",
       message: reason,
-      metadata: { targetUserId: user.id, platformPlan }
+      metadata: {
+        targetUserId: user.id,
+        previousPlan,
+        platformPlan,
+        downgradedToStandard: shouldConsolidateForStandard,
+        downgradeResult
+      }
     });
     res.json({ workspace: publicWorkspace(user) });
   })

@@ -309,7 +309,7 @@ export default function InitialOnboarding() {
                       value={business.businessName}
                       onChange={(event) => updateBusiness("businessName", event.target.value)}
                       className={inputClass}
-                      placeholder="Ex: Studio AgenSync"
+                      placeholder="Nome do seu negócio"
                     />
                   </Field>
                   <div className="grid gap-4 sm:grid-cols-2">

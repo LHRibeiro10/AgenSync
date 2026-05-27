@@ -31,12 +31,6 @@ import { cancelFutureSubscriptionAppointments } from "../services/subscriptions.
 import { todayInputValue } from "../utils.js";
 
 const workingHoursStorageKey = "agensync_working_hours_v1";
-const demoAgendaAppointments = [
-  { id: "demo-apt-1", time: "09:00", client: "Maria Souza", service: "Corte feminino" },
-  { id: "demo-apt-2", time: "11:00", client: "Lucas Lima", service: "Escova" },
-  { id: "demo-apt-3", time: "15:30", client: "Ana Rocha", service: "Hidratacao" }
-];
-
 const revenueFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -122,7 +116,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const { showToast } = useToast();
   const { user } = useAuth();
   const { selectedProfessionalId } = useWorkspaceView();
-  const { markStepComplete, progress, toggleDemoMode } = useOnboarding();
+  const { markStepComplete } = useOnboarding();
   const initialSelectedDate = todayInputValue();
   const [viewMode, setViewMode] = useState(() =>
     initialView !== "auto"
@@ -437,31 +431,11 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
                     title="Sua agenda esta vazia."
                     description="Crie seu primeiro atendimento."
                     action={
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button size="lg" onClick={openCreateForSelectedDay}>
-                          Criar primeiro atendimento
-                        </Button>
-                        <Button size="lg" variant="secondary" onClick={toggleDemoMode}>
-                          {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
-                        </Button>
-                      </div>
+                      <Button size="lg" onClick={openCreateForSelectedDay}>
+                        Criar primeiro atendimento
+                      </Button>
                     }
                   />
-                  {progress.demoEnabled ? (
-                    <div className="mt-4 border-t border-[#E2E8F0] pt-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
-                        Exemplo de agenda preenchida
-                      </p>
-                      <div className="mt-3 space-y-2">
-                        {demoAgendaAppointments.map((item) => (
-                          <article key={item.id} className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                            <p className="text-sm font-black text-ink">{item.time} · {item.client}</p>
-                            <p className="mt-1 text-sm text-muted">{item.service}</p>
-                          </article>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                 </section>
               ) : (
                 <CalendarGrid
@@ -526,26 +500,11 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
                         title="Sua agenda esta vazia."
                         description="Crie seu primeiro atendimento."
                         action={
-                          <div className="flex flex-col gap-2 sm:flex-row">
-                            <Button size="md" onClick={openCreateForSelectedDay}>
-                              Criar primeiro atendimento
-                            </Button>
-                            <Button size="md" variant="secondary" onClick={toggleDemoMode}>
-                              {progress.demoEnabled ? "Ocultar exemplo" : "Ver exemplo preenchido"}
-                            </Button>
-                          </div>
+                          <Button size="md" onClick={openCreateForSelectedDay}>
+                            Criar primeiro atendimento
+                          </Button>
                         }
                       />
-                      {progress.demoEnabled ? (
-                        <div className="mt-3 space-y-2">
-                          {demoAgendaAppointments.map((item) => (
-                            <article key={item.id} className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                              <p className="text-sm font-black text-ink">{item.time} · {item.client}</p>
-                              <p className="mt-1 text-sm text-muted">{item.service}</p>
-                            </article>
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
                   )}
                 </div>

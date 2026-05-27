@@ -66,5 +66,5 @@ export const platformNavigation = [
   { to: "/platform/contas", label: "Contas", icon: "clients" },
   { to: "/platform/planos", label: "Planos", icon: "finance" },
   { to: "/platform/auditoria", label: "Auditoria", icon: "history" },
-  { to: "/platform/suporte", label: "Modo GOD", icon: "settings" }
+  { to: "/platform/suporte", label: "Suporte", icon: "settings" }
 ];

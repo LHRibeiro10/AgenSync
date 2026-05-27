@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
@@ -10,7 +11,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
-import { PLANS_CONFIG } from "../config/plans.js";
+import { PLAN_SLUGS, PLANS_CONFIG } from "../config/plans.js";
 
 const periodOptions = [
   { value: "today", label: "Hoje" },
@@ -247,25 +248,31 @@ function ActionPanel({ workspace, onRefresh }) {
   const [busy, setBusy] = useState("");
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
 
   useEffect(() => {
     setPlan(workspace?.plan || "");
     setReason("");
     setDetail(null);
+    setPendingAction(null);
   }, [workspace?.id]);
 
-  async function runAction(key, label, handler) {
+  function runAction(key, label, handler) {
     if (!workspace) return;
     if (reason.trim().length < 5) {
       showToast("Informe um motivo antes da acao sensivel.", "error");
       return;
     }
-    const confirmed = window.confirm(`${label}\n\nConta: ${workspace.name}\nMotivo: ${reason}`);
-    if (!confirmed) return;
-    setBusy(key);
+    setPendingAction({ key, label, handler, reason: reason.trim(), workspaceName: workspace.name });
+  }
+
+  async function confirmPendingAction() {
+    if (!pendingAction) return;
+    setBusy(pendingAction.key);
     try {
-      await handler();
+      await pendingAction.handler();
       showToast("Acao registrada com auditoria.");
+      setPendingAction(null);
       await onRefresh?.();
     } catch (error) {
       showToast(error?.message || "Nao foi possivel executar a acao.", "error");
@@ -289,7 +296,7 @@ function ActionPanel({ workspace, onRefresh }) {
   if (!workspace) {
     return (
       <Card>
-        <CardHeader title="Controle total / Modo GOD" description="Selecione uma conta no comparativo para liberar acoes sensiveis." />
+        <CardHeader title="Controles administrativos" description="Selecione uma conta no comparativo para liberar acoes sensiveis." />
         <EmptyState title="Nenhuma conta selecionada" description="As acoes aparecem aqui com confirmacao e motivo obrigatorio." />
       </Card>
     );
@@ -298,8 +305,8 @@ function ActionPanel({ workspace, onRefresh }) {
   return (
     <Card>
       <CardHeader
-        title="Controle total / Modo GOD"
-        description="Acoes destrutivas exigem confirmacao e motivo. O backend registra auditoria quando a estrutura existe."
+        title="Controles administrativos"
+        description="Acoes sensiveis exigem confirmacao, motivo e registro de auditoria."
       />
       <div className="grid gap-4 p-4 lg:grid-cols-[1fr_1.2fr]">
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -336,7 +343,15 @@ function ActionPanel({ workspace, onRefresh }) {
           <Button
             variant="secondary"
             loading={busy === "plan"}
-            onClick={() => runAction("plan", "Alterar plano manualmente", () => api.updatePlatformWorkspacePlan(workspace.id, { plan, reason }))}
+            onClick={() =>
+              runAction(
+                "plan",
+                plan === PLAN_SLUGS.PADRAO
+                  ? "Alterar para Padrao, inativar contas afiliadas e consolidar os dados no owner"
+                  : "Alterar plano manualmente",
+                () => api.updatePlatformWorkspacePlan(workspace.id, { plan, reason })
+              )
+            }
           >
             Alterar plano
           </Button>
@@ -388,9 +403,6 @@ function ActionPanel({ workspace, onRefresh }) {
           >
             Inativar usuario
           </Button>
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-600 sm:col-span-2">
-            Excluir usuario, impersonar conta e suporte remoto aparecem como placeholders seguros ate existir fluxo backend especifico de exclusao/impersonacao.
-          </div>
         </section>
       </div>
 
@@ -420,6 +432,20 @@ function ActionPanel({ workspace, onRefresh }) {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title="Confirmar acao sensivel?"
+        description={
+          pendingAction
+            ? `${pendingAction.label}. Conta: ${pendingAction.workspaceName}. Motivo: ${pendingAction.reason}.`
+            : ""
+        }
+        confirmLabel="Confirmar"
+        danger
+        onConfirm={confirmPendingAction}
+        onCancel={() => setPendingAction(null)}
+      />
     </Card>
   );
 }
@@ -525,8 +551,8 @@ export default function PlatformDashboard() {
 
       {activeSection === "auditoria" ? (
         <Card>
-          <CardHeader title="Auditoria" description="As acoes sensiveis do painel da plataforma registram motivo, operador, alvo e rota no AuditLog existente." />
-          <EmptyState title="Auditoria operacional" description="Use as acoes do Modo GOD para gerar eventos platform.* e consulte a rota administrativa de logs quando necessario." />
+          <CardHeader title="Auditoria" description="As acoes sensiveis do painel da plataforma registram motivo, operador, alvo e rota." />
+          <EmptyState title="Auditoria operacional" description="Use as acoes administrativas para acompanhar os registros de suporte e operacao." />
         </Card>
       ) : null}
     </div>

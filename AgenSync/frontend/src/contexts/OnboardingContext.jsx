@@ -43,7 +43,7 @@ const TOUR_STEPS = [
     id: "sales",
     path: "/vendas/nova",
     title: "Vendas",
-    description: "Use vendas para registrar rapidamente uma nova venda, consultar historico e futuramente acompanhar comissoes e relatorios."
+    description: "Use vendas para registrar rapidamente uma nova venda, consultar historico e acompanhar comissoes e relatorios."
   },
   {
     id: "finance",
@@ -70,7 +70,6 @@ function createDefaultProgress() {
     hasSeenWelcome: false,
     skippedTour: false,
     tourCompleted: false,
-    demoEnabled: false,
     steps: {
       service: false,
       client: false,
@@ -87,7 +86,6 @@ function normalizeProgress(value) {
     hasSeenWelcome: Boolean(safe.hasSeenWelcome),
     skippedTour: Boolean(safe.skippedTour),
     tourCompleted: Boolean(safe.tourCompleted),
-    demoEnabled: Boolean(safe.demoEnabled),
     steps: {
       service: Boolean(steps.service),
       client: Boolean(steps.client),
@@ -252,7 +250,7 @@ export function OnboardingProvider({ children }) {
       skippedTour: true
     }));
     setTourActive(false);
-    showToast("Tour pulado. Voce pode iniciar quando quiser.");
+    showToast("Guia inicial pulado. Voce pode iniciar quando quiser.");
   }, [showToast]);
 
   const closeWelcome = useCallback(() => {
@@ -270,7 +268,7 @@ export function OnboardingProvider({ children }) {
       tourCompleted: true
     }));
     setTourActive(false);
-    showToast("Tour concluido. Agora voce ja pode seguir sozinho.");
+    showToast("Guia inicial concluido.");
   }, [showToast]);
 
   const nextTourStep = useCallback(() => {
@@ -296,26 +294,6 @@ export function OnboardingProvider({ children }) {
     setTourActive(false);
   }, []);
 
-  const setDemoEnabled = useCallback(
-    (enabled) => {
-      setProgress((current) => ({
-        ...current,
-        hasSeenWelcome: true,
-        demoEnabled: Boolean(enabled)
-      }));
-      if (enabled) {
-        showToast("Modo de exemplo ativado. Nenhum dado real foi alterado.");
-      } else {
-        showToast("Modo de exemplo desativado.");
-      }
-    },
-    [showToast]
-  );
-
-  const toggleDemoMode = useCallback(() => {
-    setDemoEnabled(!progress.demoEnabled);
-  }, [progress.demoEnabled, setDemoEnabled]);
-
   const resetOnboarding = useCallback(
     (options = {}) => {
       const shouldNotify = options.notify !== false;
@@ -327,7 +305,7 @@ export function OnboardingProvider({ children }) {
       setTourIndex(0);
       setHydrated(Boolean(isAuthenticated && user));
       if (shouldNotify) {
-        showToast("Onboarding resetado para teste.");
+        showToast("Primeiros passos reiniciados.");
       }
     },
     [isAuthenticated, user?.id, user?.email, showToast]
@@ -391,9 +369,7 @@ export function OnboardingProvider({ children }) {
       refreshChecklist,
       markStepComplete,
       resetOnboarding,
-      openWelcomeAndRestart,
-      setDemoEnabled,
-      toggleDemoMode
+      openWelcomeAndRestart
     }),
     [
       progress,
@@ -413,9 +389,7 @@ export function OnboardingProvider({ children }) {
       refreshChecklist,
       markStepComplete,
       resetOnboarding,
-      openWelcomeAndRestart,
-      setDemoEnabled,
-      toggleDemoMode
+      openWelcomeAndRestart
     ]
   );
 

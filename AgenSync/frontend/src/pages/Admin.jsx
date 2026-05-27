@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
@@ -173,6 +174,7 @@ export default function Admin() {
   const [eventType, setEventType] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState("");
+  const [pendingRoleChange, setPendingRoleChange] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -215,13 +217,17 @@ export default function Admin() {
     load({ search: "", roleFilter: "all", eventType: "" });
   }
 
-  async function changeRole(user, nextRole) {
+  function changeRole(user, nextRole) {
     if (normalizeRole(user.role) === nextRole) return;
-    const action = nextRole === "admin" ? "conceder acesso admin para" : "remover acesso admin de";
-    const confirmed = window.confirm(`Deseja ${action} ${user.email}?`);
-    if (!confirmed) return;
+    setPendingRoleChange({ user, nextRole });
+  }
+
+  async function confirmRoleChange() {
+    if (!pendingRoleChange) return;
+    const { user, nextRole } = pendingRoleChange;
 
     setSavingUserId(user.id);
+    setPendingRoleChange(null);
     setError("");
     setSuccess("");
     try {
@@ -515,6 +521,20 @@ export default function Admin() {
           </table>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={Boolean(pendingRoleChange)}
+        title="Confirmar alteração de perfil?"
+        description={
+          pendingRoleChange
+            ? `${pendingRoleChange.nextRole === "admin" ? "Conceder acesso admin para" : "Remover acesso admin de"} ${pendingRoleChange.user.email}.`
+            : ""
+        }
+        confirmLabel="Confirmar"
+        danger={pendingRoleChange?.nextRole !== "admin"}
+        onConfirm={confirmRoleChange}
+        onCancel={() => setPendingRoleChange(null)}
+      />
     </div>
   );
 }

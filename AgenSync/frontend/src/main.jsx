@@ -10,24 +10,24 @@ import { WorkspaceViewProvider } from "./contexts/WorkspaceViewContext.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import "./styles.css";
 
-const LEGACY_MOCK_KEYS = [
+const LEGACY_LOCAL_DATA_KEYS = [
   "agensync_local_products_v1",
   "agensync_local_product_sales_v1",
   "agensync_local_expenses_v1",
   "agensync_local_subscriptions_v1",
   "agensync_token",
   "@agensync-token",
-  "agensync_cleanup_legacy_mock_data_v1"
+  "agensync_cleanup_legacy_local_data_v1"
 ];
 const CARE_STORAGE_KEY = "agensync_client_care_v1";
 const FORM_TEMPLATES_KEY = "agensync_form_templates_v1";
 const LEGACY_STORAGE_PREFIX = "agensync_local_";
 const LEGACY_SUPABASE_AUTH_TOKEN_SUFFIX = "-auth-token";
 
-function cleanupLegacyMockStorage() {
+function cleanupLegacyLocalStorage() {
   if (typeof window === "undefined") return;
 
-  const keysToRemove = [...LEGACY_MOCK_KEYS];
+  const keysToRemove = [...LEGACY_LOCAL_DATA_KEYS];
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = String(window.localStorage.key(index) || "");
     if (key.startsWith(LEGACY_STORAGE_PREFIX)) {
@@ -58,7 +58,7 @@ function cleanupLegacyMockStorage() {
   }
 }
 
-cleanupLegacyMockStorage();
+cleanupLegacyLocalStorage();
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
