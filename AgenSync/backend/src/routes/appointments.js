@@ -11,7 +11,7 @@ import {
   resolveProfessionalScope,
   workspaceWhere
 } from "../utils/accessControl.js";
-import { normalizeStatus, publicAppointment } from "../utils/formatters.js";
+import { normalizeStatus, publicAppointment, publicClient, publicProfessional, publicService } from "../utils/formatters.js";
 import { syncAppointmentReminders } from "../services/appointmentReminderService.js";
 import {
   optionalString,
@@ -220,6 +220,37 @@ async function buildWhereFromQuery(req, query) {
   return where;
 }
 
+async function listAppointmentBootstrap(req) {
+  const professionalListWhere = workspaceWhere(req);
+  if (isWorkspaceProfessional(req.user)) {
+    professionalListWhere.id = req.user.professionalId || "__missing_professional__";
+  }
+
+  const [clients, professionals, services] = await Promise.all([
+    prisma.client.findMany({
+      where: clientAccessWhere(req),
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      take: 500
+    }),
+    prisma.professional.findMany({
+      where: professionalListWhere,
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      take: 300
+    }),
+    prisma.service.findMany({
+      where: isWorkspaceProfessional(req.user) ? { ...workspaceWhere(req), isActive: true } : workspaceWhere(req),
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      take: 300
+    })
+  ]);
+
+  return {
+    clients: clients.map(publicClient),
+    professionals: professionals.map(publicProfessional),
+    services: services.map(publicService)
+  };
+}
+
 router.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -237,6 +268,32 @@ router.get(
     });
 
     res.json({ appointments: appointments.map(publicAppointment) });
+  })
+);
+
+router.get(
+  "/overview",
+  asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+    const where = await buildWhereFromQuery(req, req.query);
+
+    const [appointments, bootstrap] = await Promise.all([
+      prisma.appointment.findMany({
+        where,
+        ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
+        select: appointmentSelect,
+        orderBy: [{ startsAt: "asc" }]
+      }),
+      req.query.includeBootstrap === "false" ? Promise.resolve(null) : listAppointmentBootstrap(req)
+    ]);
+
+    res.json({
+      appointments: appointments.map(publicAppointment),
+      ...(bootstrap ? { bootstrap } : {})
+    });
   })
 );
 

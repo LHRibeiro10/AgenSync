@@ -171,35 +171,20 @@ export default function Products({ mode = "catalog" }) {
 
   useEffect(() => {
     let active = true;
-    listProducts()
-      .then((everyProduct) => {
-        if (!active) return;
-        setAllProducts(everyProduct);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setAllProducts([]);
-        showToast(err.message, "error");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [version, showToast]);
-
-  useEffect(() => {
-    let active = true;
     setLoading(true);
     setError("");
+    const hasActiveFilters = Object.values(filters).some(Boolean);
 
-    listProducts(filters)
-      .then((filteredProducts) => {
+    Promise.all([listProducts(filters), hasActiveFilters ? listProducts() : Promise.resolve(null)])
+      .then(([filteredProducts, everyProduct]) => {
         if (!active) return;
         setProducts(filteredProducts);
+        setAllProducts(everyProduct || filteredProducts);
       })
       .catch((err) => {
         if (!active) return;
         setProducts([]);
+        setAllProducts([]);
         setError(err.message);
         showToast(err.message, "error");
       })

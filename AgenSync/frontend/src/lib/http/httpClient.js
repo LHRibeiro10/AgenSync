@@ -99,10 +99,11 @@ export function createHttpClient({
 
     const url = resolveUrl(baseURL, context.path, params);
     const requestMethod = String(context.config.method || method).toUpperCase();
-    const canUseCache = requestMethod === "GET" && cacheTtlMs > 0;
-    const cacheKey = canUseCache ? buildCacheKey(url, requestHeaders.Authorization) : "";
+    const canShareInflight = requestMethod === "GET";
+    const canUseCache = canShareInflight && cacheTtlMs > 0;
+    const cacheKey = canShareInflight ? buildCacheKey(url, requestHeaders.Authorization) : "";
 
-    if (canUseCache) {
+    if (canShareInflight) {
       const cached = getCachedResponse(cacheKey);
       if (cached) return cached;
       const inflight = inflightRequests.get(cacheKey);
@@ -167,7 +168,7 @@ export function createHttpClient({
       return result;
     };
 
-    if (!canUseCache) return executeRequest();
+    if (!canShareInflight) return executeRequest();
 
     const requestPromise = executeRequest().finally(() => {
       inflightRequests.delete(cacheKey);

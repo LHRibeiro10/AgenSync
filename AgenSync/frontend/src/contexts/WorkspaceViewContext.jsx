@@ -24,19 +24,28 @@ export function WorkspaceViewProvider({ children }) {
   const { user, workspaceRole, professionalId } = useAuth();
   const [selectedProfessionalId, setSelectedProfessionalIdState] = useState("");
   const [period, setPeriodState] = useState("today");
+  const [viewReady, setViewReady] = useState(false);
 
   const role = workspaceRole || workspaceRoles.OWNER;
   const isProfessional = role === workspaceRoles.PROFESSIONAL;
   const canManageWorkspace = role === workspaceRoles.OWNER || role === workspaceRoles.ADMIN;
 
   useEffect(() => {
+    setViewReady(false);
+    if (!user?.id) {
+      setSelectedProfessionalIdState("");
+      setPeriodState("today");
+      return;
+    }
+
     const stored = readStoredView(user?.id);
     setSelectedProfessionalIdState(stored.selectedProfessionalId || "");
     setPeriodState(stored.period || "today");
+    setViewReady(true);
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id || typeof window === "undefined") return;
+    if (!viewReady || !user?.id || typeof window === "undefined") return;
 
     window.localStorage.setItem(
       storageKey(user.id),
@@ -45,7 +54,7 @@ export function WorkspaceViewProvider({ children }) {
         period
       })
     );
-  }, [period, selectedProfessionalId, user?.id]);
+  }, [period, selectedProfessionalId, user?.id, viewReady]);
 
   const setSelectedProfessionalId = useCallback(
     (professionalId) => {
@@ -69,6 +78,8 @@ export function WorkspaceViewProvider({ children }) {
       role,
       isProfessional,
       canManageWorkspace,
+      viewReady,
+      workspaceReady: viewReady,
       viewMode: selectedProfessionalId || isProfessional ? "professional" : "all"
     }),
     [
@@ -79,7 +90,8 @@ export function WorkspaceViewProvider({ children }) {
       selectedProfessionalId,
       setPeriod,
       setSelectedProfessionalId,
-      professionalId
+      professionalId,
+      viewReady
     ]
   );
 

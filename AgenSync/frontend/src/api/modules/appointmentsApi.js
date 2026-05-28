@@ -5,6 +5,10 @@ export function listAppointmentsApi(params) {
   return httpClient.get(endpoints.appointments.list, { params, cacheTtlMs: 30000 });
 }
 
+export function appointmentsOverviewApi(params) {
+  return httpClient.get(endpoints.appointments.overview, { params, cacheTtlMs: 30000 });
+}
+
 export function getAppointmentApi(appointmentId) {
   return httpClient.get(endpoints.appointments.byId(appointmentId), { cacheTtlMs: 30000 });
 }

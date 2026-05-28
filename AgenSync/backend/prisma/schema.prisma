@@ -377,6 +377,10 @@ model MonthlyPlan {
   @@index([workspaceId, professionalId])
   @@index([workspaceId, billingType])
   @@index([workspaceId, startDate])
+  @@index([workspaceId, status, startDate], map: "idx_monthly_plan_workspace_status_start")
+  @@index([workspaceId, professionalId, status, startDate], map: "idx_monthly_plan_workspace_prof_status_start")
+  @@index([workspaceId, billingType, status], map: "idx_monthly_plan_workspace_billing_status")
+  @@index([workspaceId, createdAt], map: "idx_monthly_plan_workspace_created")
   @@index([userId, status])
   @@index([userId, clientId])
   @@index([userId, serviceId])
@@ -405,6 +409,8 @@ model MonthlyPlanPayment {
   @@unique([monthlyPlanId, month])
   @@index([month, status])
   @@index([dueDate, status])
+  @@index([monthlyPlanId, month, status], map: "idx_monthly_payment_plan_month_status")
+  @@index([month, status, dueDate], map: "idx_monthly_payment_month_status_due")
 }
 
 model Workspace {

@@ -16,11 +16,10 @@ import {
   createSubscription,
   generateSubscriptionAppointments,
   getSubscription,
-  listSubscriptions,
   markSubscriptionPayment,
   previewSubscriptionSchedule,
   subscriptionStatusLabel,
-  subscriptionSummary,
+  subscriptionsOverview,
   updateSubscription
 } from "../services/subscriptions.js";
 import { money, statusOptions, todayInputValue } from "../utils.js";
@@ -544,28 +543,6 @@ export default function Subscriptions() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.listClients(), api.listServices(), api.listProfessionals()])
-      .then(([clientsData, servicesData, professionalsData]) => {
-        if (!active) return;
-        setClients(clientsData.clients || []);
-        setServices((servicesData.services || []).filter((service) => service.isActive !== false));
-        const activeProfessionals = (professionalsData.professionals || []).filter((professional) => professional.isActive !== false);
-        setProfessionals(activeProfessionals);
-        if (activeProfessionals.length === 1) {
-          setForm((current) => ({ ...current, professionalId: activeProfessionals[0].id }));
-        }
-      })
-      .catch((err) => {
-        if (active) setError(err.message);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
     setLoading(true);
     setError("");
 
@@ -574,11 +551,25 @@ export default function Subscriptions() {
       ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value))
     };
 
-    Promise.all([listSubscriptions(params), subscriptionSummary({ month: currentMonth, ...params })])
-      .then(([plans, monthlySummary]) => {
+    subscriptionsOverview(params)
+      .then((overview) => {
         if (!active) return;
-        setSubscriptions(plans);
-        setSummary(monthlySummary);
+
+        const activeProfessionals = (overview.bootstrap?.professionals || []).filter(
+          (professional) => professional.isActive !== false
+        );
+
+        setClients(overview.bootstrap?.clients || []);
+        setServices((overview.bootstrap?.services || []).filter((service) => service.isActive !== false));
+        setProfessionals(activeProfessionals);
+        setSubscriptions(overview.monthlyPlans || []);
+        setSummary(overview.summary || {});
+
+        if (activeProfessionals.length === 1) {
+          setForm((current) =>
+            current.professionalId ? current : { ...current, professionalId: activeProfessionals[0].id }
+          );
+        }
       })
       .catch((err) => {
         if (active) setError(err.message);

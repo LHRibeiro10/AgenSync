@@ -13,6 +13,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authConfigurationError] = useState(authService.getAuthConfigurationError?.() || "");
   const didRunInitialRestore = useRef(false);
+  const lastSyncedTokenRef = useRef("");
 
   const refreshSession = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -21,6 +22,7 @@ export function AuthProvider({ children }) {
       setUser(restored.user || null);
       setSession(restored.session || null);
       setToken(restored.token || "");
+      lastSyncedTokenRef.current = restored.token || "";
     } finally {
       didRunInitialRestore.current = true;
       if (!silent) setLoading(false);
@@ -33,7 +35,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribeAuth = authService.onAuthStateChange?.((event, nextSession) => {
-      if (event === "INITIAL_SESSION" && !didRunInitialRestore.current) {
+      if (event === "INITIAL_SESSION") {
         return;
       }
 
@@ -41,12 +43,19 @@ export function AuthProvider({ children }) {
         setSession(null);
         setToken("");
         setUser(null);
+        lastSyncedTokenRef.current = "";
         setLoading(false);
         return;
       }
 
+      const nextToken = nextSession?.access_token || "";
       setSession(nextSession || null);
-      setToken(nextSession?.access_token || "");
+      setToken(nextToken);
+      if (nextToken && nextToken === lastSyncedTokenRef.current) {
+        setLoading(false);
+        return;
+      }
+
       refreshSession({ silent: true }).catch(() => {
         setLoading(false);
       });
@@ -70,6 +79,7 @@ export function AuthProvider({ children }) {
     setUser(result.user || null);
     setSession(result.session || null);
     setToken(result.token || "");
+    lastSyncedTokenRef.current = result.token || "";
     return result;
   }, []);
 
@@ -79,6 +89,7 @@ export function AuthProvider({ children }) {
     setUser(hasAuthenticatedSession ? result.user || null : null);
     setSession(hasAuthenticatedSession ? result.session || null : null);
     setToken(hasAuthenticatedSession ? result.token || result.session?.access_token || "" : "");
+    lastSyncedTokenRef.current = hasAuthenticatedSession ? result.token || result.session?.access_token || "" : "";
     return result;
   }, []);
 
@@ -87,6 +98,7 @@ export function AuthProvider({ children }) {
     setUser(result.user || null);
     setSession(result.session || null);
     setToken(result.token || result.session?.access_token || "");
+    lastSyncedTokenRef.current = result.token || result.session?.access_token || "";
     return result;
   }, []);
 
@@ -119,6 +131,7 @@ export function AuthProvider({ children }) {
     setToken("");
     setUser(null);
     setSession(null);
+    lastSyncedTokenRef.current = "";
   }, []);
 
   const deleteAccount = useCallback(async () => {
@@ -128,6 +141,7 @@ export function AuthProvider({ children }) {
     setToken("");
     setUser(null);
     setSession(null);
+    lastSyncedTokenRef.current = "";
   }, []);
 
   const workspaceRole = getWorkspaceRole(user);
@@ -159,7 +173,9 @@ export function AuthProvider({ children }) {
       session,
       loading,
       authConfigurationError,
+      authReady: !loading,
       isAuthenticated: Boolean(token),
+      workspaceReady: hasPlatformAccess || Boolean(currentWorkspace?.id) || !token,
       isAdmin,
       workspaceRole,
       platformRole,

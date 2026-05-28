@@ -16,7 +16,7 @@ import {
   resolveProfessionalScope,
   workspaceWhere
 } from "../utils/accessControl.js";
-import { publicAppointment, publicMonthlyPlan } from "../utils/formatters.js";
+import { publicAppointment, publicClient, publicMonthlyPlan, publicProfessional, publicService } from "../utils/formatters.js";
 import { optionalString, parseBoolean, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
@@ -131,6 +131,19 @@ const monthlyPlanSelect = {
     orderBy: [{ month: "desc" }]
   }
 };
+
+function monthlyPlanSelectForMonth(month) {
+  if (!month) return monthlyPlanSelect;
+
+  return {
+    ...monthlyPlanSelect,
+    payments: {
+      where: { month },
+      select: paymentSelect,
+      orderBy: [{ month: "desc" }]
+    }
+  };
+}
 
 const pad = (value) => String(value).padStart(2, "0");
 const FIXED_BILLING_TYPES = new Set(["FIXED_MONTHLY", "PACKAGE_MONTHLY"]);
@@ -317,6 +330,60 @@ function cyclesForRange(plans, startDate, endDate) {
   });
 
   return cycles.sort((first, second) => `${second.dueDate}${second.clientName}`.localeCompare(`${first.dueDate}${first.clientName}`));
+}
+
+function buildMonthlyPlanSummary(plans, monthAppointments, cycles) {
+  const perSessionAppointments = monthAppointments.filter(
+    (appointment) => appointment.monthlyPlan?.billingType === "PER_COMPLETED_SESSION" && appointment.status !== "CANCELED"
+  );
+  const completedPerSessionAppointments = perSessionAppointments.filter((appointment) => appointment.status === "COMPLETED");
+  const expectedFromSessions = perSessionAppointments.reduce((total, appointment) => total + Number(appointment.price || 0), 0);
+  const receivedFromSessions = completedPerSessionAppointments.reduce((total, appointment) => total + Number(appointment.price || 0), 0);
+  const expectedFromFixed = cycles.reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
+  const receivedFromFixed = cycles
+    .filter((cycle) => cycle.status === "paid")
+    .reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
+
+  return {
+    activeCount: plans.filter((plan) => plan.status === "ACTIVE").length,
+    pausedCount: plans.filter((plan) => plan.status === "PAUSED").length,
+    sessionsExpected: monthAppointments.filter((appointment) => appointment.status !== "CANCELED").length,
+    sessionsCompleted: monthAppointments.filter((appointment) => appointment.status === "COMPLETED").length,
+    pending: cycles.filter((cycle) => cycle.status === "pending").length,
+    overdue: cycles.filter((cycle) => cycle.status === "overdue").length,
+    paid: cycles.filter((cycle) => cycle.status === "paid").length,
+    expected: expectedFromFixed + expectedFromSessions,
+    received: receivedFromFixed + receivedFromSessions,
+    pendingAmount: Math.max(expectedFromFixed + expectedFromSessions - receivedFromFixed - receivedFromSessions, 0),
+    cycles
+  };
+}
+
+async function listMonthlyPlansBootstrap(req) {
+  const where = workspaceWhere(req);
+  const [clients, services, professionals] = await Promise.all([
+    prisma.client.findMany({
+      where,
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      take: 500
+    }),
+    prisma.service.findMany({
+      where: { ...where, isActive: true },
+      orderBy: [{ name: "asc" }],
+      take: 300
+    }),
+    prisma.professional.findMany({
+      where: { ...where, isActive: true },
+      orderBy: [{ name: "asc" }],
+      take: 300
+    })
+  ]);
+
+  return {
+    clients: clients.map(publicClient),
+    services: services.map(publicService),
+    professionals: professionals.map(publicProfessional)
+  };
 }
 
 async function findPlan(user, id, includeAppointments = false) {
@@ -666,6 +733,7 @@ router.get(
     const includeSummary = req.query.includeSummary === "true";
     const startDate = req.query.startDate || `${month}-01`;
     const endDate = req.query.endDate || endOfMonthKey(month);
+    const paymentMonth = monthKey(startDate) === monthKey(endDate) ? month : "";
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
@@ -680,7 +748,7 @@ router.get(
         ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {})
       },
       ...(!includeCycles && !includeSummary && pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
-      select: monthlyPlanSelect,
+      select: monthlyPlanSelectForMonth(paymentMonth),
       orderBy: [{ createdAt: "desc" }]
     });
 
@@ -697,32 +765,7 @@ router.get(
 
     if (includeSummary) {
       const cycles = cyclesForRange(plans, startDate, endDate);
-      const perSessionAppointments = monthAppointments.filter(
-        (appointment) => appointment.monthlyPlan?.billingType === "PER_COMPLETED_SESSION" && appointment.status !== "CANCELED"
-      );
-      const completedPerSessionAppointments = perSessionAppointments.filter((appointment) => appointment.status === "COMPLETED");
-      const expectedFromSessions = perSessionAppointments.reduce((total, appointment) => total + Number(appointment.price || 0), 0);
-      const receivedFromSessions = completedPerSessionAppointments.reduce((total, appointment) => total + Number(appointment.price || 0), 0);
-      const expectedFromFixed = cycles.reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
-      const receivedFromFixed = cycles
-        .filter((cycle) => cycle.status === "paid")
-        .reduce((total, cycle) => total + Number(cycle.amount || 0), 0);
-
-      return res.json({
-        summary: {
-          activeCount: plans.filter((plan) => plan.status === "ACTIVE").length,
-          pausedCount: plans.filter((plan) => plan.status === "PAUSED").length,
-          sessionsExpected: monthAppointments.filter((appointment) => appointment.status !== "CANCELED").length,
-          sessionsCompleted: monthAppointments.filter((appointment) => appointment.status === "COMPLETED").length,
-          pending: cycles.filter((cycle) => cycle.status === "pending").length,
-          overdue: cycles.filter((cycle) => cycle.status === "overdue").length,
-          paid: cycles.filter((cycle) => cycle.status === "paid").length,
-          expected: expectedFromFixed + expectedFromSessions,
-          received: receivedFromFixed + receivedFromSessions,
-          pendingAmount: Math.max(expectedFromFixed + expectedFromSessions - receivedFromFixed - receivedFromSessions, 0),
-          cycles
-        }
-      });
+      return res.json({ summary: buildMonthlyPlanSummary(plans, monthAppointments, cycles) });
     }
 
     const publicPlans = attachMonthMetrics(plans, monthAppointments).map((plan) => ({
@@ -733,6 +776,71 @@ router.get(
     }));
 
     res.json({ monthlyPlans: publicPlans });
+  })
+);
+
+router.get(
+  "/overview",
+  asyncHandler(async (req, res) => {
+    const canFilterProfessionals =
+      isWorkspaceProfessional(req.user) || planHasFeature(req.user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
+    const scope = await resolveProfessionalScope(
+      prisma,
+      req.user,
+      canFilterProfessionals ? req.query.professionalId : ""
+    );
+    const month = monthKey(req.query.month || req.query.endDate || todayString());
+    const startDate = req.query.startDate || `${month}-01`;
+    const endDate = req.query.endDate || endOfMonthKey(month);
+    const paymentMonth = monthKey(startDate) === monthKey(endDate) ? month : "";
+    const bootstrapRequested = req.query.includeBootstrap !== "false";
+
+    const plansPromise = prisma.monthlyPlan.findMany({
+      where: {
+        ...workspaceWhere(req),
+        ...professionalWhere(scope),
+        ...(req.query.status ? { status: normalizePlanStatus(req.query.status) } : {}),
+        ...(req.query.billingType ? { billingType: normalizeBillingType(req.query.billingType) } : {}),
+        ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {})
+      },
+      select: monthlyPlanSelectForMonth(paymentMonth),
+      orderBy: [{ createdAt: "desc" }],
+      take: 300
+    });
+
+    const [plans, bootstrap] = await Promise.all([
+      plansPromise,
+      bootstrapRequested ? listMonthlyPlansBootstrap(req) : Promise.resolve(null)
+    ]);
+
+    const monthAppointments = await appointmentsForPlans(
+      req,
+      plans.map((plan) => plan.id),
+      startDate,
+      endDate
+    );
+    const cycles = cyclesForRange(plans, startDate, endDate);
+    const monthlyPlans = attachMonthMetrics(plans, monthAppointments).map((plan) => ({
+      ...plan,
+      currentCycle: shouldIncludePlan(plans.find((item) => item.id === plan.id), month)
+        ? cycleForMonth(plans.find((item) => item.id === plan.id), month)
+        : null
+    }));
+
+    res.json({
+      month,
+      filters: {
+        startDate,
+        endDate,
+        professionalId: scope.professionalId || "",
+        status: req.query.status || "",
+        billingType: req.query.billingType || "",
+        clientId: req.query.clientId || ""
+      },
+      ...(bootstrap ? { bootstrap } : {}),
+      monthlyPlans,
+      summary: buildMonthlyPlanSummary(plans, monthAppointments, cycles)
+    });
   })
 );
 

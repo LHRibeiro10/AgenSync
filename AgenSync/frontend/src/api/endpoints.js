@@ -62,6 +62,7 @@ export const endpoints = Object.freeze({
   },
   clients: {
     list: "/clients",
+    overview: "/clients/overview",
     import: "/clients/import",
     byId: (id) => `/clients/${id}`
   },
@@ -76,6 +77,7 @@ export const endpoints = Object.freeze({
   },
   appointments: {
     list: "/appointments",
+    overview: "/appointments/overview",
     byId: (id) => `/appointments/${id}`
   },
   dashboard: "/dashboard",
@@ -103,6 +105,7 @@ export const endpoints = Object.freeze({
   },
   subscriptions: {
     monthlyPlans: "/subscriptions/monthly-plans",
+    monthlyPlansOverview: "/subscriptions/monthly-plans/overview",
     monthlyPlanById: (id) => `/subscriptions/monthly-plans/${id}`
   }
 });

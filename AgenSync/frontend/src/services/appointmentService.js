@@ -1,4 +1,5 @@
 import {
+  appointmentsOverviewApi,
   createAppointmentApi,
   deleteAppointmentApi,
   getAppointmentApi,
@@ -11,6 +12,13 @@ export function listAppointments(params) {
   return executeDataSource({
     feature: "appointments.list",
     remote: () => listAppointmentsApi(params)
+  });
+}
+
+export function appointmentsOverview(params) {
+  return executeDataSource({
+    feature: "appointments.overview",
+    remote: () => appointmentsOverviewApi(params)
   });
 }
 

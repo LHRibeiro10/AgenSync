@@ -245,7 +245,8 @@ export default function Dashboard() {
     period: workspacePeriod,
     setPeriod: setWorkspacePeriod,
     canManageWorkspace,
-    isProfessional
+    isProfessional,
+    viewReady
   } = useWorkspaceView();
   const { user } = useAuth();
   const canUseProfessionalFilters = canUsePlanFeature(user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
@@ -520,10 +521,8 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load(appliedFilters);
-  }, []);
+    if (!viewReady) return;
 
-  useEffect(() => {
     const nextPeriod = workspacePeriod || "today";
     const range = nextPeriod === "custom" ? filters : rangeForPeriod(nextPeriod);
     const next = {
@@ -534,16 +533,20 @@ export default function Dashboard() {
     };
     const nextKey = filterKey(next);
 
-    if (nextKey === filterKey(filters) || nextKey === lastLoadedFiltersKey.current) {
+    if (nextKey !== filterKey(filters)) {
+      setFilters(next);
+      setAppliedFilters(next);
+    }
+
+    if (nextKey === lastLoadedFiltersKey.current) {
       return;
     }
 
-    setFilters(next);
-    setAppliedFilters(next);
     load(next);
-  }, [canUseProfessionalFilters, selectedProfessionalId, workspacePeriod]);
+  }, [canUseProfessionalFilters, selectedProfessionalId, viewReady, workspacePeriod]);
 
   useEffect(() => {
+    if (!viewReady) return undefined;
     let ignore = false;
 
     async function loadProfessionals() {
@@ -560,7 +563,7 @@ export default function Dashboard() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [viewReady]);
 
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));

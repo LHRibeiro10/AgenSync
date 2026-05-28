@@ -28,6 +28,7 @@ export const api = {
   resetPassword: (payload) => authService.resetPassword(payload),
 
   listClients: (params) => clientService.listClients(params),
+  clientsOverview: (params) => clientService.clientsOverview(params),
   createClient: (payload) => clientService.createClient(payload),
   importClients: (payload) => clientService.importClients(payload),
   updateClient: (id, payload) => clientService.updateClient(id, payload),
@@ -46,6 +47,7 @@ export const api = {
   deleteService: (id) => serviceCatalogService.deleteService(id),
 
   listAppointments: (params) => appointmentService.listAppointments(params),
+  appointmentsOverview: (params) => appointmentService.appointmentsOverview(params),
   getAppointment: (id) => appointmentService.getAppointment(id),
   createAppointment: (payload) => appointmentService.createAppointment(payload),
   updateAppointment: (id, payload) => appointmentService.updateAppointment(id, payload),

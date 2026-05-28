@@ -6,6 +6,7 @@ import {
   getMonthlyPlanApi,
   listMonthlyPlansApi,
   markMonthlyPlanPaymentApi,
+  monthlyPlansOverviewApi,
   previewMonthlyPlanScheduleApi,
   updateMonthlyPlanApi
 } from "../api/modules/monthlyPlansApi.js";
@@ -74,6 +75,13 @@ export async function subscriptionSummary(filters = {}) {
 
   if (response?.summary) return response.summary;
   return response;
+}
+
+export async function subscriptionsOverview(filters = {}) {
+  return executeDataSource({
+    feature: "subscriptions.monthlyPlans.overview",
+    remote: () => monthlyPlansOverviewApi(filters)
+  });
 }
 
 export async function createSubscription(payload) {

@@ -1,4 +1,5 @@
 import {
+  clientsOverviewApi,
   createClientApi,
   deleteClientApi,
   importClientsApi,
@@ -11,6 +12,13 @@ export function listClients(params) {
   return executeDataSource({
     feature: "clients.list",
     remote: () => listClientsApi(params)
+  });
+}
+
+export function clientsOverview(params) {
+  return executeDataSource({
+    feature: "clients.overview",
+    remote: () => clientsOverviewApi(params)
   });
 }
 

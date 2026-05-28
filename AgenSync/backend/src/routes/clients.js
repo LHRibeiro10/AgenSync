@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { clientAccessWhere, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
-import { publicClient, publicClientCareRecord } from "../utils/formatters.js";
+import { publicClient, publicClientCareRecord, publicProduct, publicService } from "../utils/formatters.js";
 import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
@@ -99,6 +99,41 @@ router.get(
     });
 
     res.json({ clients: clients.map(publicClient) });
+  })
+);
+
+router.get(
+  "/overview",
+  asyncHandler(async (req, res) => {
+    const includeInactive = parseBoolean(req.query.includeInactive, true);
+    const [clients, services, products] = await Promise.all([
+      prisma.client.findMany({
+        where: {
+          ...clientAccessWhere(req),
+          ...(includeInactive ? {} : { isActive: true })
+        },
+        orderBy: [{ isActive: "desc" }, { name: "asc" }],
+        take: 500
+      }),
+      prisma.service.findMany({
+        where: { ...workspaceWhere(req), isActive: true },
+        orderBy: [{ name: "asc" }],
+        take: 300
+      }),
+      prisma.product.findMany({
+        where: { ...workspaceWhere(req), isActive: true },
+        orderBy: [{ name: "asc" }],
+        take: 300
+      })
+    ]);
+
+    res.json({
+      clients: clients.map(publicClient),
+      bootstrap: {
+        services: services.map(publicService),
+        products: products.map(publicProduct)
+      }
+    });
   })
 );
 

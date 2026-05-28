@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
@@ -115,7 +115,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const location = useLocation();
   const { showToast } = useToast();
   const { user } = useAuth();
-  const { selectedProfessionalId } = useWorkspaceView();
+  const { selectedProfessionalId, viewReady } = useWorkspaceView();
   const { markStepComplete } = useOnboarding();
   const initialSelectedDate = todayInputValue();
   const [viewMode, setViewMode] = useState(() =>
@@ -143,6 +143,7 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
     confirmation: DEFAULT_CONFIRMATION_MESSAGE,
     cancellation: DEFAULT_CANCELLATION_MESSAGE
   });
+  const lastLoadedAppointmentsKey = useRef("");
 
   const weekDays = useMemo(() => buildWeekDays(weekStart, workingHours), [weekStart, workingHours]);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
@@ -192,7 +193,15 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   }, []);
 
   useEffect(() => {
+    if (!viewReady) return undefined;
+
     let active = true;
+    const startDate = formatDateKey(weekStart);
+    const endDate = formatDateKey(weekEnd);
+    const requestKey = [startDate, endDate, selectedProfessionalId || "", reloadKey].join("|");
+
+    if (requestKey === lastLoadedAppointmentsKey.current) return undefined;
+    lastLoadedAppointmentsKey.current = requestKey;
 
     async function loadWeekAppointments() {
       setLoading(true);
@@ -200,8 +209,8 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
 
       try {
         const data = await api.listAppointments({
-          startDate: formatDateKey(weekStart),
-          endDate: formatDateKey(weekEnd),
+          startDate,
+          endDate,
           professionalId: selectedProfessionalId || ""
         });
 
@@ -226,11 +235,12 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
     return () => {
       active = false;
     };
-  }, [weekStart, weekEnd, reloadKey, markStepComplete, selectedProfessionalId]);
+  }, [weekStart, weekEnd, reloadKey, markStepComplete, selectedProfessionalId, viewReady]);
 
   useEffect(() => {
+    if (!viewReady) return undefined;
     const appointmentId = new URLSearchParams(location.search).get("agendamento");
-    if (!appointmentId) return;
+    if (!appointmentId) return undefined;
 
     let active = true;
 

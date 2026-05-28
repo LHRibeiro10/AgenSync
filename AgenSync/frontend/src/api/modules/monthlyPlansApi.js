@@ -5,6 +5,10 @@ export function listMonthlyPlansApi(params) {
   return httpClient.get(endpoints.subscriptions.monthlyPlans, { params, cacheTtlMs: 30000 });
 }
 
+export function monthlyPlansOverviewApi(params) {
+  return httpClient.get(endpoints.subscriptions.monthlyPlansOverview, { params, cacheTtlMs: 30000 });
+}
+
 export function getMonthlyPlanApi(monthlyPlanId) {
   return httpClient.get(endpoints.subscriptions.monthlyPlanById(monthlyPlanId), { cacheTtlMs: 30000 });
 }

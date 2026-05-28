@@ -17,7 +17,6 @@ import {
   normalizeContactPhone,
   supportsContactPicker
 } from "../services/contactImportService.js";
-import { listProducts } from "../services/products.js";
 
 const emptyForm = { name: "", phone: "", notes: "" };
 
@@ -86,15 +85,15 @@ export default function Clients({ section = "clients" }) {
     setLoading(true);
     setError("");
 
-    Promise.all([api.listClients({ includeInactive: true }), api.listServices({ active: true }), listProducts({ activeOnly: true })])
-      .then(([clientsData, servicesData, activeProducts]) => {
+    api.clientsOverview({ includeInactive: true })
+      .then((overview) => {
         if (!active) return;
-        setClients(clientsData.clients);
-        if (clientsData.clients.length) {
+        setClients(overview.clients || []);
+        if (overview.clients?.length) {
           markStepComplete("client", { toast: false });
         }
-        setServices(servicesData.services);
-        setProducts(activeProducts);
+        setServices(overview.bootstrap?.services || []);
+        setProducts(overview.bootstrap?.products || []);
       })
       .catch((err) => {
         if (!active) return;

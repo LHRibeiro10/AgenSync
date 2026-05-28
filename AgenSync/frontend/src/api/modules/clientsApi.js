@@ -5,6 +5,10 @@ export function listClientsApi(params) {
   return httpClient.get(endpoints.clients.list, { params, cacheTtlMs: 30_000 });
 }
 
+export function clientsOverviewApi(params) {
+  return httpClient.get(endpoints.clients.overview, { params, cacheTtlMs: 30_000 });
+}
+
 export function createClientApi(payload) {
   return httpClient.post(endpoints.clients.list, { body: payload });
 }

@@ -3,6 +3,7 @@
   getSubscription,
   listSubscriptions,
   listSubscriptionCycles,
+  subscriptionsOverview,
   subscriptionSummary,
   previewSubscriptionSchedule,
   createSubscription,

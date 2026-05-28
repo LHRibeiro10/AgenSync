@@ -262,19 +262,16 @@ export default function Appointments() {
     setLoading(true);
     setError("");
     try {
-      const [appointmentsData, clientsData, professionalsData, servicesData] = await Promise.all([
-        api.listAppointments(selectedProfessionalId ? { professionalId: selectedProfessionalId } : undefined),
-        api.listClients(),
-        api.listProfessionals(),
-        api.listServices()
-      ]);
+      const appointmentsData = await api.appointmentsOverview(
+        selectedProfessionalId ? { professionalId: selectedProfessionalId } : undefined
+      );
       setAppointments(appointmentsData.appointments);
       if (appointmentsData.appointments.length) {
         markStepComplete("appointment", { toast: false });
       }
-      setClients(clientsData.clients);
-      setProfessionals(professionalsData.professionals);
-      setServices(servicesData.services);
+      setClients(appointmentsData.bootstrap?.clients || []);
+      setProfessionals(appointmentsData.bootstrap?.professionals || []);
+      setServices(appointmentsData.bootstrap?.services || []);
     } catch (err) {
       setError(err.message);
     } finally {
