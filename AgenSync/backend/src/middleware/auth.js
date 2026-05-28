@@ -277,18 +277,39 @@ const userSelect = {
   createdAt: true
 };
 
+const INITIAL_PLATFORM_OWNER_EMAIL = "luiz.henrique.ribeiro770@gmail.com";
+
+function isInitialPlatformOwnerEmail(email) {
+  return String(email || "").trim().toLowerCase() === INITIAL_PLATFORM_OWNER_EMAIL;
+}
+
 function roleForEmail(email) {
-  return String(email || "").trim().toLowerCase() === "luiz.henrique.ribeiro770@gmail.com" ? "ADMIN" : "USER";
+  return isInitialPlatformOwnerEmail(email) ? "ADMIN" : "USER";
+}
+
+function platformRoleForEmail(email) {
+  return isInitialPlatformOwnerEmail(email) ? "PLATFORM_OWNER" : "USER";
 }
 
 async function ensureInitialAdminRole(user) {
   if (!user?.id) return user;
   if (roleForEmail(user.email) !== "ADMIN") return user;
-  if (String(user.role || "").toUpperCase() === "ADMIN") return user;
+  const needsUpdate =
+    String(user.role || "").toUpperCase() !== "ADMIN" ||
+    String(user.platformRole || "").toUpperCase() !== "PLATFORM_OWNER" ||
+    String(user.accountStatus || "ACTIVE").toUpperCase() !== "ACTIVE" ||
+    String(user.userStatus || "ACTIVE").toUpperCase() !== "ACTIVE";
+
+  if (!needsUpdate) return user;
 
   const updatedUser = await prisma.user.update({
     where: { id: user.id },
-    data: { role: "ADMIN" },
+    data: {
+      role: "ADMIN",
+      platformRole: "PLATFORM_OWNER",
+      accountStatus: "ACTIVE",
+      userStatus: "ACTIVE"
+    },
     select: userSelect
   });
 
@@ -387,8 +408,9 @@ async function ensureSupabaseUser(payload, token) {
 
   const cachedUser = getCachedAuthUser(supabaseId, metadataKey);
   if (cachedUser) {
-    await ensureSupabaseBootstrap(cachedUser);
-    return cachedUser;
+    const ensuredUser = await ensureInitialAdminRole(cachedUser);
+    await ensureSupabaseBootstrap(ensuredUser);
+    return ensuredUser;
   }
 
   const existingUser = await prisma.user.findUnique({
@@ -412,6 +434,7 @@ async function ensureSupabaseUser(payload, token) {
           name: resolvedName,
           email,
           role: roleForEmail(email),
+          platformRole: platformRoleForEmail(email),
           workspaceRole: "OWNER",
           platformPlan: PLAN_SLUGS.PADRAO,
           subscriptionStatus: "PAID",
@@ -429,6 +452,9 @@ async function ensureSupabaseUser(payload, token) {
         if (existingUser.name !== resolvedName) updates.name = resolvedName;
         if (existingUser.email !== email) updates.email = email;
         if (existingUser.role !== roleForEmail(email) && roleForEmail(email) === "ADMIN") updates.role = "ADMIN";
+        if (existingUser.platformRole !== platformRoleForEmail(email)) updates.platformRole = platformRoleForEmail(email);
+        if (isInitialPlatformOwnerEmail(email) && existingUser.accountStatus !== "ACTIVE") updates.accountStatus = "ACTIVE";
+        if (isInitialPlatformOwnerEmail(email) && existingUser.userStatus !== "ACTIVE") updates.userStatus = "ACTIVE";
         if (metadataBusinessName && existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
         if (metadataBusinessType && existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
 
@@ -441,10 +467,11 @@ async function ensureSupabaseUser(payload, token) {
         });
       })();
 
-  await ensureSupabaseBootstrap(user);
+  const ensuredUser = await ensureInitialAdminRole(user);
+  await ensureSupabaseBootstrap(ensuredUser);
 
-  setCachedAuthUser(user, metadataKey);
-  return user;
+  setCachedAuthUser(ensuredUser, metadataKey);
+  return ensuredUser;
 }
 
 async function authenticateWithSupabaseJwt(token) {

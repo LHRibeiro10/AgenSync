@@ -64,5 +64,6 @@ export const api = {
   getPlatformWorkspace: (id, params) => platformService.getPlatformWorkspace(id, params),
   updatePlatformWorkspaceStatus: (id, payload) => platformService.updatePlatformWorkspaceStatus(id, payload),
   updatePlatformWorkspacePlan: (id, payload) => platformService.updatePlatformWorkspacePlan(id, payload),
+  deletePlatformWorkspace: (id, payload) => platformService.deletePlatformWorkspace(id, payload),
   updatePlatformUserStatus: (id, payload) => platformService.updatePlatformUserStatus(id, payload)
 };

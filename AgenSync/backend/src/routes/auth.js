@@ -36,14 +36,29 @@ function roleForEmail(email) {
   return String(email || "").trim().toLowerCase() === INITIAL_ADMIN_EMAIL ? "ADMIN" : "USER";
 }
 
+function isInitialAdminEmail(email) {
+  return String(email || "").trim().toLowerCase() === INITIAL_ADMIN_EMAIL;
+}
+
 async function ensureInitialAdminRole(user) {
   if (!user?.id) return user;
   if (roleForEmail(user.email) !== "ADMIN") return user;
-  if (String(user.role || "").toUpperCase() === "ADMIN") return user;
+  const needsUpdate =
+    String(user.role || "").toUpperCase() !== "ADMIN" ||
+    String(user.platformRole || "").toUpperCase() !== "PLATFORM_OWNER" ||
+    String(user.accountStatus || "ACTIVE").toUpperCase() !== "ACTIVE" ||
+    String(user.userStatus || "ACTIVE").toUpperCase() !== "ACTIVE";
+
+  if (!needsUpdate) return user;
 
   const updatedUser = await prisma.user.update({
     where: { id: user.id },
-    data: { role: "ADMIN" }
+    data: {
+      role: "ADMIN",
+      platformRole: "PLATFORM_OWNER",
+      accountStatus: "ACTIVE",
+      userStatus: "ACTIVE"
+    }
   });
 
   invalidateAuthUserCache(user.id);
@@ -126,6 +141,7 @@ router.post(
           email,
           passwordHash,
           role: roleForEmail(email),
+          platformRole: isInitialAdminEmail(email) ? "PLATFORM_OWNER" : "USER",
           workspaceRole: "OWNER",
           platformPlan: PLAN_SLUGS.PADRAO,
           subscriptionStatus: "PAID",

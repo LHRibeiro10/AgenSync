@@ -403,6 +403,19 @@ function ActionPanel({ workspace, onRefresh }) {
           >
             Inativar usuario
           </Button>
+          <Button
+            variant="danger"
+            loading={busy === "delete"}
+            onClick={() =>
+              runAction(
+                "delete",
+                "Excluir conta definitivamente do banco de dados",
+                () => api.deletePlatformWorkspace(workspace.id, { reason })
+              )
+            }
+          >
+            Excluir definitivo
+          </Button>
         </section>
       </div>
 

@@ -1,5 +1,5 @@
 import { prisma } from "../prisma.js";
-import { getPlanConfig, normalizePlanSlug, publicPlan } from "../config/plans.js";
+import { PLAN_SLUGS, getPlanConfig, normalizePlanSlug, publicPlan } from "../config/plans.js";
 import { ApiError } from "../middleware/error.js";
 
 const workspaceSelect = {
@@ -129,6 +129,16 @@ export function publicWorkspaceMember(member) {
   };
 }
 
+function canUseWorkspaceMember(member) {
+  if (!member?.workspace) return false;
+  if (normalizePlanSlug(member.workspace.plan) !== PLAN_SLUGS.PADRAO) return true;
+  return member.userId === member.workspace.ownerId;
+}
+
+function inactiveWorkspaceAccessError() {
+  return new ApiError(403, "Seu acesso a este workspace esta inativo.");
+}
+
 export async function resolveWorkspaceContext(user, options = {}) {
   if (!user || isPlatformAccount(user)) {
     return { workspace: null, member: null, legacy: false };
@@ -150,7 +160,7 @@ export async function resolveWorkspaceContext(user, options = {}) {
         })
       : null;
 
-    const member =
+    let member =
       preferredMember ||
       (await prisma.workspaceMember.findFirst({
         where,
@@ -158,7 +168,33 @@ export async function resolveWorkspaceContext(user, options = {}) {
         orderBy: [{ role: "asc" }, { createdAt: "asc" }]
       }));
 
+    if (member?.workspace && !canUseWorkspaceMember(member)) {
+      if (requestedWorkspaceId) {
+        throw inactiveWorkspaceAccessError();
+      }
+
+      member = await prisma.workspaceMember.findFirst({
+        where: {
+          userId: user.id,
+          status: "ACTIVE",
+          workspace: {
+            is: {
+              OR: [
+                { ownerId: user.id },
+                { plan: { not: PLAN_SLUGS.PADRAO } }
+              ]
+            }
+          }
+        },
+        select: memberSelect,
+        orderBy: [{ role: "asc" }, { createdAt: "asc" }]
+      });
+    }
+
     if (member?.workspace) {
+      if (!canUseWorkspaceMember(member)) {
+        throw inactiveWorkspaceAccessError();
+      }
       return { workspace: member.workspace, member, legacy: false };
     }
 
@@ -168,7 +204,7 @@ export async function resolveWorkspaceContext(user, options = {}) {
         select: { status: true }
       });
       if (inactiveMember) {
-        throw new ApiError(403, "Seu acesso a este workspace esta inativo.");
+        throw inactiveWorkspaceAccessError();
       }
       throw new ApiError(403, "Voce nao faz parte deste workspace.");
     }
@@ -178,7 +214,7 @@ export async function resolveWorkspaceContext(user, options = {}) {
       select: { status: true }
     });
     if (inactiveMember) {
-      throw new ApiError(403, "Seu acesso a este workspace esta inativo.");
+      throw inactiveWorkspaceAccessError();
     }
   } catch (error) {
     if (error instanceof ApiError) throw error;

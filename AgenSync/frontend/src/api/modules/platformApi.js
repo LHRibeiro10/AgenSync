@@ -25,6 +25,10 @@ export function updatePlatformWorkspacePlanApi(id, payload) {
   return httpClient.patch(endpoints.platform.workspacePlan(id), { body: payload });
 }
 
+export function deletePlatformWorkspaceApi(id, payload) {
+  return httpClient.delete(endpoints.platform.workspaceDelete(id), { body: payload });
+}
+
 export function updatePlatformUserStatusApi(id, payload) {
   return httpClient.patch(endpoints.platform.userStatus(id), { body: payload });
 }

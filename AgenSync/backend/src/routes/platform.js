@@ -6,6 +6,7 @@ import { PLAN_SLUGS, normalizePlanSlug } from "../config/plans.js";
 import { consolidateOwnerWorkspaceForStandardPlan } from "../services/workspacePlanDowngrade.js";
 import { recordAuditEvent } from "../utils/audit.js";
 import { endOfDay, endOfMonth, formatDate, parseDateOnly, startOfDay, startOfMonth, todayString } from "../utils/dates.js";
+import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
 
 const router = Router();
 
@@ -73,6 +74,122 @@ function platformUserWhere() {
       { platformRole: { notIn: ["DEVELOPER", "PLATFORM_OWNER"] } }
     ]
   };
+}
+
+function isProtectedPlatformRole(role) {
+  const normalized = String(role || "").trim().toUpperCase();
+  return normalized === "DEVELOPER" || normalized === "PLATFORM_OWNER";
+}
+
+function whereAny(conditions) {
+  const OR = conditions.filter(Boolean);
+  return OR.length ? { OR } : { id: "__never__" };
+}
+
+async function collectAccountDeletionContext(targetUserId) {
+  const target = await prisma.user.findFirst({
+    where: { id: targetUserId, ...platformUserWhere() },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      passwordHash: true,
+      platformRole: true,
+      ownedWorkspaces: { select: { id: true } }
+    }
+  });
+
+  if (!target) throw new ApiError(404, "Conta nao encontrada.");
+  if (isProtectedPlatformRole(target.platformRole)) {
+    throw new ApiError(403, "Contas da plataforma nao podem ser excluidas por aqui.");
+  }
+
+  const workspaceIds = target.ownedWorkspaces.map((workspace) => workspace.id);
+  if (!workspaceIds.length) return { target, workspaceIds, usersToDelete: [target] };
+
+  const memberRows = await prisma.workspaceMember.findMany({
+    where: { workspaceId: { in: workspaceIds }, userId: { not: target.id } },
+    select: { userId: true }
+  });
+  const memberUserIds = [...new Set(memberRows.map((member) => member.userId).filter(Boolean))];
+  if (!memberUserIds.length) return { target, workspaceIds, usersToDelete: [target] };
+
+  const [memberUsers, externalMembers, externalOwners] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: memberUserIds } },
+      select: { id: true, name: true, email: true, passwordHash: true, platformRole: true }
+    }),
+    prisma.workspaceMember.findMany({
+      where: { userId: { in: memberUserIds }, workspaceId: { notIn: workspaceIds } },
+      select: { userId: true }
+    }),
+    prisma.workspace.findMany({
+      where: { ownerId: { in: memberUserIds }, id: { notIn: workspaceIds } },
+      select: { ownerId: true }
+    })
+  ]);
+
+  const externallyLinkedUserIds = new Set([
+    ...externalMembers.map((member) => member.userId),
+    ...externalOwners.map((workspace) => workspace.ownerId)
+  ]);
+  const safeAffiliateUsers = memberUsers.filter(
+    (user) => !externallyLinkedUserIds.has(user.id) && !isProtectedPlatformRole(user.platformRole)
+  );
+
+  return { target, workspaceIds, usersToDelete: [target, ...safeAffiliateUsers] };
+}
+
+async function hardDeleteAccountData(tx, { workspaceIds, userIds }) {
+  await tx.auditLog.updateMany({ where: { userId: { in: userIds } }, data: { userId: null } });
+  if (workspaceIds.length) {
+    await tx.auditLog.updateMany({ where: { workspaceId: { in: workspaceIds } }, data: { workspaceId: null } });
+  }
+
+  await tx.appointmentReminder.deleteMany({
+    where: whereAny([
+      { userId: { in: userIds } },
+      workspaceIds.length ? { appointment: { workspaceId: { in: workspaceIds } } } : null
+    ])
+  });
+  await tx.notification.deleteMany({
+    where: whereAny([
+      { userId: { in: userIds } },
+      workspaceIds.length ? { workspaceId: { in: workspaceIds } } : null
+    ])
+  });
+  await tx.pushSubscription.deleteMany({ where: { userId: { in: userIds } } });
+  await tx.notificationToken.deleteMany({ where: { userId: { in: userIds } } });
+
+  const ownedRecordWhere = whereAny([
+    { userId: { in: userIds } },
+    workspaceIds.length ? { workspaceId: { in: workspaceIds } } : null
+  ]);
+  await tx.productSale.deleteMany({ where: ownedRecordWhere });
+  await tx.appointment.deleteMany({ where: ownedRecordWhere });
+  await tx.monthlyPlan.deleteMany({ where: ownedRecordWhere });
+  await tx.expense.deleteMany({ where: ownedRecordWhere });
+  await tx.product.deleteMany({ where: ownedRecordWhere });
+  await tx.service.deleteMany({ where: ownedRecordWhere });
+  await tx.professional.deleteMany({ where: ownedRecordWhere });
+  await tx.client.deleteMany({ where: ownedRecordWhere });
+
+  await tx.workspaceInvite.deleteMany({
+    where: whereAny([
+      { invitedById: { in: userIds } },
+      workspaceIds.length ? { workspaceId: { in: workspaceIds } } : null
+    ])
+  });
+  await tx.workspaceMember.deleteMany({
+    where: whereAny([
+      { userId: { in: userIds } },
+      workspaceIds.length ? { workspaceId: { in: workspaceIds } } : null
+    ])
+  });
+  if (workspaceIds.length) {
+    await tx.workspace.deleteMany({ where: { id: { in: workspaceIds } } });
+  }
+  await tx.user.deleteMany({ where: { id: { in: userIds } } });
 }
 
 function resolvePeriod(query) {
@@ -498,8 +615,8 @@ router.patch(
     });
     if (!current) throw new ApiError(404, "Conta nao encontrada.");
 
-    const previousPlan = normalizePlan(current.ownedWorkspaces?.[0]?.plan || current.platformPlan);
-    const shouldConsolidateForStandard = platformPlan === PLAN_SLUGS.PADRAO && previousPlan !== PLAN_SLUGS.PADRAO;
+    const previousPlan = normalizePlan(current.platformPlan || current.ownedWorkspaces?.[0]?.plan);
+    const shouldConsolidateForStandard = platformPlan === PLAN_SLUGS.PADRAO;
     let downgradeResult = null;
 
     const user = await prisma.$transaction(async (tx) => {
@@ -535,6 +652,53 @@ router.patch(
       }
     });
     res.json({ workspace: publicWorkspace(user) });
+  })
+);
+
+router.delete(
+  "/workspaces/:id",
+  asyncHandler(async (req, res) => {
+    const reason = String(req.body.reason || "").trim();
+    if (reason.length < 5) throw new ApiError(400, "Informe um motivo com pelo menos 5 caracteres.");
+    if (req.params.id === req.user.id) {
+      throw new ApiError(400, "Voce nao pode excluir sua propria conta por aqui.");
+    }
+
+    const context = await collectAccountDeletionContext(req.params.id);
+    const userIds = context.usersToDelete.map((user) => user.id);
+    const supabaseUsers = context.usersToDelete.filter((user) => user.passwordHash === "supabase-auth");
+
+    for (const user of supabaseUsers) {
+      await deleteSupabaseAuthUser(user.id);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await hardDeleteAccountData(tx, { workspaceIds: context.workspaceIds, userIds });
+    });
+
+    userIds.forEach((userId) => invalidateAuthUserCache(userId));
+
+    await recordAuditEvent({
+      req,
+      userId: req.user.id,
+      email: req.user.email,
+      eventType: "platform.workspace_deleted",
+      message: reason,
+      metadata: {
+        targetUserId: context.target.id,
+        targetEmail: context.target.email,
+        deletedUserIds: userIds,
+        deletedWorkspaceIds: context.workspaceIds
+      }
+    });
+
+    res.json({
+      ok: true,
+      deleted: {
+        userIds,
+        workspaceIds: context.workspaceIds
+      }
+    });
   })
 );
 

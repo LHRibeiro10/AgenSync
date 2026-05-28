@@ -57,6 +57,7 @@ export const endpoints = Object.freeze({
     workspaceById: (id) => `/platform/workspaces/${id}`,
     workspaceStatus: (id) => `/platform/workspaces/${id}/status`,
     workspacePlan: (id) => `/platform/workspaces/${id}/plan`,
+    workspaceDelete: (id) => `/platform/workspaces/${id}`,
     userStatus: (id) => `/platform/users/${id}/status`
   },
   clients: {

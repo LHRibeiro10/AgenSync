@@ -2,6 +2,7 @@ import {
   platformOverviewApi,
   platformWorkspaceApi,
   platformWorkspacesApi,
+  deletePlatformWorkspaceApi,
   updatePlatformUserStatusApi,
   updatePlatformWorkspacePlanApi,
   updatePlatformWorkspaceStatusApi
@@ -44,6 +45,13 @@ export async function updatePlatformWorkspacePlan(id, payload) {
     remote: () => updatePlatformWorkspacePlanApi(id, payload)
   });
   return response?.workspace || response;
+}
+
+export async function deletePlatformWorkspace(id, payload) {
+  return executeDataSource({
+    feature: "platform.workspaces.delete",
+    remote: () => deletePlatformWorkspaceApi(id, payload)
+  });
 }
 
 export async function updatePlatformUserStatus(id, payload) {
