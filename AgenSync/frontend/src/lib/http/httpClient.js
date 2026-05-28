@@ -15,6 +15,22 @@ function defaultMessageByStatus(status) {
   return "Nao foi possivel concluir a operacao.";
 }
 
+function isSessionInvalidForbidden(status, payload) {
+  if (status !== 403) return false;
+  const message = String(payload?.message || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  return (
+    message.includes("conta inativa") ||
+    message.includes("usuario inativo") ||
+    message.includes("acesso a este workspace esta inativo") ||
+    message.includes("voce nao faz parte deste workspace")
+  );
+}
+
 export function createHttpClient({
   baseURL,
   defaultHeaders = { "Content-Type": "application/json" },
@@ -128,7 +144,7 @@ export function createHttpClient({
           message: payload?.message || defaultMessageByStatus(response.status)
         });
 
-        if (response.status === 401) {
+        if (response.status === 401 || isSessionInvalidForbidden(response.status, payload)) {
           onUnauthorized?.(apiError);
         }
 

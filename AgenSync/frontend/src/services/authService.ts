@@ -37,12 +37,21 @@ function authError(message: string, code?: string) {
   return next;
 }
 
+function isBackendAuthDeniedError(error: any) {
+  return String(error?.code || "") === "BACKEND_AUTH_DENIED";
+}
+
 function requireSupabase() {
   if (!supabase) {
     throw authError(supabaseConfigError, "SUPABASE_NOT_CONFIGURED");
   }
 
   return supabase;
+}
+
+async function clearRejectedSession(client?: any) {
+  clearAccessToken();
+  await client?.auth?.signOut?.().catch(() => null);
 }
 
 export function getAuthConfigurationError() {
@@ -113,10 +122,24 @@ async function requestBackendMe(token: string, authEvent = "") {
       headers
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw authError(payload?.message || "Sua sessao nao esta mais ativa.", "BACKEND_AUTH_DENIED");
+      }
+
+      return null;
+    }
     const payload = await response.json();
     return payload?.user || null;
-  } catch {
+  } catch (error) {
+    if (isBackendAuthDeniedError(error)) throw error;
     return null;
   }
 }
@@ -429,9 +452,13 @@ export async function getSession() {
 
   if (!supabase) {
     if (storedToken) {
-      const backendUser = await requestBackendMe(storedToken);
-      if (backendUser) {
-        return { user: backendUser, session: null, token: storedToken };
+      try {
+        const backendUser = await requestBackendMe(storedToken);
+        if (backendUser) {
+          return { user: backendUser, session: null, token: storedToken };
+        }
+      } catch (error) {
+        if (!isBackendAuthDeniedError(error)) throw error;
       }
     }
     clearAccessToken();
@@ -443,9 +470,13 @@ export async function getSession() {
 
   if (!data.session) {
     if (storedToken) {
-      const backendUser = await requestBackendMe(storedToken);
-      if (backendUser) {
-        return { user: backendUser, session: null, token: storedToken };
+      try {
+        const backendUser = await requestBackendMe(storedToken);
+        if (backendUser) {
+          return { user: backendUser, session: null, token: storedToken };
+        }
+      } catch (error) {
+        if (!isBackendAuthDeniedError(error)) throw error;
       }
     }
     clearAccessToken();
@@ -453,7 +484,13 @@ export async function getSession() {
   }
 
   const safeSession = await maybeShrinkOversizedTokenSession(data.session);
-  return enrichAuthResultWithBackend(authResult({ session: safeSession, user: safeSession.user }));
+  try {
+    return await enrichAuthResultWithBackend(authResult({ session: safeSession, user: safeSession.user }));
+  } catch (error) {
+    if (!isBackendAuthDeniedError(error)) throw error;
+    await clearRejectedSession(supabase);
+    return { user: null, session: null, token: "" };
+  }
 }
 
 export async function restoreSession() {
@@ -491,9 +528,11 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
     : { email: emailOrPayload, password: maybePassword };
 
   let supabaseError = null;
+  let supabaseClient = null;
 
   try {
     const client = requireSupabase();
+    supabaseClient = client;
     const { data, error } = await client.auth.signInWithPassword({
       email: String(payload.email || "").trim(),
       password: payload.password || ""
@@ -507,6 +546,10 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
       "login_success"
     );
   } catch (error) {
+    if (isBackendAuthDeniedError(error)) {
+      await clearRejectedSession(supabaseClient);
+      throw error;
+    }
     supabaseError = error;
   }
 
