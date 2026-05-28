@@ -2,7 +2,7 @@ import { endpoints } from "../endpoints.js";
 import { httpClient } from "../httpClient.js";
 
 export function listWorkspaceMembersApi() {
-  return httpClient.get(endpoints.workspace.members);
+  return httpClient.get(endpoints.workspace.members, { cacheTtlMs: 30000 });
 }
 
 export function listWorkspaceAuditLogsApi(params) {
@@ -26,7 +26,7 @@ export function deleteWorkspaceMemberApi(memberId) {
 }
 
 export function listWorkspaceInvitesApi() {
-  return httpClient.get(endpoints.workspace.invites);
+  return httpClient.get(endpoints.workspace.invites, { cacheTtlMs: 15000 });
 }
 
 export function createWorkspaceInviteApi(payload) {

@@ -374,8 +374,11 @@ export default function Dashboard() {
           setTomorrowAppointments(tomorrowPeriodAppointments);
           return;
         }
-      } catch {
-        // Mantem compatibilidade com backends antigos que ainda nao tenham /dashboard/overview.
+      } catch (overviewError) {
+        // Mantem compatibilidade apenas com backends antigos que ainda nao tenham /dashboard/overview.
+        if (overviewError?.status !== 404) {
+          throw overviewError;
+        }
       }
 
       const [dashboardData, appointmentsData, previousData, tomorrowData, teamData] = await Promise.all([

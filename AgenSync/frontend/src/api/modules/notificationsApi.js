@@ -10,7 +10,7 @@ export function disableNotificationTokenApi(payload) {
 }
 
 export function listNotificationsApi(params) {
-  return httpClient.get(endpoints.notifications.list, { params });
+  return httpClient.get(endpoints.notifications.list, { params, cacheTtlMs: 15000 });
 }
 
 export function clearNotificationsApi() {

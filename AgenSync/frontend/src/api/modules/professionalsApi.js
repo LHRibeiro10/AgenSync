@@ -2,7 +2,7 @@ import { endpoints } from "../endpoints.js";
 import { httpClient } from "../httpClient.js";
 
 export function listProfessionalsApi(params) {
-  return httpClient.get(endpoints.professionals.list, { params });
+  return httpClient.get(endpoints.professionals.list, { params, cacheTtlMs: 60000 });
 }
 
 export function createProfessionalApi(payload) {

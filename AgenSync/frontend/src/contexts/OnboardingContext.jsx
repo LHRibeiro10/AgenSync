@@ -154,9 +154,9 @@ export function OnboardingProvider({ children }) {
     setChecklistLoading(true);
     try {
       const [servicesData, clientsData, appointmentsData] = await Promise.all([
-        api.listServices(),
-        api.listClients(),
-        api.listAppointments()
+        api.listServices({ take: 1 }),
+        api.listClients({ take: 1 }),
+        api.listAppointments({ take: 1 })
       ]);
 
       const nextSteps = {

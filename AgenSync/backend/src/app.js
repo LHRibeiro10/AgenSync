@@ -34,6 +34,35 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use((req, res, next) => {
+  if (process.env.API_TIMING_DEBUG !== "1") {
+    next();
+    return;
+  }
+
+  const startedAt = process.hrtime.bigint();
+
+  res.on("finish", () => {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1000000;
+    const path = String(req.originalUrl || req.url || "").split("?")[0];
+    const workspaceId = req.workspaceId || req.workspace?.id || "";
+    const workspaceRole = req.workspaceRole || req.user?.workspaceRole || "";
+    const platformRole = req.user?.platformRole || "";
+
+    console.info("[API_TIMING]", {
+      method: req.method,
+      path,
+      status: res.statusCode,
+      durationMs: Number(durationMs.toFixed(1)),
+      workspaceId,
+      workspaceRole,
+      platformRole
+    });
+  });
+
+  next();
+});
+
 app.use("/api", apiRouter);
 
 app.use(notFound);
