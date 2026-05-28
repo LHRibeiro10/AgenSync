@@ -2,7 +2,7 @@ import { endpoints } from "../endpoints.js";
 import { httpClient } from "../httpClient.js";
 
 export function getOnboardingStatusApi() {
-  return httpClient.get(endpoints.onboarding.status);
+  return httpClient.get(endpoints.onboarding.status, { cacheTtlMs: 60000 });
 }
 
 export function saveOnboardingBusinessApi(payload) {

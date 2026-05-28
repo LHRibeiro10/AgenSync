@@ -149,6 +149,7 @@ export function publicProfessional(professional) {
       professional.workspaceMembers.find((member) => member.userId) ||
       null
     : null;
+  const stats = professional.stats && typeof professional.stats === "object" ? professional.stats : null;
 
   return {
     id: professional.id,
@@ -169,6 +170,13 @@ export function publicProfessional(professional) {
           permissions: accessMember.permissions && typeof accessMember.permissions === "object" ? accessMember.permissions : {}
         }
       : null,
+    stats: stats
+      ? {
+          total: Number(stats.total || 0),
+          completed: Number(stats.completed || 0),
+          revenue: Number(stats.revenue || 0)
+        }
+      : undefined,
     createdAt: professional.createdAt,
     updatedAt: professional.updatedAt
   };

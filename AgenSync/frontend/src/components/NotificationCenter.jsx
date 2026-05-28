@@ -37,6 +37,7 @@ function upcomingLabel(appointment) {
 const shownBrowserNotificationIds = new Set();
 let hasPrimedNotificationList = false;
 const NOTIFICATION_CACHE_TTL_MS = 30000;
+const NOTIFICATION_POLL_INTERVAL_MS = 2 * 60 * 1000;
 const PROCESS_DUE_COOLDOWN_MS = 5 * 60 * 1000;
 const notificationStateByWorkspace = new Map();
 const notificationListeners = new Set();
@@ -151,7 +152,7 @@ async function processDueOncePerWorkspace(workspaceId) {
   return processDueAppointmentReminders({ limit: 50 }).catch(() => null);
 }
 
-async function loadNotificationSnapshot(workspaceId, { force = false, includeUpcoming = false } = {}) {
+async function loadNotificationSnapshot(workspaceId, { force = false, includeUpcoming = false, processDue = false } = {}) {
   const state = getNotificationState(workspaceId);
   const notificationsFresh = state.loadedAt && Date.now() - state.loadedAt < NOTIFICATION_CACHE_TTL_MS;
   const upcomingFresh =
@@ -164,12 +165,12 @@ async function loadNotificationSnapshot(workspaceId, { force = false, includeUpc
   if (state.inflight) {
     if (!includeUpcoming || state.inflightIncludesUpcoming) return state.inflight;
     await state.inflight.catch(() => null);
-    return loadNotificationSnapshot(workspaceId, { force, includeUpcoming });
+    return loadNotificationSnapshot(workspaceId, { force, includeUpcoming, processDue });
   }
 
   state.inflightIncludesUpcoming = includeUpcoming;
   state.inflight = (async () => {
-    const reminderResult = await processDueOncePerWorkspace(workspaceId);
+    const reminderResult = processDue ? await processDueOncePerWorkspace(workspaceId) : null;
     const today = todayInputValue();
     const endDate = formatDateKey(addDays(new Date(), 7));
     const requests = [listNotifications({ limit: 30 })];
@@ -278,13 +279,13 @@ export default function NotificationCenter({ tone = "light" }) {
     setError(snapshot.error || "");
   }
 
-  async function loadData({ silent = false, force = false, includeUpcoming = false } = {}) {
+  async function loadData({ silent = false, force = false, includeUpcoming = false, processDue = false } = {}) {
     if (!notificationScopeId) return;
     if (!silent) setLoading(true);
     setError("");
 
     try {
-      const snapshot = await loadNotificationSnapshot(notificationScopeId, { force, includeUpcoming });
+      const snapshot = await loadNotificationSnapshot(notificationScopeId, { force, includeUpcoming, processDue });
       const nextNotifications = snapshot.notifications || [];
       showBrowserNotifications(snapshot.reminderNotifications || []);
 
@@ -306,8 +307,8 @@ export default function NotificationCenter({ tone = "light" }) {
     if (!canLoadWorkspaceNotifications) return undefined;
     const unsubscribe = subscribeNotificationState(notificationScopeId, applySnapshot);
     loadData({ silent: true });
-    const timer = window.setInterval(() => loadData({ silent: true }), 60000);
-    const onForegroundNotification = () => loadData({ silent: true });
+    const timer = window.setInterval(() => loadData({ silent: true }), NOTIFICATION_POLL_INTERVAL_MS);
+    const onForegroundNotification = () => loadData({ silent: true, force: true, processDue: true });
     window.addEventListener("agensync:foreground-notification", onForegroundNotification);
 
     return () => {
@@ -318,7 +319,7 @@ export default function NotificationCenter({ tone = "light" }) {
   }, [canLoadWorkspaceNotifications, notificationScopeId]);
 
   useEffect(() => {
-    if (open && canLoadWorkspaceNotifications) loadData({ force: true, includeUpcoming: true });
+    if (open && canLoadWorkspaceNotifications) loadData({ force: true, includeUpcoming: true, processDue: true });
   }, [canLoadWorkspaceNotifications, open, notificationScopeId]);
 
   if (!canLoadWorkspaceNotifications) return null;
@@ -475,7 +476,7 @@ export default function NotificationCenter({ tone = "light" }) {
         </div>
 
         <footer className="border-t border-line p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-          <Button variant="secondary" className="w-full" onClick={() => loadData({ force: true, includeUpcoming: true })}>
+          <Button variant="secondary" className="w-full" onClick={() => loadData({ force: true, includeUpcoming: true, processDue: true })}>
             Atualizar
           </Button>
         </footer>

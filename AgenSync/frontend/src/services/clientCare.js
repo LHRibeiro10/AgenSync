@@ -274,7 +274,7 @@ export function getClientCare(clientId) {
 export async function loadClientCare(clientId) {
   if (!clientId) return defaultCare();
 
-  const result = await httpClient.get(`/clients/${clientId}/care-record`);
+  const result = await httpClient.get(`/clients/${clientId}/care-record`, { cacheTtlMs: 30000 });
   const care = normalizeCare(result?.care || {});
   cacheClientCare(clientId, care);
   return care;

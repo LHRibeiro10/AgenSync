@@ -2,11 +2,11 @@ import { endpoints } from "../endpoints.js";
 import { httpClient } from "../httpClient.js";
 
 export function listAppointmentsApi(params) {
-  return httpClient.get(endpoints.appointments.list, { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.appointments.list, { params, cacheTtlMs: 30000 });
 }
 
 export function getAppointmentApi(appointmentId) {
-  return httpClient.get(endpoints.appointments.byId(appointmentId), { cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.appointments.byId(appointmentId), { cacheTtlMs: 30000 });
 }
 
 export function createAppointmentApi(payload) {

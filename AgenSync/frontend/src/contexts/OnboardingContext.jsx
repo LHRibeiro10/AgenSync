@@ -120,6 +120,12 @@ export function OnboardingProvider({ children }) {
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const [tourIndex, setTourIndex] = useState(0);
+  const checklistComplete = Boolean(
+    progress.hasSeenWelcome &&
+      progress.steps?.service &&
+      progress.steps?.client &&
+      progress.steps?.appointment
+  );
 
   useEffect(() => {
     if (!isAuthenticated || !user || hasPlatformAccess) {
@@ -184,9 +190,13 @@ export function OnboardingProvider({ children }) {
   }, [hasPlatformAccess, isAuthenticated, user?.id]);
 
   useEffect(() => {
-    if (!hydrated || !isAuthenticated || !user || hasPlatformAccess) return;
-    refreshChecklist();
-  }, [hydrated, hasPlatformAccess, isAuthenticated, user?.id, refreshChecklist]);
+    if (!hydrated || !isAuthenticated || !user || hasPlatformAccess || checklistComplete) return undefined;
+    const timer = window.setTimeout(() => {
+      refreshChecklist();
+    }, 4000);
+
+    return () => window.clearTimeout(timer);
+  }, [checklistComplete, hydrated, hasPlatformAccess, isAuthenticated, user?.id, refreshChecklist]);
 
   useEffect(() => {
     if (!tourActive) return;

@@ -6,7 +6,7 @@ export function listWorkspaceMembersApi() {
 }
 
 export function listWorkspaceAuditLogsApi(params) {
-  return httpClient.get(endpoints.workspace.auditLogs, { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.workspace.auditLogs, { params, cacheTtlMs: 30000 });
 }
 
 export function updateWorkspaceMemberApi(memberId, payload) {
@@ -26,7 +26,7 @@ export function deleteWorkspaceMemberApi(memberId) {
 }
 
 export function listWorkspaceInvitesApi() {
-  return httpClient.get(endpoints.workspace.invites, { cacheTtlMs: 15000 });
+  return httpClient.get(endpoints.workspace.invites, { cacheTtlMs: 30000 });
 }
 
 export function createWorkspaceInviteApi(payload) {

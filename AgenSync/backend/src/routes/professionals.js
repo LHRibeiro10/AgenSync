@@ -25,6 +25,55 @@ import {
 const router = Router();
 const accessRoles = new Set(["ADMIN", "PROFESSIONAL"]);
 
+function includeStatsFromQuery(query) {
+  return String(query?.includeStats || "").trim().toLowerCase() === "true";
+}
+
+async function professionalStatsById(req, professionalIds) {
+  if (!professionalIds.length) return new Map();
+
+  const baseWhere = workspaceWhere(req, {
+    professionalId: { in: professionalIds }
+  });
+  const [totalRows, completedRows] = await Promise.all([
+    prisma.appointment.groupBy({
+      by: ["professionalId"],
+      where: baseWhere,
+      _count: { _all: true }
+    }),
+    prisma.appointment.groupBy({
+      by: ["professionalId"],
+      where: { ...baseWhere, status: "COMPLETED" },
+      _count: { _all: true },
+      _sum: { price: true }
+    })
+  ]);
+  const statsById = new Map(
+    professionalIds.map((professionalId) => [
+      professionalId,
+      {
+        total: 0,
+        completed: 0,
+        revenue: 0
+      }
+    ])
+  );
+
+  totalRows.forEach((row) => {
+    if (!row.professionalId || !statsById.has(row.professionalId)) return;
+    statsById.get(row.professionalId).total = row._count?._all || 0;
+  });
+
+  completedRows.forEach((row) => {
+    if (!row.professionalId || !statsById.has(row.professionalId)) return;
+    const stats = statsById.get(row.professionalId);
+    stats.completed = row._count?._all || 0;
+    stats.revenue = Number(row._sum?.price || 0);
+  });
+
+  return statsById;
+}
+
 async function findProfessionalOrFail(req, id) {
   const professional = await prisma.professional.findFirst({
     where: workspaceWhere(req, { id }),
@@ -133,8 +182,21 @@ router.get(
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
+    const includeStats = includeStatsFromQuery(req.query);
+    const statsById = includeStats
+      ? await professionalStatsById(
+          req,
+          professionals.map((professional) => professional.id)
+        )
+      : new Map();
+    const responseProfessionals = includeStats
+      ? professionals.map((professional) => ({
+          ...professional,
+          stats: statsById.get(professional.id) || { total: 0, completed: 0, revenue: 0 }
+        }))
+      : professionals;
 
-    res.json({ professionals: professionals.map(publicProfessional) });
+    res.json({ professionals: responseProfessionals.map(publicProfessional) });
   })
 );
 

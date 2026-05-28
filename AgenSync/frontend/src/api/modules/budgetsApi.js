@@ -2,7 +2,7 @@
 import { httpClient } from "../httpClient.js";
 
 export function listBudgetsApi(params) {
-  return httpClient.get(endpoints.budgets.list, { params });
+  return httpClient.get(endpoints.budgets.list, { params, cacheTtlMs: 30000 });
 }
 
 export function createBudgetApi(payload) {

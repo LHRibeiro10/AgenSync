@@ -2,19 +2,19 @@ import { endpoints } from "../endpoints.js";
 import { httpClient } from "../httpClient.js";
 
 export function platformOverviewApi(params) {
-  return httpClient.get(endpoints.platform.overview, { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.platform.overview, { params, cacheTtlMs: 30000 });
 }
 
 export function platformMetricsApi(params) {
-  return httpClient.get(endpoints.platform.metrics, { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.platform.metrics, { params, cacheTtlMs: 30000 });
 }
 
 export function platformWorkspacesApi(params) {
-  return httpClient.get(endpoints.platform.workspaces, { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.platform.workspaces, { params, cacheTtlMs: 30000 });
 }
 
 export function platformWorkspaceApi(id, params) {
-  return httpClient.get(endpoints.platform.workspaceById(id), { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.platform.workspaceById(id), { params, cacheTtlMs: 30000 });
 }
 
 export function updatePlatformWorkspaceStatusApi(id, payload) {

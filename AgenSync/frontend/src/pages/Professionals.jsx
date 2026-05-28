@@ -26,23 +26,21 @@ function initials(name) {
     .toUpperCase();
 }
 
-function buildStats(professionals, appointments) {
+function buildStats(professionals) {
   return professionals.map((professional) => {
-    const items = appointments.filter((appointment) => appointment.professionalId === professional.id);
-    const completed = items.filter((appointment) => appointment.status === "concluido");
+    const stats = professional.stats || {};
 
     return {
       id: professional.id,
-      total: items.length,
-      completed: completed.length,
-      revenue: completed.reduce((sum, appointment) => sum + Number(appointment.price || 0), 0)
+      total: Number(stats.total || 0),
+      completed: Number(stats.completed || 0),
+      revenue: Number(stats.revenue || 0)
     };
   });
 }
 
 export default function Professionals() {
   const [professionals, setProfessionals] = useState([]);
-  const [appointments, setAppointments] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [accessProfessionalId, setAccessProfessionalId] = useState("");
   const [accessForm, setAccessForm] = useState(emptyAccessForm);
@@ -53,9 +51,9 @@ export default function Professionals() {
   const [creatingAccess, setCreatingAccess] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
-  const { user, workspaceRole } = useAuth();
+  const { user, workspaceRole, refreshSession } = useAuth();
 
-  const stats = useMemo(() => buildStats(professionals, appointments), [professionals, appointments]);
+  const stats = useMemo(() => buildStats(professionals), [professionals]);
   const statsByProfessional = useMemo(
     () => Object.fromEntries(stats.map((item) => [item.id, item])),
     [stats]
@@ -74,12 +72,8 @@ export default function Professionals() {
     setError("");
 
     try {
-      const [professionalsData, appointmentsData] = await Promise.all([
-        api.listProfessionals(),
-        api.listAppointments()
-      ]);
+      const professionalsData = await api.listProfessionals({ includeStats: true });
       setProfessionals(professionalsData.professionals);
-      setAppointments(appointmentsData.appointments);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -92,8 +86,9 @@ export default function Professionals() {
   }, []);
 
   async function loadProfessionalsOnly() {
-    const professionalsData = await api.listProfessionals();
+    const professionalsData = await api.listProfessionals({ includeStats: true });
     setProfessionals(professionalsData.professionals);
+    await refreshSession?.({ silent: true }).catch(() => null);
   }
 
   function update(field, value) {
@@ -243,6 +238,7 @@ export default function Professionals() {
   const canManageAccess = workspaceRole === "owner" || workspaceRole === "admin";
   const activeCount = professionals.filter((professional) => professional.isActive).length;
   const professionalLimitReached = !editing && form.isActive && activeCount >= currentPlan.maxProfessionals;
+  const professionalLimitExceeded = activeCount > currentPlan.maxProfessionals;
   const totalRevenue = stats.reduce((sum, item) => sum + item.revenue, 0);
 
   return (
@@ -331,7 +327,7 @@ export default function Professionals() {
               {editing ? "Atualizar" : "Cadastrar"}
             </Button>
           </div>
-          {professionalLimitReached ? (
+          {professionalLimitExceeded ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
               Seu plano atual permite ate {currentPlan.maxProfessionals} profissional(is).
             </p>

@@ -18,7 +18,7 @@ export function deleteProductApi(productId) {
 }
 
 export function listSalesApi(params) {
-  return httpClient.get(endpoints.sales.list, { params, cacheTtlMs: 10_000 });
+  return httpClient.get(endpoints.sales.list, { params, cacheTtlMs: 30000 });
 }
 
 export function createSaleApi(payload) {

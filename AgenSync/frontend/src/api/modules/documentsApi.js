@@ -2,7 +2,7 @@
 import { httpClient } from "../httpClient.js";
 
 export function listDocumentsApi(params) {
-  return httpClient.get(endpoints.documents.list, { params });
+  return httpClient.get(endpoints.documents.list, { params, cacheTtlMs: 30000 });
 }
 
 export function createDocumentApi(payload) {

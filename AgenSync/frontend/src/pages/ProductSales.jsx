@@ -14,6 +14,7 @@ import {
   listProductSales,
   listProducts,
   productSalesProfit,
+  stockStatus,
   sumProductSales
 } from "../services/products.js";
 import { money } from "../utils.js";
@@ -170,11 +171,11 @@ export default function ProductSales({ mode = "new" }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([listProducts({ activeOnly: true }), listProducts({ stock: "attention" })])
-      .then(([activeProducts, stockAlerts]) => {
+    listProducts({ activeOnly: true })
+      .then((activeProducts) => {
         if (!active) return;
         setProducts(activeProducts);
-        setLowStockProducts(stockAlerts);
+        setLowStockProducts(activeProducts.filter((product) => ["low", "out"].includes(stockStatus(product))));
       })
       .catch((err) => {
         if (!active) return;
