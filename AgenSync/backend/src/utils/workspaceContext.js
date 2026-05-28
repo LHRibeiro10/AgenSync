@@ -1,5 +1,5 @@
 import { prisma } from "../prisma.js";
-import { PLAN_SLUGS, getPlanConfig, normalizePlanSlug, publicPlan } from "../config/plans.js";
+import { getPlanConfig, normalizePlanSlug, publicPlan } from "../config/plans.js";
 import { ApiError } from "../middleware/error.js";
 
 const workspaceSelect = {
@@ -26,6 +26,12 @@ const memberSelect = {
   createdAt: true,
   updatedAt: true,
   workspace: { select: workspaceSelect }
+};
+
+const workspaceRoleRank = {
+  OWNER: 0,
+  ADMIN: 1,
+  PROFESSIONAL: 2
 };
 
 export function isPlatformAccount(user) {
@@ -94,6 +100,7 @@ async function backfillWorkspaceIdForUser(client, userId, workspaceId) {
 export function publicWorkspace(workspace) {
   if (!workspace) return null;
   const plan = publicPlan({ platformPlan: workspace.plan });
+  const exceededResources = Array.isArray(workspace.exceededResources) ? workspace.exceededResources : [];
   return {
     id: workspace.id,
     name: workspace.name,
@@ -109,6 +116,8 @@ export function publicWorkspace(workspace) {
       maxAdmins: plan.maxAdmins
     },
     planFeatures: plan.features,
+    planLimitExceeded: Boolean(workspace.planLimitExceeded || exceededResources.length),
+    exceededResources,
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt
   };
@@ -129,14 +138,155 @@ export function publicWorkspaceMember(member) {
   };
 }
 
-function canUseWorkspaceMember(member) {
-  if (!member?.workspace) return false;
-  if (normalizePlanSlug(member.workspace.plan) !== PLAN_SLUGS.PADRAO) return true;
-  return member.userId === member.workspace.ownerId;
-}
-
 function inactiveWorkspaceAccessError() {
   return new ApiError(403, "Seu acesso a este workspace esta inativo.");
+}
+
+function workspaceMemberLimitError(state) {
+  return new ApiError(
+    403,
+    "Seu acesso a esta conta esta bloqueado pelo limite de usuarios do plano. Peca ao responsavel para regularizar o plano ou os membros ativos.",
+    {
+      code: "WORKSPACE_MEMBER_LIMIT_EXCEEDED",
+      plan: state?.plan || "",
+      exceededResources: state?.exceededResources || []
+    }
+  );
+}
+
+function compareMembersForPlanAccess(ownerId) {
+  return (first, second) => {
+    const firstRole = String(first.role || "PROFESSIONAL").toUpperCase();
+    const secondRole = String(second.role || "PROFESSIONAL").toUpperCase();
+    const firstRank = first.userId === ownerId ? 0 : workspaceRoleRank[firstRole] ?? 3;
+    const secondRank = second.userId === ownerId ? 0 : workspaceRoleRank[secondRole] ?? 3;
+    if (firstRank !== secondRank) return firstRank - secondRank;
+
+    const firstDate = new Date(first.createdAt || 0).getTime();
+    const secondDate = new Date(second.createdAt || 0).getTime();
+    if (firstDate !== secondDate) return firstDate - secondDate;
+
+    return String(first.id || "").localeCompare(String(second.id || ""));
+  };
+}
+
+function exceededResource(resource, current, limit) {
+  const safeCurrent = Number(current || 0);
+  const safeLimit = Number(limit || 0);
+  if (safeLimit < 0 || safeCurrent <= safeLimit) return null;
+  return { resource, current: safeCurrent, limit: safeLimit };
+}
+
+async function loadWorkspacePlanLimitState(client, workspace) {
+  if (!workspace?.id) {
+    return {
+      plan: "",
+      ownerId: "",
+      userLimitExceeded: false,
+      allowedMemberIds: new Set(),
+      planLimitExceeded: false,
+      exceededResources: []
+    };
+  }
+
+  const plan = getPlanConfig(workspace.plan);
+  const [activeMembers, activeProfessionals] = await Promise.all([
+    client.workspaceMember.findMany({
+      where: { workspaceId: workspace.id, status: "ACTIVE" },
+      select: {
+        id: true,
+        userId: true,
+        role: true,
+        createdAt: true
+      }
+    }),
+    client.professional.count({
+      where: { workspaceId: workspace.id, isActive: true }
+    })
+  ]);
+
+  const activeAdmins = activeMembers.filter((member) => String(member.role || "").toUpperCase() === "ADMIN").length;
+  const exceededResources = [
+    exceededResource("users", activeMembers.length, plan.maxUsers),
+    exceededResource("admins", activeAdmins, plan.maxAdmins),
+    exceededResource("professionals", activeProfessionals, plan.maxProfessionals)
+  ].filter(Boolean);
+
+  const sortedMembers = activeMembers.slice().sort(compareMembersForPlanAccess(workspace.ownerId));
+  const allowedMemberIds = new Set();
+  sortedMembers.forEach((member) => {
+    if (member.userId === workspace.ownerId) allowedMemberIds.add(member.id);
+  });
+  sortedMembers.forEach((member) => {
+    if (allowedMemberIds.has(member.id)) return;
+    if (allowedMemberIds.size >= Number(plan.maxUsers || 0)) return;
+    allowedMemberIds.add(member.id);
+  });
+
+  return {
+    plan: plan.slug,
+    ownerId: workspace.ownerId,
+    userLimitExceeded: activeMembers.length > Number(plan.maxUsers || 0),
+    allowedMemberIds,
+    planLimitExceeded: exceededResources.length > 0,
+    exceededResources
+  };
+}
+
+function workspaceWithLimitState(workspace, state) {
+  if (!workspace) return null;
+  return {
+    ...workspace,
+    planLimitExceeded: Boolean(state?.planLimitExceeded),
+    exceededResources: state?.exceededResources || []
+  };
+}
+
+function memberIsAllowedByUserLimit(member, state) {
+  if (!member) return false;
+  if (!state?.userLimitExceeded) return true;
+  if (member.userId === state.ownerId) return true;
+  return state.allowedMemberIds?.has(member.id) === true;
+}
+
+async function contextForActiveMember(client, member) {
+  if (!member?.workspace) return null;
+  const state = await loadWorkspacePlanLimitState(client, member.workspace);
+  if (!memberIsAllowedByUserLimit(member, state)) {
+    throw workspaceMemberLimitError(state);
+  }
+  return {
+    workspace: workspaceWithLimitState(member.workspace, state),
+    member,
+    legacy: false
+  };
+}
+
+async function findFirstEligibleActiveMember(client, userId) {
+  const members = await client.workspaceMember.findMany({
+    where: { userId, status: "ACTIVE" },
+    select: memberSelect,
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  let firstBlockedState = null;
+  for (const member of members) {
+    const state = await loadWorkspacePlanLimitState(client, member.workspace);
+    if (memberIsAllowedByUserLimit(member, state)) {
+      return {
+        workspace: workspaceWithLimitState(member.workspace, state),
+        member,
+        legacy: false
+      };
+    }
+    firstBlockedState ||= state;
+  }
+
+  if (firstBlockedState) {
+    throw workspaceMemberLimitError(firstBlockedState);
+  }
+
+  return null;
 }
 
 export async function resolveWorkspaceContext(user, options = {}) {
@@ -147,67 +297,27 @@ export async function resolveWorkspaceContext(user, options = {}) {
   const requestedWorkspaceId = String(options.workspaceId || "").trim();
 
   try {
-    const where = {
-      userId: user.id,
-      status: "ACTIVE",
-      ...(requestedWorkspaceId ? { workspaceId: requestedWorkspaceId } : {})
-    };
+    const scopedWorkspaceId = requestedWorkspaceId || user.currentWorkspaceId || "";
+    if (scopedWorkspaceId) {
+      const scopedMember = await prisma.workspaceMember.findFirst({
+        where: { userId: user.id, workspaceId: scopedWorkspaceId },
+        select: memberSelect
+      });
 
-    const preferredMember = user.currentWorkspaceId && !requestedWorkspaceId
-      ? await prisma.workspaceMember.findFirst({
-          where: { userId: user.id, workspaceId: user.currentWorkspaceId, status: "ACTIVE" },
-          select: memberSelect
-        })
-      : null;
+      if (scopedMember) {
+        if (String(scopedMember.status || "").toUpperCase() !== "ACTIVE") {
+          throw inactiveWorkspaceAccessError();
+        }
+        return await contextForActiveMember(prisma, scopedMember);
+      }
 
-    let member =
-      preferredMember ||
-      (await prisma.workspaceMember.findFirst({
-        where,
-        select: memberSelect,
-        orderBy: [{ role: "asc" }, { createdAt: "asc" }]
-      }));
-
-    if (member?.workspace && !canUseWorkspaceMember(member)) {
       if (requestedWorkspaceId) {
-        throw inactiveWorkspaceAccessError();
+        throw new ApiError(403, "Voce nao faz parte deste workspace.");
       }
-
-      member = await prisma.workspaceMember.findFirst({
-        where: {
-          userId: user.id,
-          status: "ACTIVE",
-          workspace: {
-            is: {
-              OR: [
-                { ownerId: user.id },
-                { plan: { not: PLAN_SLUGS.PADRAO } }
-              ]
-            }
-          }
-        },
-        select: memberSelect,
-        orderBy: [{ role: "asc" }, { createdAt: "asc" }]
-      });
     }
 
-    if (member?.workspace) {
-      if (!canUseWorkspaceMember(member)) {
-        throw inactiveWorkspaceAccessError();
-      }
-      return { workspace: member.workspace, member, legacy: false };
-    }
-
-    if (requestedWorkspaceId) {
-      const inactiveMember = await prisma.workspaceMember.findFirst({
-        where: { userId: user.id, workspaceId: requestedWorkspaceId },
-        select: { status: true }
-      });
-      if (inactiveMember) {
-        throw inactiveWorkspaceAccessError();
-      }
-      throw new ApiError(403, "Voce nao faz parte deste workspace.");
-    }
+    const eligibleContext = await findFirstEligibleActiveMember(prisma, user.id);
+    if (eligibleContext) return eligibleContext;
 
     const inactiveMember = await prisma.workspaceMember.findFirst({
       where: { userId: user.id },
@@ -233,20 +343,24 @@ export async function ensureDefaultWorkspaceForUser(user, client = prisma) {
   if (!user || isPlatformAccount(user)) return user;
 
   try {
-    const existingMember = await client.workspaceMember.findFirst({
-      where: { userId: user.id, status: "ACTIVE" },
-      select: { workspaceId: true },
-      orderBy: [{ createdAt: "asc" }]
-    });
+    if (user.currentWorkspaceId) {
+      const currentMember = await client.workspaceMember.findFirst({
+        where: { userId: user.id, workspaceId: user.currentWorkspaceId },
+        select: { id: true, status: true }
+      });
+      if (currentMember) return user;
+    }
 
-    if (existingMember?.workspaceId) {
-      if (user.currentWorkspaceId !== existingMember.workspaceId) {
-        await backfillWorkspaceIdForUser(client, user.id, existingMember.workspaceId);
+    const existingContext = await findFirstEligibleActiveMember(client, user.id);
+
+    if (existingContext?.workspace?.id) {
+      if (user.currentWorkspaceId !== existingContext.workspace.id) {
+        await backfillWorkspaceIdForUser(client, user.id, existingContext.workspace.id);
         await client.user.update({
           where: { id: user.id },
-          data: { currentWorkspaceId: existingMember.workspaceId }
+          data: { currentWorkspaceId: existingContext.workspace.id }
         });
-        return { ...user, currentWorkspaceId: existingMember.workspaceId };
+        return { ...user, currentWorkspaceId: existingContext.workspace.id };
       }
       return user;
     }
@@ -266,6 +380,37 @@ export async function ensureDefaultWorkspaceForUser(user, client = prisma) {
           select: { id: true }
         })
       : null;
+
+    const ownedWorkspace = await client.workspace.findFirst({
+      where: { ownerId: user.id },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }]
+    });
+
+    if (ownedWorkspace?.id) {
+      await client.workspaceMember
+        .create({
+          data: {
+            workspaceId: ownedWorkspace.id,
+            userId: user.id,
+            role: "OWNER",
+            permissions: {},
+            professionalId: professional?.id || null,
+            status: "ACTIVE"
+          }
+        })
+        .catch((error) => {
+          if (String(error?.code || "") !== "P2002") throw error;
+        });
+
+      await client.user.update({
+        where: { id: user.id },
+        data: { currentWorkspaceId: ownedWorkspace.id }
+      });
+      await backfillWorkspaceIdForUser(client, user.id, ownedWorkspace.id);
+
+      return { ...user, currentWorkspaceId: ownedWorkspace.id };
+    }
 
     const workspace = await client.workspace.create({
       data: {

@@ -31,9 +31,13 @@ function authResult(data: any = {}) {
   return { user, session, token };
 }
 
-function authError(message: string, code?: string) {
-  const next = new Error(message) as Error & { code?: string };
+function authError(message: string, code?: string, details?: any) {
+  const next = new Error(message) as Error & { code?: string; details?: any; backendCode?: string };
   if (code) next.code = code;
+  if (details) {
+    next.details = details;
+    if (details.backendCode) next.backendCode = details.backendCode;
+  }
   return next;
 }
 
@@ -131,7 +135,12 @@ async function requestBackendMe(token: string, authEvent = "") {
       }
 
       if (response.status === 401 || response.status === 403) {
-        throw authError(payload?.message || "Sua sessao nao esta mais ativa.", "BACKEND_AUTH_DENIED");
+        const backendCode = payload?.details?.code || payload?.code || "";
+        throw authError(payload?.message || "Sua sessao nao esta mais ativa.", "BACKEND_AUTH_DENIED", {
+          ...(payload?.details || {}),
+          backendCode,
+          status: response.status
+        });
       }
 
       return null;

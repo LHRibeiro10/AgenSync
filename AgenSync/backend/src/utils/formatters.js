@@ -40,6 +40,7 @@ export function publicUser(user) {
   const plan = publicPlan(currentWorkspace ? { platformPlan: currentWorkspace.plan } : user);
   const workspaceRole = workspaceMember?.role || String(user.workspaceRole || "OWNER").toLowerCase();
   const professionalId = workspaceMember?.professionalId || user.professionalId || "";
+  const exceededResources = Array.isArray(currentWorkspace?.exceededResources) ? currentWorkspace.exceededResources : [];
 
   return {
     id: user.id,
@@ -66,6 +67,8 @@ export function publicUser(user) {
     currentWorkspace,
     workspaceMember,
     permissions: workspaceMember?.permissions || {},
+    planLimitExceeded: Boolean(currentWorkspace?.planLimitExceeded || exceededResources.length),
+    exceededResources,
     businessName: user.businessName,
     businessLogo: user.businessLogo || "",
     businessType: user.businessType,

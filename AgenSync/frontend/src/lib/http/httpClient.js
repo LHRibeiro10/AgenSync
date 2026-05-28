@@ -17,6 +17,9 @@ function defaultMessageByStatus(status) {
 
 function isSessionInvalidForbidden(status, payload) {
   if (status !== 403) return false;
+  const code = String(payload?.details?.code || payload?.code || "").trim().toUpperCase();
+  if (code === "WORKSPACE_MEMBER_LIMIT_EXCEEDED") return true;
+
   const message = String(payload?.message || "")
     .trim()
     .toLowerCase()

@@ -3,7 +3,6 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { invalidateAuthUserCache } from "../middleware/auth.js";
 import { PLAN_SLUGS, normalizePlanSlug } from "../config/plans.js";
-import { consolidateOwnerWorkspaceForStandardPlan } from "../services/workspacePlanDowngrade.js";
 import { recordAuditEvent } from "../utils/audit.js";
 import { endOfDay, endOfMonth, formatDate, parseDateOnly, startOfDay, startOfMonth, todayString } from "../utils/dates.js";
 import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
@@ -607,35 +606,35 @@ router.patch(
         id: true,
         platformPlan: true,
         ownedWorkspaces: {
-          select: { plan: true },
-          orderBy: [{ createdAt: "asc" }],
-          take: 1
+          select: { id: true, plan: true },
+          orderBy: [{ createdAt: "asc" }]
         }
       }
     });
     if (!current) throw new ApiError(404, "Conta nao encontrada.");
 
-    const previousPlan = normalizePlan(current.platformPlan || current.ownedWorkspaces?.[0]?.plan);
-    const shouldConsolidateForStandard = platformPlan === PLAN_SLUGS.PADRAO;
-    let downgradeResult = null;
+    const previousPlan = normalizePlan(current.ownedWorkspaces?.[0]?.plan || current.platformPlan);
+    const ownedWorkspaceIds = current.ownedWorkspaces.map((workspace) => workspace.id);
+    let affectedMemberUserIds = [];
 
     const user = await prisma.$transaction(async (tx) => {
-      if (shouldConsolidateForStandard) {
-        downgradeResult = await consolidateOwnerWorkspaceForStandardPlan(tx, current.id);
-        return tx.user.findUnique({ where: { id: current.id }, select: workspaceSelect });
-      }
-
       const updatedUser = await tx.user.update({
         where: { id: req.params.id },
         data: { platformPlan },
         select: workspaceSelect
       });
       await tx.workspace.updateMany({ where: { ownerId: updatedUser.id }, data: { plan: platformPlan } });
+      if (ownedWorkspaceIds.length) {
+        const members = await tx.workspaceMember.findMany({
+          where: { workspaceId: { in: ownedWorkspaceIds }, status: "ACTIVE" },
+          select: { userId: true }
+        });
+        affectedMemberUserIds = [...new Set(members.map((member) => member.userId).filter(Boolean))];
+      }
       return updatedUser;
     });
 
-    invalidateAuthUserCache(user.id);
-    downgradeResult?.affiliateUserIds?.forEach((userId) => invalidateAuthUserCache(userId));
+    [user.id, ...affectedMemberUserIds].forEach((userId) => invalidateAuthUserCache(userId));
 
     await recordAuditEvent({
       req,
@@ -647,8 +646,9 @@ router.patch(
         targetUserId: user.id,
         previousPlan,
         platformPlan,
-        downgradedToStandard: shouldConsolidateForStandard,
-        downgradeResult
+        ownedWorkspaceIds,
+        changedWorkspaceCount: ownedWorkspaceIds.length,
+        destructiveDowngrade: false
       }
     });
     res.json({ workspace: publicWorkspace(user) });

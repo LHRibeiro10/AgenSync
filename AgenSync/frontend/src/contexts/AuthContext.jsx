@@ -140,7 +140,13 @@ export function AuthProvider({ children }) {
       : user?.permissions && typeof user.permissions === "object"
         ? user.permissions
         : {};
-  const plan = user?.plan || user?.platformPlan || currentWorkspace?.plan || "padrao";
+  const plan = currentWorkspace?.plan || user?.plan || user?.platformPlan || "padrao";
+  const exceededResources = Array.isArray(currentWorkspace?.exceededResources)
+    ? currentWorkspace.exceededResources
+    : Array.isArray(user?.exceededResources)
+      ? user.exceededResources
+      : [];
+  const planLimitExceeded = Boolean(currentWorkspace?.planLimitExceeded || user?.planLimitExceeded || exceededResources.length);
   const professionalId = workspaceMember?.professionalId || user?.professionalId || "";
   const isAdmin = canAccessAdmin(user);
   const hasPlatformAccess = isPlatformOwner(user);
@@ -162,6 +168,8 @@ export function AuthProvider({ children }) {
       workspacePermissions,
       permissions: workspacePermissions,
       plan,
+      planLimitExceeded,
+      exceededResources,
       professionalId,
       hasPlatformAccess,
       canAccess,
@@ -191,6 +199,8 @@ export function AuthProvider({ children }) {
       workspaceMember,
       workspacePermissions,
       plan,
+      planLimitExceeded,
+      exceededResources,
       professionalId,
       hasPlatformAccess,
       canAccess,

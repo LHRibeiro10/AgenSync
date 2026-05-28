@@ -274,9 +274,9 @@ function formatAuditDate(value) {
 function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialPermissions" }) {
   const isManager = workspaceRole === "owner" || workspaceRole === "admin";
   const isAuditPage = mode === "audit";
-  const plan = user?.plan || user?.platformPlan || user?.currentWorkspace?.plan || "padrao";
-  const planLimits = user?.planLimits || user?.currentWorkspace?.planLimits || {};
-  const planFeatures = user?.planFeatures || user?.currentWorkspace?.planFeatures || [];
+  const plan = user?.currentWorkspace?.plan || user?.plan || user?.platformPlan || "padrao";
+  const planLimits = user?.currentWorkspace?.planLimits || user?.planLimits || {};
+  const planFeatures = user?.currentWorkspace?.planFeatures || user?.planFeatures || [];
   const canUseSpecialPermissions = planFeatures.includes("permissoes_especiais");
   const canViewAudit = planFeatures.includes("auditoria");
   const shouldLoadAudit = isAuditPage && canViewAudit;

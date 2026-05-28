@@ -188,8 +188,29 @@ function mobileActionFor(pathname, navigate) {
   return null;
 }
 
+const planResourceLabels = {
+  users: "usuarios",
+  admins: "administradores",
+  professionals: "profissionais"
+};
+
+function planLimitWarningText(resources) {
+  if (!Array.isArray(resources) || !resources.length) {
+    return "Limite do plano excedido. Ajuste o plano ou reduza recursos ativos para liberar novas criacoes.";
+  }
+
+  const summary = resources
+    .map((item) => {
+      const label = planResourceLabels[item.resource] || item.resource || "recursos";
+      return `${label}: ${item.current}/${item.limit}`;
+    })
+    .join(", ");
+
+  return `Limite do plano excedido em ${summary}. Novas criacoes ficam bloqueadas ate regularizar.`;
+}
+
 export default function Layout() {
-  const { user, logout, isAdmin, canAccess, hasPlatformAccess } = useAuth();
+  const { user, logout, isAdmin, canAccess, hasPlatformAccess, planLimitExceeded, exceededResources } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -388,6 +409,11 @@ export default function Layout() {
 
       <main className="min-h-screen min-w-0 max-w-full overflow-x-hidden px-4 pb-6 pt-[calc(env(safe-area-inset-top)+6rem)] sm:px-6 lg:pb-6 lg:pl-80 lg:pr-8 lg:pt-4 xl:pr-10">
         <div className="mx-auto min-w-0 max-w-[1440px] overflow-x-hidden">
+          {!hasPlatformAccess && planLimitExceeded ? (
+            <div className="mb-4 rounded-2xl border border-amber-300/40 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900 shadow-sm">
+              {planLimitWarningText(exceededResources)}
+            </div>
+          ) : null}
           <PageTransition key={location.pathname}>
             <Outlet />
           </PageTransition>
