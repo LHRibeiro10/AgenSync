@@ -45,6 +45,17 @@ function isBackendAuthDeniedError(error: any) {
   return String(error?.code || "") === "BACKEND_AUTH_DENIED";
 }
 
+function authDebug(label: string, data: Record<string, any> = {}) {
+  if (import.meta.env.VITE_AUTH_DEBUG !== "1") return;
+  const safeData = { ...data };
+  if (safeData.email) {
+    const [name = "", domain = ""] = String(safeData.email).split("@");
+    safeData.email = domain ? `${name.slice(0, 2)}***@${domain}` : "";
+  }
+  // eslint-disable-next-line no-console
+  console.info(`[AUTH_DEBUG] ${label}`, safeData);
+}
+
 function requireSupabase() {
   if (!supabase) {
     throw authError(supabaseConfigError, "SUPABASE_NOT_CONFIGURED");
@@ -59,7 +70,7 @@ async function clearRejectedSession(client?: any) {
 }
 
 export function getAuthConfigurationError() {
-  return supabaseConfigError;
+  return supabaseConfigError && !resolveApiBaseUrl() ? supabaseConfigError : "";
 }
 
 function friendlyError(error: any, fallback: string) {
@@ -113,6 +124,11 @@ function safeTokenForAuthHeader(token: string) {
 async function requestBackendMe(token: string, authEvent = "") {
   const safeToken = safeTokenForAuthHeader(token);
   const apiBaseUrl = resolveApiBaseUrl();
+  authDebug("backend_me.prepare", {
+    hasApiBaseUrl: Boolean(apiBaseUrl),
+    hasToken: Boolean(safeToken),
+    authEvent
+  });
   if (!apiBaseUrl || !safeToken) return null;
 
   try {
@@ -125,6 +141,7 @@ async function requestBackendMe(token: string, authEvent = "") {
       method: "GET",
       headers
     });
+    authDebug("backend_me.response", { status: response.status, ok: response.ok });
 
     if (!response.ok) {
       let payload = null;
@@ -155,7 +172,11 @@ async function requestBackendMe(token: string, authEvent = "") {
 
 async function requestBackendLogin(payload: any) {
   const apiBaseUrl = resolveApiBaseUrl();
-  if (!apiBaseUrl) return null;
+  if (!apiBaseUrl) throw authError("Backend nao configurado para login.", "BACKEND_NOT_CONFIGURED");
+  authDebug("backend_login.request", {
+    hasApiBaseUrl: Boolean(apiBaseUrl),
+    email: payload.email
+  });
 
   const response = await fetch(`${apiBaseUrl}/auth/login`, {
     method: "POST",
@@ -174,11 +195,18 @@ async function requestBackendLogin(payload: any) {
   }
 
   if (!response.ok) {
+    authDebug("backend_login.failed", { status: response.status, email: payload.email });
     throw authError(data?.message || "Email ou senha invalidos.");
   }
 
   const token = safeTokenForAuthHeader(data?.token || "");
   if (token) setAccessToken(token);
+  authDebug("backend_login.success", {
+    hasToken: Boolean(token),
+    hasUser: Boolean(data?.user),
+    platformRole: data?.user?.platformRole || "",
+    workspaceRole: data?.user?.workspaceRole || ""
+  });
 
   return {
     user: data?.user || null,
@@ -536,6 +564,17 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
     ? emailOrPayload
     : { email: emailOrPayload, password: maybePassword };
 
+  authDebug("signin.start", {
+    email: payload.email,
+    provider: env.authProvider,
+    hasSupabaseClient: Boolean(supabase),
+    hasApiBaseUrl: Boolean(resolveApiBaseUrl())
+  });
+
+  if (shouldUseBackendAuthOnly()) {
+    return requestBackendLogin(payload);
+  }
+
   let supabaseError = null;
   let supabaseClient = null;
 
@@ -550,6 +589,11 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
     if (error) throw friendlyError(error, "Email ou senha invalidos.");
 
     const safeSession = await maybeShrinkOversizedTokenSession(data.session);
+    authDebug("signin.supabase_success", {
+      hasSession: Boolean(safeSession),
+      hasUser: Boolean(safeSession?.user || data.user),
+      hasToken: Boolean(safeSession?.access_token)
+    });
     return enrichAuthResultWithBackend(
       authResult({ ...data, session: safeSession, user: safeSession?.user || data.user }),
       "login_success"
@@ -565,7 +609,8 @@ export async function signIn(emailOrPayload: any, maybePassword?: string) {
   try {
     const backendResult = await requestBackendLogin(payload);
     if (backendResult?.token) return backendResult;
-  } catch {
+  } catch (backendError) {
+    if (String(supabaseError?.code || "") === "SUPABASE_NOT_CONFIGURED") throw backendError;
     // Keep the Supabase-facing error when both strategies fail.
   }
 

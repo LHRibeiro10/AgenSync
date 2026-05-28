@@ -32,6 +32,22 @@ function signPasswordResetToken(userId) {
   return jwt.sign({ userId, purpose: "password-reset" }, jwtSecret(), { expiresIn: "30m" });
 }
 
+function maskEmail(email) {
+  const [name = "", domain = ""] = String(email || "").split("@");
+  if (!domain) return "";
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function authDebug(label, data = {}) {
+  if (process.env.AUTH_DEBUG !== "1") return;
+  const safeData = {
+    ...data,
+    email: data.email ? maskEmail(data.email) : undefined
+  };
+  // eslint-disable-next-line no-console
+  console.info(`[AUTH_DEBUG] ${label}`, safeData);
+}
+
 function roleForEmail(email) {
   return String(email || "").trim().toLowerCase() === INITIAL_ADMIN_EMAIL ? "ADMIN" : "USER";
 }
@@ -174,6 +190,11 @@ router.post(
     const password = requiredString(req.body.password, "senha");
 
     const user = await prisma.user.findUnique({ where: { email } });
+    authDebug("login.user_lookup", {
+      email,
+      found: Boolean(user),
+      provider: user?.passwordHash === "supabase-auth" ? "supabase" : user ? "legacy" : ""
+    });
     if (!user) {
       await recordAuditEvent({
         req,
@@ -288,6 +309,16 @@ router.get(
         message: authEvent === "register" ? "Cadastro Supabase validado pelo backend." : "Login Supabase validado pelo backend."
       });
     }
+
+    authDebug("me.success", {
+      email: req.user.email,
+      userId: req.user.id,
+      platformRole: req.user.platformRole || "",
+      currentWorkspaceId: req.user.currentWorkspaceId || "",
+      workspaceRole: req.user.workspaceRole || "",
+      hasWorkspaceMember: Boolean(req.user.workspaceMember),
+      professionalId: req.user.professionalId || ""
+    });
 
     res.json({ user: publicUser(req.user) });
   })

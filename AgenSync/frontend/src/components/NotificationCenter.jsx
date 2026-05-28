@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { addDays, formatDateKey } from "./agenda/agendaDate.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
 import Button from "./Button.jsx";
 import EmptyState from "./EmptyState.jsx";
 import Icon from "./Icon.jsx";
@@ -65,6 +66,7 @@ function primeNotificationList(notifications = []) {
 
 export default function NotificationCenter({ tone = "light" }) {
   const navigate = useNavigate();
+  const { currentWorkspace, hasPlatformAccess, isAuthenticated } = useAuth();
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,6 +78,7 @@ export default function NotificationCenter({ tone = "light" }) {
 
   const hasItems = notifications.length || upcoming.length;
   const canUsePortal = typeof document !== "undefined";
+  const canLoadWorkspaceNotifications = isAuthenticated && !hasPlatformAccess && Boolean(currentWorkspace?.id);
   const buttonClass = useMemo(() => {
     const base = "relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition active:scale-95";
     if (tone === "dark") {
@@ -125,6 +128,7 @@ export default function NotificationCenter({ tone = "light" }) {
   }
 
   useEffect(() => {
+    if (!canLoadWorkspaceNotifications) return undefined;
     loadData({ silent: true });
     const timer = window.setInterval(() => loadData({ silent: true }), 60000);
     const onForegroundNotification = () => loadData({ silent: true });
@@ -134,11 +138,13 @@ export default function NotificationCenter({ tone = "light" }) {
       window.clearInterval(timer);
       window.removeEventListener("agensync:foreground-notification", onForegroundNotification);
     };
-  }, []);
+  }, [canLoadWorkspaceNotifications]);
 
   useEffect(() => {
-    if (open) loadData();
-  }, [open]);
+    if (open && canLoadWorkspaceNotifications) loadData();
+  }, [canLoadWorkspaceNotifications, open]);
+
+  if (!canLoadWorkspaceNotifications) return null;
 
   async function openNotification(notification) {
     if (!notification.readAt) {

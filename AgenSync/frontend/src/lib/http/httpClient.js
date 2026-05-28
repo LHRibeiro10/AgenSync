@@ -15,23 +15,10 @@ function defaultMessageByStatus(status) {
   return "Nao foi possivel concluir a operacao.";
 }
 
-function isSessionInvalidForbidden(status, payload) {
-  if (status !== 403) return false;
-  const code = String(payload?.details?.code || payload?.code || "").trim().toUpperCase();
-  if (code === "WORKSPACE_MEMBER_LIMIT_EXCEEDED") return true;
-
-  const message = String(payload?.message || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-  return (
-    message.includes("conta inativa") ||
-    message.includes("usuario inativo") ||
-    message.includes("acesso a este workspace esta inativo") ||
-    message.includes("voce nao faz parte deste workspace")
-  );
+function httpDebug(label, data = {}) {
+  if (import.meta.env.VITE_AUTH_DEBUG !== "1") return;
+  // eslint-disable-next-line no-console
+  console.info(`[HTTP_DEBUG] ${label}`, data);
 }
 
 export function createHttpClient({
@@ -84,6 +71,12 @@ export function createHttpClient({
     const requestHeaders = { ...defaultHeaders, ...headers };
     const token = omitAuth ? "" : getAuthToken?.();
     if (token) requestHeaders.Authorization = `Bearer ${token}`;
+    httpDebug("request", {
+      path,
+      method,
+      omitAuth: Boolean(omitAuth),
+      hasAuthorization: Boolean(requestHeaders.Authorization)
+    });
 
     const config = {
       method,
@@ -146,8 +139,14 @@ export function createHttpClient({
           details: payload,
           message: payload?.message || defaultMessageByStatus(response.status)
         });
+        httpDebug("response_error", {
+          path,
+          method: requestMethod,
+          status: response.status,
+          code: payload?.details?.code || payload?.code || ""
+        });
 
-        if (response.status === 401 || isSessionInvalidForbidden(response.status, payload)) {
+        if (response.status === 401) {
           onUnauthorized?.(apiError);
         }
 

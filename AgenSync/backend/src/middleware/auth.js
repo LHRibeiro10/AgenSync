@@ -155,6 +155,22 @@ function debugAuthLog(label, error) {
   console.error(`[AUTH_DEBUG] ${label}`, { statusCode, code, name, message });
 }
 
+function maskEmail(email) {
+  const [name = "", domain = ""] = String(email || "").split("@");
+  if (!domain) return "";
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function debugAuthInfo(label, data = {}) {
+  if (process.env.AUTH_DEBUG !== "1") return;
+  const safeData = {
+    ...data,
+    email: data.email ? maskEmail(data.email) : undefined
+  };
+  // eslint-disable-next-line no-console
+  console.info(`[AUTH_DEBUG] ${label}`, safeData);
+}
+
 function tokenStrategy(token) {
   const decoded = jwt.decode(token);
   if (!decoded || typeof decoded !== "object") return "legacy";
@@ -488,6 +504,17 @@ async function finishAuthenticatedRequest(req, user, next) {
     throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
   }
   await attachWorkspaceContext(req);
+  debugAuthInfo("require_auth.resolved", {
+    path: req.originalUrl,
+    userId: req.user.id,
+    email: req.user.email,
+    platformRole: req.user.platformRole || "",
+    currentWorkspaceId: req.user.currentWorkspaceId || "",
+    workspaceId: req.workspaceId || "",
+    workspaceRole: req.workspaceRole || "",
+    hasWorkspaceMember: Boolean(req.workspaceMember),
+    professionalId: req.professionalId || ""
+  });
   next();
 }
 
@@ -500,6 +527,12 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
   }
 
   const strategy = tokenStrategy(token);
+  debugAuthInfo("require_auth.received", {
+    path: req.originalUrl,
+    hasToken: Boolean(token),
+    tokenLength: token.length,
+    strategy
+  });
   const primaryAuth = strategy === "supabase" ? authenticateWithSupabaseJwt : authenticateWithLegacyJwt;
   const fallbackAuth = strategy === "supabase" ? authenticateWithLegacyJwt : authenticateWithSupabaseJwt;
 

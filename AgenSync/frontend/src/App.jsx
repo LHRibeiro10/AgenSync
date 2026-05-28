@@ -53,6 +53,7 @@ function PublicRoute({ children }) {
   const { loading, isAuthenticated, user, hasPlatformAccess, workspaceRole } = useAuth();
 
   if (loading) return <Loading label="Preparando acesso..." />;
+  if (isAuthenticated && hasPlatformAccess) return <Navigate to="/platform" replace />;
   if (isAuthenticated && !hasPlatformAccess && workspaceRole === "owner" && user?.onboardingCompleted === false) {
     return <Navigate to="/onboarding" replace />;
   }
