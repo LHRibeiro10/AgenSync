@@ -10,5 +10,6 @@ export * as documentService from "./documentService.js";
 export * as productService from "./productService.js";
 export * as expenseService from "./expenseService.js";
 export * as monthlyPlanService from "./monthlyPlanService.js";
+export * as billingService from "./billingService.js";
 export * as adminService from "./adminService.js";
 export * as workspaceTeamService from "./workspaceTeamService.js";

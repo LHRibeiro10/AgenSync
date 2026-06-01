@@ -2,6 +2,7 @@
   appointmentService,
   adminService,
   authService,
+  billingService,
   clientService,
   dashboardService,
   financeService,
@@ -67,5 +68,9 @@ export const api = {
   updatePlatformWorkspaceStatus: (id, payload) => platformService.updatePlatformWorkspaceStatus(id, payload),
   updatePlatformWorkspacePlan: (id, payload) => platformService.updatePlatformWorkspacePlan(id, payload),
   deletePlatformWorkspace: (id, payload) => platformService.deletePlatformWorkspace(id, payload),
-  updatePlatformUserStatus: (id, payload) => platformService.updatePlatformUserStatus(id, payload)
+  updatePlatformUserStatus: (id, payload) => platformService.updatePlatformUserStatus(id, payload),
+
+  getBillingStatus: () => billingService.getBillingStatus(),
+  createBillingCheckoutSession: (payload) => billingService.createBillingCheckoutSession(payload),
+  createBillingPortalSession: () => billingService.createBillingPortalSession()
 };

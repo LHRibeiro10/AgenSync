@@ -107,5 +107,10 @@ export const endpoints = Object.freeze({
     monthlyPlans: "/subscriptions/monthly-plans",
     monthlyPlansOverview: "/subscriptions/monthly-plans/overview",
     monthlyPlanById: (id) => `/subscriptions/monthly-plans/${id}`
+  },
+  billing: {
+    status: "/billing/status",
+    checkoutSession: "/billing/checkout-session",
+    portalSession: "/billing/portal-session"
   }
 });

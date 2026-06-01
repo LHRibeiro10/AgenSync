@@ -79,6 +79,29 @@ enum AccountSubscriptionStatus {
   CANCELED
 }
 
+enum BillingProvider {
+  MANUAL
+  STRIPE
+  MERCADO_PAGO
+  ASAAS
+}
+
+enum BillingInvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+  CANCELED
+}
+
+enum BillingWebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
 enum AccountOperationalStatus {
   ACTIVE
   INACTIVE
@@ -433,6 +456,10 @@ model Workspace {
   products       Product[]
   productSales   ProductSale[]
   monthlyPlans   MonthlyPlan[]
+  billingCustomer BillingCustomer?
+  billingSubscriptions BillingSubscription[]
+  billingInvoices BillingInvoice[]
+  billingWebhookEvents BillingWebhookEvent[]
   careRecords    ClientCareRecord[]
   notifications  Notification[]
   invites        WorkspaceInvite[]
@@ -444,6 +471,100 @@ model Workspace {
   @@index([plan])
   @@index([planStatus])
   @@index([createdAt])
+}
+
+model BillingCustomer {
+  id                 String          @id @default(cuid())
+  workspaceId        String          @unique
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider           BillingProvider @default(MANUAL)
+  providerCustomerId String?
+  email              String?
+  name               String?
+  metadata           Json            @default("{}")
+  subscriptions      BillingSubscription[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([provider, providerCustomerId])
+  @@index([provider])
+  @@index([email])
+}
+
+model BillingSubscription {
+  id                     String                    @id @default(cuid())
+  workspaceId            String
+  workspace              Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  billingCustomerId      String?
+  billingCustomer        BillingCustomer?          @relation(fields: [billingCustomerId], references: [id], onDelete: SetNull)
+  provider               BillingProvider           @default(MANUAL)
+  providerSubscriptionId String?
+  providerPriceId        String?
+  plan                   String
+  status                 AccountSubscriptionStatus @default(TRIAL)
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  trialEndsAt            DateTime?
+  cancelAtPeriodEnd      Boolean                   @default(false)
+  canceledAt             DateTime?
+  metadata               Json                      @default("{}")
+  invoices               BillingInvoice[]
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  @@unique([provider, providerSubscriptionId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, plan])
+  @@index([provider, status])
+  @@index([providerPriceId])
+  @@index([currentPeriodEnd])
+}
+
+model BillingInvoice {
+  id                        String               @id @default(cuid())
+  workspaceId               String
+  workspace                 Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  billingSubscriptionId     String?
+  billingSubscription       BillingSubscription? @relation(fields: [billingSubscriptionId], references: [id], onDelete: SetNull)
+  provider                  BillingProvider      @default(MANUAL)
+  providerInvoiceId         String?
+  providerPaymentId         String?
+  providerCheckoutSessionId String?
+  amount                    Decimal              @db.Decimal(10, 2)
+  currency                  String               @default("BRL")
+  status                    BillingInvoiceStatus @default(OPEN)
+  dueAt                     DateTime?
+  paidAt                    DateTime?
+  hostedUrl                 String?
+  pdfUrl                    String?
+  metadata                  Json                 @default("{}")
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  @@unique([provider, providerInvoiceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, dueAt])
+  @@index([provider, status])
+  @@index([providerCheckoutSessionId])
+}
+
+model BillingWebhookEvent {
+  id           String               @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  provider     BillingProvider
+  eventId      String
+  eventType    String
+  status       BillingWebhookStatus @default(RECEIVED)
+  payload      Json
+  errorMessage String?
+  receivedAt   DateTime             @default(now())
+  processedAt  DateTime?
+
+  @@unique([provider, eventId])
+  @@index([workspaceId, receivedAt])
+  @@index([provider, eventType])
+  @@index([status, receivedAt])
 }
 
 model WorkspaceMember {

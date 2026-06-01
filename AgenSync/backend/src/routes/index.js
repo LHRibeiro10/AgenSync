@@ -9,6 +9,7 @@ import adminRouter from "./admin.js";
 import appointmentsRouter from "./appointments.js";
 import appointmentRemindersRouter from "./appointmentReminders.js";
 import authRouter from "./auth.js";
+import billingRouter, { billingWebhookRouter } from "./billing.js";
 import clientsRouter from "./clients.js";
 import dashboardRouter from "./dashboard.js";
 import expensesRouter from "./expenses.js";
@@ -77,6 +78,7 @@ router.post(
 );
 
 router.use("/auth", authRouter);
+router.use("/billing/webhooks", billingWebhookRouter);
 router.use("/workspace", workspaceRouter);
 router.use("/admin", requireAuth, requireAdmin, adminRouter);
 router.use("/platform", requireAuth, requirePlatformRole(["DEVELOPER", "PLATFORM_OWNER"]), platformRouter);
@@ -91,6 +93,7 @@ router.use("/expenses", requireAuth, workspaceRoute, expensesRouter);
 router.use("/products", requireAuth, workspaceRoute, productsRouter);
 router.use("/sales", requireAuth, workspaceRoute, salesRouter);
 router.use("/subscriptions/monthly-plans", requireAuth, workspaceRoute, monthlyPlansRouter);
+router.use("/billing", requireAuth, workspaceRoute, billingRouter);
 router.use("/notification-tokens", requireAuth, workspaceRoute, notificationTokensRouter);
 router.use("/notifications", requireAuth, workspaceRoute, notificationsRouter);
 router.use("/onboarding", requireAuth, workspaceRoute, onboardingRouter);
