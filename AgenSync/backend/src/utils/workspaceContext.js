@@ -34,6 +34,84 @@ const workspaceRoleRank = {
   PROFESSIONAL: 2
 };
 
+function readPositiveIntEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.floor(parsed);
+}
+
+const WORKSPACE_CONTEXT_CACHE_TTL_MS = Math.max(
+  5000,
+  readPositiveIntEnv("WORKSPACE_CONTEXT_CACHE_TTL_MS", 30000)
+);
+const WORKSPACE_CONTEXT_CACHE_MAX_SIZE = Math.max(
+  100,
+  readPositiveIntEnv("WORKSPACE_CONTEXT_CACHE_MAX_SIZE", 5000)
+);
+const workspaceContextCache = new Map();
+
+function workspaceContextCacheKey(user, workspaceId = "") {
+  return [
+    user?.id || "",
+    user?.currentWorkspaceId || "",
+    String(workspaceId || "").trim(),
+    user?.workspaceRole || "",
+    user?.professionalId || "",
+    user?.platformPlan || ""
+  ].join(":");
+}
+
+function cloneContext(context) {
+  return {
+    workspace: context?.workspace ? { ...context.workspace } : null,
+    member: context?.member ? { ...context.member, workspace: context.member.workspace ? { ...context.member.workspace } : undefined } : null,
+    legacy: context?.legacy === true
+  };
+}
+
+function getCachedWorkspaceContext(key) {
+  const cached = workspaceContextCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    workspaceContextCache.delete(key);
+    return null;
+  }
+  return cached.inflight || Promise.resolve(cloneContext(cached.context));
+}
+
+function setCachedWorkspaceContext(key, context) {
+  if (!workspaceContextCache.has(key) && workspaceContextCache.size >= WORKSPACE_CONTEXT_CACHE_MAX_SIZE) {
+    const oldestKey = workspaceContextCache.keys().next().value;
+    if (oldestKey) workspaceContextCache.delete(oldestKey);
+  }
+
+  workspaceContextCache.set(key, {
+    context: cloneContext(context),
+    expiresAt: Date.now() + WORKSPACE_CONTEXT_CACHE_TTL_MS
+  });
+}
+
+function setInflightWorkspaceContext(key, inflight) {
+  workspaceContextCache.set(key, {
+    context: null,
+    inflight,
+    expiresAt: Date.now() + WORKSPACE_CONTEXT_CACHE_TTL_MS
+  });
+}
+
+export function invalidateWorkspaceContextCache(userId = "") {
+  if (!userId) {
+    workspaceContextCache.clear();
+    return;
+  }
+
+  for (const key of workspaceContextCache.keys()) {
+    if (key.startsWith(`${userId}:`)) workspaceContextCache.delete(key);
+  }
+}
+
 export function isPlatformAccount(user) {
   const role = String(user?.platformRole || "").trim().toUpperCase();
   return role === "DEVELOPER" || role === "PLATFORM_OWNER";
@@ -295,48 +373,64 @@ export async function resolveWorkspaceContext(user, options = {}) {
   }
 
   const requestedWorkspaceId = String(options.workspaceId || "").trim();
+  const cacheKey = workspaceContextCacheKey(user, requestedWorkspaceId);
+  const cachedContext = getCachedWorkspaceContext(cacheKey);
+  if (cachedContext) return cachedContext;
+
+  const inflight = (async () => {
+    try {
+      const scopedWorkspaceId = requestedWorkspaceId || user.currentWorkspaceId || "";
+      if (scopedWorkspaceId) {
+        const scopedMember = await prisma.workspaceMember.findFirst({
+          where: { userId: user.id, workspaceId: scopedWorkspaceId },
+          select: memberSelect
+        });
+
+        if (scopedMember) {
+          if (String(scopedMember.status || "").toUpperCase() !== "ACTIVE") {
+            throw inactiveWorkspaceAccessError();
+          }
+          return await contextForActiveMember(prisma, scopedMember);
+        }
+
+        if (requestedWorkspaceId) {
+          throw new ApiError(403, "Voce nao faz parte deste workspace.");
+        }
+      }
+
+      const eligibleContext = await findFirstEligibleActiveMember(prisma, user.id);
+      if (eligibleContext) return eligibleContext;
+
+      const inactiveMember = await prisma.workspaceMember.findFirst({
+        where: { userId: user.id },
+        select: { status: true }
+      });
+      if (inactiveMember) {
+        throw inactiveWorkspaceAccessError();
+      }
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (!isMissingWorkspaceSchemaError(error)) throw error;
+    }
+
+    const workspace = legacyWorkspaceFromUser(user);
+    return {
+      workspace,
+      member: legacyMemberFromUser(user, workspace),
+      legacy: true
+    };
+  })();
+
+  setInflightWorkspaceContext(cacheKey, inflight);
 
   try {
-    const scopedWorkspaceId = requestedWorkspaceId || user.currentWorkspaceId || "";
-    if (scopedWorkspaceId) {
-      const scopedMember = await prisma.workspaceMember.findFirst({
-        where: { userId: user.id, workspaceId: scopedWorkspaceId },
-        select: memberSelect
-      });
-
-      if (scopedMember) {
-        if (String(scopedMember.status || "").toUpperCase() !== "ACTIVE") {
-          throw inactiveWorkspaceAccessError();
-        }
-        return await contextForActiveMember(prisma, scopedMember);
-      }
-
-      if (requestedWorkspaceId) {
-        throw new ApiError(403, "Voce nao faz parte deste workspace.");
-      }
-    }
-
-    const eligibleContext = await findFirstEligibleActiveMember(prisma, user.id);
-    if (eligibleContext) return eligibleContext;
-
-    const inactiveMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { status: true }
-    });
-    if (inactiveMember) {
-      throw inactiveWorkspaceAccessError();
-    }
+    const context = await inflight;
+    setCachedWorkspaceContext(cacheKey, context);
+    return cloneContext(context);
   } catch (error) {
-    if (error instanceof ApiError) throw error;
-    if (!isMissingWorkspaceSchemaError(error)) throw error;
+    workspaceContextCache.delete(cacheKey);
+    throw error;
   }
-
-  const workspace = legacyWorkspaceFromUser(user);
-  return {
-    workspace,
-    member: legacyMemberFromUser(user, workspace),
-    legacy: true
-  };
 }
 
 export async function ensureDefaultWorkspaceForUser(user, client = prisma) {
@@ -344,11 +438,7 @@ export async function ensureDefaultWorkspaceForUser(user, client = prisma) {
 
   try {
     if (user.currentWorkspaceId) {
-      const currentMember = await client.workspaceMember.findFirst({
-        where: { userId: user.id, workspaceId: user.currentWorkspaceId },
-        select: { id: true, status: true }
-      });
-      if (currentMember) return user;
+      return user;
     }
 
     const existingContext = await findFirstEligibleActiveMember(client, user.id);

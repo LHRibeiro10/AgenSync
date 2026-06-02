@@ -6,7 +6,11 @@ import { PLAN_SLUGS } from "../config/plans.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { ensureSupabaseAuthUserExists } from "../utils/supabaseAuthAdmin.js";
-import { attachWorkspaceContext, ensureDefaultWorkspaceForUser } from "../utils/workspaceContext.js";
+import {
+  attachWorkspaceContext,
+  ensureDefaultWorkspaceForUser,
+  invalidateWorkspaceContextCache
+} from "../utils/workspaceContext.js";
 
 function jwtSecret() {
   const secret = normalizeEnvValue(process.env.JWT_SECRET);
@@ -32,6 +36,7 @@ function readPositiveIntEnv(name, fallback) {
 const AUTH_USER_CACHE_TTL_MS = Math.max(5000, readPositiveIntEnv("AUTH_USER_CACHE_TTL_MS", 30000));
 const AUTH_USER_CACHE_MAX_SIZE = Math.max(100, readPositiveIntEnv("AUTH_USER_CACHE_MAX_SIZE", 5000));
 const authUserCache = new Map();
+const authUserInflightCache = new Map();
 
 function getSupabaseJwtSecret() {
   return normalizeEnvValue(process.env.SUPABASE_JWT_SECRET);
@@ -226,6 +231,10 @@ function setCachedAuthUser(user, metadataKey = null) {
 export function invalidateAuthUserCache(userId) {
   if (!userId) return;
   authUserCache.delete(userId);
+  invalidateWorkspaceContextCache(userId);
+  for (const key of authUserInflightCache.keys()) {
+    if (key.includes(`:${userId}:`) || key.endsWith(`:${userId}`)) authUserInflightCache.delete(key);
+  }
 }
 
 export function requireAdmin(req, res, next) {
@@ -342,15 +351,26 @@ async function authenticateWithLegacyJwt(token) {
     return ensureInitialAdminRole(cachedUser);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    select: userSelect
+  const inflightKey = `legacy:${payload.userId}`;
+  const inflight = authUserInflightCache.get(inflightKey);
+  if (inflight) return inflight;
+
+  const request = (async () => {
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: userSelect
+    });
+
+    if (!user) throw new ApiError(401, "Usuario nao encontrado.");
+    const ensuredUser = await ensureInitialAdminRole(user);
+    setCachedAuthUser(ensuredUser);
+    return ensuredUser;
+  })().finally(() => {
+    authUserInflightCache.delete(inflightKey);
   });
 
-  if (!user) throw new ApiError(401, "Usuario nao encontrado.");
-  const ensuredUser = await ensureInitialAdminRole(user);
-  setCachedAuthUser(ensuredUser);
-  return ensuredUser;
+  authUserInflightCache.set(inflightKey, request);
+  return request;
 }
 
 async function ensureSupabaseBootstrap(user) {
@@ -429,65 +449,76 @@ async function ensureSupabaseUser(payload, token) {
     return ensuredUser;
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: { id: supabaseId },
-    select: userSelect
+  const inflightKey = `supabase:${supabaseId}:${metadataKey}`;
+  const inflight = authUserInflightCache.get(inflightKey);
+  if (inflight) return inflight;
+
+  const request = (async () => {
+    const existingUser = await prisma.user.findUnique({
+      where: { id: supabaseId },
+      select: userSelect
+    });
+
+    const resolvedName = metadataName || existingUser?.name || email;
+    const resolvedBusinessType = metadataBusinessType || existingUser?.businessType || "Outro";
+    const resolvedBusinessName = metadataBusinessName || existingUser?.businessName || `Agenda de ${resolvedName}`;
+    const resolvedBusinessLogo = existingUser?.businessLogo || null;
+
+    if (!existingUser) {
+      await ensureSupabaseAuthUserExists(supabaseId, token);
+    }
+
+    const user = !existingUser
+      ? await prisma.user.create({
+          data: {
+            id: supabaseId,
+            name: resolvedName,
+            email,
+            role: roleForEmail(email),
+            platformRole: platformRoleForEmail(email),
+            workspaceRole: "OWNER",
+            platformPlan: PLAN_SLUGS.PADRAO,
+            subscriptionStatus: "PAID",
+            billingEnabled: false,
+            passwordHash: "supabase-auth",
+            businessName: resolvedBusinessName,
+            businessLogo: resolvedBusinessLogo,
+            businessType: resolvedBusinessType,
+            onboardingCompleted: false
+          },
+          select: userSelect
+        })
+      : await (async () => {
+          const updates = {};
+          if (existingUser.name !== resolvedName) updates.name = resolvedName;
+          if (existingUser.email !== email) updates.email = email;
+          if (existingUser.role !== roleForEmail(email) && roleForEmail(email) === "ADMIN") updates.role = "ADMIN";
+          if (existingUser.platformRole !== platformRoleForEmail(email)) updates.platformRole = platformRoleForEmail(email);
+          if (isInitialPlatformOwnerEmail(email) && existingUser.accountStatus !== "ACTIVE") updates.accountStatus = "ACTIVE";
+          if (isInitialPlatformOwnerEmail(email) && existingUser.userStatus !== "ACTIVE") updates.userStatus = "ACTIVE";
+          if (metadataBusinessName && existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
+          if (metadataBusinessType && existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
+
+          if (!Object.keys(updates).length) return existingUser;
+
+          return prisma.user.update({
+            where: { id: supabaseId },
+            data: updates,
+            select: userSelect
+          });
+        })();
+
+    const ensuredUser = await ensureInitialAdminRole(user);
+    await ensureSupabaseBootstrap(ensuredUser);
+
+    setCachedAuthUser(ensuredUser, metadataKey);
+    return ensuredUser;
+  })().finally(() => {
+    authUserInflightCache.delete(inflightKey);
   });
 
-  const resolvedName = metadataName || existingUser?.name || email;
-  const resolvedBusinessType = metadataBusinessType || existingUser?.businessType || "Outro";
-  const resolvedBusinessName = metadataBusinessName || existingUser?.businessName || `Agenda de ${resolvedName}`;
-  const resolvedBusinessLogo = existingUser?.businessLogo || null;
-
-  if (!existingUser) {
-    await ensureSupabaseAuthUserExists(supabaseId, token);
-  }
-
-  const user = !existingUser
-    ? await prisma.user.create({
-        data: {
-          id: supabaseId,
-          name: resolvedName,
-          email,
-          role: roleForEmail(email),
-          platformRole: platformRoleForEmail(email),
-          workspaceRole: "OWNER",
-          platformPlan: PLAN_SLUGS.PADRAO,
-          subscriptionStatus: "PAID",
-          billingEnabled: false,
-          passwordHash: "supabase-auth",
-          businessName: resolvedBusinessName,
-          businessLogo: resolvedBusinessLogo,
-          businessType: resolvedBusinessType,
-          onboardingCompleted: false
-        },
-        select: userSelect
-      })
-    : await (async () => {
-        const updates = {};
-        if (existingUser.name !== resolvedName) updates.name = resolvedName;
-        if (existingUser.email !== email) updates.email = email;
-        if (existingUser.role !== roleForEmail(email) && roleForEmail(email) === "ADMIN") updates.role = "ADMIN";
-        if (existingUser.platformRole !== platformRoleForEmail(email)) updates.platformRole = platformRoleForEmail(email);
-        if (isInitialPlatformOwnerEmail(email) && existingUser.accountStatus !== "ACTIVE") updates.accountStatus = "ACTIVE";
-        if (isInitialPlatformOwnerEmail(email) && existingUser.userStatus !== "ACTIVE") updates.userStatus = "ACTIVE";
-        if (metadataBusinessName && existingUser.businessName !== resolvedBusinessName) updates.businessName = resolvedBusinessName;
-        if (metadataBusinessType && existingUser.businessType !== resolvedBusinessType) updates.businessType = resolvedBusinessType;
-
-        if (!Object.keys(updates).length) return existingUser;
-
-        return prisma.user.update({
-          where: { id: supabaseId },
-          data: updates,
-          select: userSelect
-        });
-      })();
-
-  const ensuredUser = await ensureInitialAdminRole(user);
-  await ensureSupabaseBootstrap(ensuredUser);
-
-  setCachedAuthUser(ensuredUser, metadataKey);
-  return ensuredUser;
+  authUserInflightCache.set(inflightKey, request);
+  return request;
 }
 
 async function authenticateWithSupabaseJwt(token) {
