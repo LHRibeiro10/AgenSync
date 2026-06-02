@@ -57,6 +57,7 @@ export const api = {
   dashboard: (params) => dashboardService.getDashboard(params),
   dashboardOverview: (params) => dashboardService.getDashboardOverview(params),
   finance: (params) => financeService.getFinanceSummary(params),
+  financeOverview: (params) => financeService.getFinanceOverview(params),
   adminSummary: () => adminService.getAdminSummary(),
   listAdminUsers: (params) => adminService.listAdminUsers(params),
   updateAdminUserRole: (id, role) => adminService.updateAdminUserRole(id, role),

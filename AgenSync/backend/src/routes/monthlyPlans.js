@@ -20,6 +20,9 @@ import { publicAppointment, publicClient, publicMonthlyPlan, publicProfessional,
 import { optionalString, parseBoolean, parsePagination, parsePositiveInteger, parsePositiveMoney, requiredString } from "../utils/validation.js";
 
 const router = Router();
+const MONTHLY_PLANS_OVERVIEW_CACHE_TTL_MS = 10_000;
+const MONTHLY_PLANS_OVERVIEW_CACHE_MAX_ITEMS = 200;
+const monthlyPlansOverviewCache = new Map();
 
 const paymentSelect = {
   id: true,
@@ -147,6 +150,48 @@ function monthlyPlanSelectForMonth(month) {
 
 const pad = (value) => String(value).padStart(2, "0");
 const FIXED_BILLING_TYPES = new Set(["FIXED_MONTHLY", "PACKAGE_MONTHLY"]);
+
+function clearMonthlyPlansOverviewCache() {
+  monthlyPlansOverviewCache.clear();
+}
+
+function monthlyPlansOverviewCacheKey(req) {
+  return [
+    req.workspaceId || req.user.id,
+    req.originalUrl || req.url,
+    req.user?.professionalId || "",
+    req.user?.workspaceRole || ""
+  ].join(":");
+}
+
+function getCachedMonthlyPlansOverview(key) {
+  const cached = monthlyPlansOverviewCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    monthlyPlansOverviewCache.delete(key);
+    return null;
+  }
+  return cached.inflight || Promise.resolve(cached.value);
+}
+
+function setMonthlyPlansOverviewCache(key, value) {
+  if (!monthlyPlansOverviewCache.has(key) && monthlyPlansOverviewCache.size >= MONTHLY_PLANS_OVERVIEW_CACHE_MAX_ITEMS) {
+    const oldestKey = monthlyPlansOverviewCache.keys().next().value;
+    if (oldestKey) monthlyPlansOverviewCache.delete(oldestKey);
+  }
+
+  monthlyPlansOverviewCache.set(key, {
+    value,
+    expiresAt: Date.now() + MONTHLY_PLANS_OVERVIEW_CACHE_TTL_MS
+  });
+}
+
+function setMonthlyPlansOverviewInflight(key, inflight) {
+  monthlyPlansOverviewCache.set(key, {
+    inflight,
+    expiresAt: Date.now() + MONTHLY_PLANS_OVERVIEW_CACHE_TTL_MS
+  });
+}
 
 function monthKey(value = todayString()) {
   return String(value).slice(0, 7);
@@ -782,65 +827,82 @@ router.get(
 router.get(
   "/overview",
   asyncHandler(async (req, res) => {
-    const canFilterProfessionals =
-      isWorkspaceProfessional(req.user) || planHasFeature(req.user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
-    const scope = await resolveProfessionalScope(
-      prisma,
-      req.user,
-      canFilterProfessionals ? req.query.professionalId : ""
-    );
-    const month = monthKey(req.query.month || req.query.endDate || todayString());
-    const startDate = req.query.startDate || `${month}-01`;
-    const endDate = req.query.endDate || endOfMonthKey(month);
-    const paymentMonth = monthKey(startDate) === monthKey(endDate) ? month : "";
-    const bootstrapRequested = req.query.includeBootstrap !== "false";
+    const cacheKey = monthlyPlansOverviewCacheKey(req);
+    const cached = getCachedMonthlyPlansOverview(cacheKey);
+    if (cached) return res.json(await cached);
 
-    const plansPromise = prisma.monthlyPlan.findMany({
-      where: {
-        ...workspaceWhere(req),
-        ...professionalWhere(scope),
-        ...(req.query.status ? { status: normalizePlanStatus(req.query.status) } : {}),
-        ...(req.query.billingType ? { billingType: normalizeBillingType(req.query.billingType) } : {}),
-        ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {})
-      },
-      select: monthlyPlanSelectForMonth(paymentMonth),
-      orderBy: [{ createdAt: "desc" }],
-      take: 300
-    });
+    const inflight = (async () => {
+      const canFilterProfessionals =
+        isWorkspaceProfessional(req.user) || planHasFeature(req.user, PLAN_FEATURES.PROFESSIONAL_FILTERS);
+      const scope = await resolveProfessionalScope(
+        prisma,
+        req.user,
+        canFilterProfessionals ? req.query.professionalId : ""
+      );
+      const month = monthKey(req.query.month || req.query.endDate || todayString());
+      const startDate = req.query.startDate || `${month}-01`;
+      const endDate = req.query.endDate || endOfMonthKey(month);
+      const paymentMonth = monthKey(startDate) === monthKey(endDate) ? month : "";
+      const bootstrapRequested = req.query.includeBootstrap !== "false";
 
-    const [plans, bootstrap] = await Promise.all([
-      plansPromise,
-      bootstrapRequested ? listMonthlyPlansBootstrap(req) : Promise.resolve(null)
-    ]);
+      const plansPromise = prisma.monthlyPlan.findMany({
+        where: {
+          ...workspaceWhere(req),
+          ...professionalWhere(scope),
+          ...(req.query.status ? { status: normalizePlanStatus(req.query.status) } : {}),
+          ...(req.query.billingType ? { billingType: normalizeBillingType(req.query.billingType) } : {}),
+          ...(req.query.clientId ? { clientId: String(req.query.clientId) } : {})
+        },
+        select: monthlyPlanSelectForMonth(paymentMonth),
+        orderBy: [{ createdAt: "desc" }],
+        take: 300
+      });
 
-    const monthAppointments = await appointmentsForPlans(
-      req,
-      plans.map((plan) => plan.id),
-      startDate,
-      endDate
-    );
-    const cycles = cyclesForRange(plans, startDate, endDate);
-    const monthlyPlans = attachMonthMetrics(plans, monthAppointments).map((plan) => ({
-      ...plan,
-      currentCycle: shouldIncludePlan(plans.find((item) => item.id === plan.id), month)
-        ? cycleForMonth(plans.find((item) => item.id === plan.id), month)
-        : null
-    }));
+      const [plans, bootstrap] = await Promise.all([
+        plansPromise,
+        bootstrapRequested ? listMonthlyPlansBootstrap(req) : Promise.resolve(null)
+      ]);
 
-    res.json({
-      month,
-      filters: {
+      const monthAppointments = await appointmentsForPlans(
+        req,
+        plans.map((plan) => plan.id),
         startDate,
-        endDate,
-        professionalId: scope.professionalId || "",
-        status: req.query.status || "",
-        billingType: req.query.billingType || "",
-        clientId: req.query.clientId || ""
-      },
-      ...(bootstrap ? { bootstrap } : {}),
-      monthlyPlans,
-      summary: buildMonthlyPlanSummary(plans, monthAppointments, cycles)
-    });
+        endDate
+      );
+      const cycles = cyclesForRange(plans, startDate, endDate);
+      const monthlyPlans = attachMonthMetrics(plans, monthAppointments).map((plan) => ({
+        ...plan,
+        currentCycle: shouldIncludePlan(plans.find((item) => item.id === plan.id), month)
+          ? cycleForMonth(plans.find((item) => item.id === plan.id), month)
+          : null
+      }));
+
+      return {
+        month,
+        filters: {
+          startDate,
+          endDate,
+          professionalId: scope.professionalId || "",
+          status: req.query.status || "",
+          billingType: req.query.billingType || "",
+          clientId: req.query.clientId || ""
+        },
+        ...(bootstrap ? { bootstrap } : {}),
+        monthlyPlans,
+        summary: buildMonthlyPlanSummary(plans, monthAppointments, cycles)
+      };
+    })();
+
+    setMonthlyPlansOverviewInflight(cacheKey, inflight);
+
+    try {
+      const payload = await inflight;
+      setMonthlyPlansOverviewCache(cacheKey, payload);
+      res.json(payload);
+    } catch (error) {
+      monthlyPlansOverviewCache.delete(cacheKey);
+      throw error;
+    }
   })
 );
 
@@ -939,6 +1001,7 @@ router.post(
       : null;
 
     const plan = await findPlan(req.user, result.id);
+    clearMonthlyPlansOverviewCache();
     res.status(201).json({ monthlyPlan: publicMonthlyPlan(plan), generation });
   })
 );
@@ -979,6 +1042,7 @@ router.put(
       select: monthlyPlanSelect
     });
 
+    clearMonthlyPlansOverviewCache();
     res.json({ monthlyPlan: publicMonthlyPlan(plan) });
   })
 );
@@ -997,6 +1061,7 @@ router.post(
       skipConflicts: req.body.skipConflicts !== false
     });
     const updated = await findPlan(req.user, req.params.id);
+    clearMonthlyPlansOverviewCache();
     res.json({ monthlyPlan: publicMonthlyPlan(updated), generation });
   })
 );
@@ -1029,6 +1094,7 @@ router.post(
       await syncAppointmentReminders(appointment);
     }
 
+    clearMonthlyPlansOverviewCache();
     res.json({ canceledCount: result.count });
   })
 );
@@ -1043,6 +1109,7 @@ router.post(
       data: { status: "CANCELED", canceledAt: new Date() },
       select: monthlyPlanSelect
     });
+    clearMonthlyPlansOverviewCache();
     res.json({ monthlyPlan: publicMonthlyPlan(plan) });
   })
 );
@@ -1092,6 +1159,7 @@ router.post(
       payments: [...plan.payments.filter((item) => item.month !== month), payment]
     };
 
+    clearMonthlyPlansOverviewCache();
     res.json({ cycle: cycleForMonth(updatedPlan, month) });
   })
 );

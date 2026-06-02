@@ -83,6 +83,7 @@ export const endpoints = Object.freeze({
   dashboard: "/dashboard",
   dashboardOverview: "/dashboard/overview",
   finance: "/finance",
+  financeOverview: "/finance/overview",
   products: {
     list: "/products",
     byId: (id) => `/products/${id}`

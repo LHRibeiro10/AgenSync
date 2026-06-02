@@ -15,6 +15,7 @@ const allowAnyOrigin = configuredOrigins.includes("*");
 const explicitOrigins = configuredOrigins.filter((origin) => origin !== "*");
 
 const corsOptions = {
+  maxAge: 86400,
   origin(origin, callback) {
     if (allowAnyOrigin || !origin) {
       callback(null, true);

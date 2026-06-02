@@ -13,12 +13,11 @@ import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import {
   expenseCategories,
   expenseCategoryLabel,
-  listExpenses,
   sumExpenses
 } from "../services/expenses.js";
 import { exportFinancialReportExcel } from "../services/excelReport.js";
-import { listProductSales, sumProductSales } from "../services/products.js";
-import { listSubscriptionCycles, sumExpectedSubscriptionCycles, sumPaidSubscriptionCycles } from "../services/subscriptions.js";
+import { sumProductSales } from "../services/products.js";
+import { sumExpectedSubscriptionCycles, sumPaidSubscriptionCycles } from "../services/subscriptions.js";
 import { useToast } from "../components/Toast.jsx";
 import { money } from "../utils.js";
 
@@ -39,13 +38,6 @@ function addDays(date, amount) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
   return next;
-}
-
-function monthRangeUntil(value) {
-  return {
-    startDate: `${value.slice(0, 7)}-01`,
-    endDate: value
-  };
 }
 
 function lastSevenDays(value) {
@@ -184,109 +176,39 @@ export default function Finance() {
   useEffect(() => {
     if (!viewReady) return undefined;
     let active = true;
-    const selected = parseDate(appliedFilters.endDate);
-    const currentWeekStart = formatInputDate(addDays(selected, -6));
-    const previousStart = formatInputDate(addDays(selected, -13));
-    const previousEnd = formatInputDate(addDays(selected, -7));
-    const monthRange = monthRangeUntil(appliedFilters.endDate);
     const scopedParams = selectedProfessionalId ? { professionalId: selectedProfessionalId } : {};
-    const isProfessionalScope = Boolean(selectedProfessionalId);
 
     setError("");
     setChartReady(false);
 
-    Promise.all([
-      api.finance({ date: appliedFilters.endDate, ...scopedParams }),
-      api.listAppointments({
+    api
+      .financeOverview({
         startDate: appliedFilters.startDate,
         endDate: appliedFilters.endDate,
-        status: "concluido",
+        category: appliedFilters.category,
         ...scopedParams
-      }),
-      api.listAppointments({
-        startDate: previousStart,
-        endDate: previousEnd,
-        status: "concluido",
-        ...scopedParams
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listProductSales({
-        startDate: appliedFilters.startDate,
-        endDate: appliedFilters.endDate
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listProductSales(monthRange),
-      isProfessionalScope ? Promise.resolve([]) : listProductSales({
-        startDate: currentWeekStart,
-        endDate: appliedFilters.endDate
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listProductSales({
-        startDate: previousStart,
-        endDate: previousEnd
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
-        startDate: currentWeekStart,
-        endDate: appliedFilters.endDate
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
-        startDate: previousStart,
-        endDate: previousEnd
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
-        startDate: appliedFilters.startDate,
-        endDate: appliedFilters.endDate
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles({
-        startDate: appliedFilters.endDate,
-        endDate: appliedFilters.endDate
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listSubscriptionCycles(monthRange),
-      isProfessionalScope ? Promise.resolve([]) : listExpenses({
-        startDate: appliedFilters.startDate,
-        endDate: appliedFilters.endDate,
-        category: appliedFilters.category
-      }),
-      isProfessionalScope ? Promise.resolve([]) : listExpenses({
-        ...monthRange,
-        category: appliedFilters.category
       })
-    ])
-      .then(
-        ([
-          financeData,
-          appointmentsData,
-          previousData,
-          nextPeriodSales,
-          nextMonthSales,
-          nextCurrentWeekSales,
-          nextPreviousWeekSales,
-          nextCurrentWeekSubscriptions,
-          nextPreviousWeekSubscriptions,
-          nextPeriodSubscriptions,
-          nextTodaySubscriptions,
-          nextMonthSubscriptions,
-          nextPeriodExpenses,
-          nextMonthExpenses
-        ]) => {
-          if (!active) return;
+      .then((overview) => {
+        if (!active) return;
 
-          setData(financeData);
-          setCompletedAppointments(appointmentsData.appointments);
-          setPreviousWeekCompleted(previousData.appointments);
-          setPeriodSales(nextPeriodSales);
-          setTodaySales(nextPeriodSales.filter((sale) => sale.date === appliedFilters.endDate));
-          setMonthSales(nextMonthSales);
-          setCurrentWeekSales(nextCurrentWeekSales);
-          setPreviousWeekSales(nextPreviousWeekSales);
-          setCurrentWeekSubscriptions(nextCurrentWeekSubscriptions);
-          setPreviousWeekSubscriptions(nextPreviousWeekSubscriptions);
-          setPeriodSubscriptions(nextPeriodSubscriptions);
-          setTodaySubscriptions(nextTodaySubscriptions);
-          setMonthSubscriptions(nextMonthSubscriptions);
-          setPeriodExpenses(nextPeriodExpenses);
-          setTodayExpenses(nextPeriodExpenses.filter((expense) => expense.date === appliedFilters.endDate));
-          setMonthExpenses(nextMonthExpenses);
-          requestAnimationFrame(() => setChartReady(true));
-        }
-      )
+        setData(overview.finance || null);
+        setCompletedAppointments(overview.appointments?.completed || []);
+        setPreviousWeekCompleted(overview.appointments?.previousWeekCompleted || []);
+        setPeriodSales(overview.sales?.period || []);
+        setTodaySales(overview.sales?.today || []);
+        setMonthSales(overview.sales?.month || []);
+        setCurrentWeekSales(overview.sales?.currentWeek || []);
+        setPreviousWeekSales(overview.sales?.previousWeek || []);
+        setCurrentWeekSubscriptions(overview.subscriptions?.currentWeek || []);
+        setPreviousWeekSubscriptions(overview.subscriptions?.previousWeek || []);
+        setPeriodSubscriptions(overview.subscriptions?.period || []);
+        setTodaySubscriptions(overview.subscriptions?.today || []);
+        setMonthSubscriptions(overview.subscriptions?.month || []);
+        setPeriodExpenses(overview.expenses?.period || []);
+        setTodayExpenses(overview.expenses?.today || []);
+        setMonthExpenses(overview.expenses?.month || []);
+        requestAnimationFrame(() => setChartReady(true));
+      })
       .catch((err) => {
         if (active) setError(err.message);
       });

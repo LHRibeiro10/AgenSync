@@ -12,3 +12,7 @@ export function dashboardOverviewApi(params) {
 export function financeApi(params) {
   return httpClient.get(endpoints.finance, { params, cacheTtlMs: 30000 });
 }
+
+export function financeOverviewApi(params) {
+  return httpClient.get(endpoints.financeOverview, { params, cacheTtlMs: 30000 });
+}
