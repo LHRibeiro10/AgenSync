@@ -41,7 +41,17 @@ export default function Button({
       ].join(" ")}
       {...props}
     >
-      {loading ? loadingLabel : children}
+      {loading ? (
+        <>
+          <span
+            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent"
+            aria-hidden="true"
+          />
+          <span>{loadingLabel}</span>
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }

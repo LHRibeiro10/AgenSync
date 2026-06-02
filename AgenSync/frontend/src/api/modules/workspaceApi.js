@@ -5,6 +5,10 @@ export function listWorkspaceMembersApi() {
   return httpClient.get(endpoints.workspace.members, { cacheTtlMs: 30000 });
 }
 
+export function workspaceTeamOverviewApi(params) {
+  return httpClient.get(endpoints.workspace.teamOverview, { params, cacheTtlMs: 30000 });
+}
+
 export function listWorkspaceAuditLogsApi(params) {
   return httpClient.get(endpoints.workspace.auditLogs, { params, cacheTtlMs: 30000 });
 }

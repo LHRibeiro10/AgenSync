@@ -9,6 +9,7 @@
   toggleProduct,
   createProductSale,
   listProductSales,
+  getSalesOverview,
   sumProductSales,
   productSalesProfit
 } from "./productService.js";

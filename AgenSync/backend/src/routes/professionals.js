@@ -21,6 +21,7 @@ import {
   requiredString,
   validateEmail
 } from "../utils/validation.js";
+import { clearTeamOverviewCache } from "./workspace.js";
 
 const router = Router();
 const accessRoles = new Set(["ADMIN", "PROFESSIONAL"]);
@@ -220,6 +221,7 @@ router.post(
       data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, role, email, phone, monthlyGoal, isActive }
     });
 
+    clearTeamOverviewCache();
     res.status(201).json({ professional: publicProfessional(professional) });
   })
 );
@@ -293,6 +295,7 @@ router.post(
       return { user, member, professional: updatedProfessional };
     });
 
+    clearTeamOverviewCache();
     invalidateAuthUserCache(result.user.id);
     await recordAuditEvent({
       req,
@@ -387,6 +390,7 @@ router.put(
       return { user: updatedUser, member: updatedMember, professional: updatedProfessional };
     });
 
+    clearTeamOverviewCache();
     invalidateAuthUserCache(result.user.id);
     await recordAuditEvent({
       req,
@@ -493,6 +497,7 @@ router.put(
       });
     });
 
+    clearTeamOverviewCache();
     professional.workspaceMembers.forEach((member) => invalidateAuthUserCache(member.userId));
 
     res.json({ professional: publicProfessional(professional) });
@@ -537,6 +542,7 @@ router.delete(
       await tx.professional.delete({ where: { id: req.params.id } });
     });
 
+    clearTeamOverviewCache();
     accessUserIds.forEach((userId) => invalidateAuthUserCache(userId));
     res.status(204).send();
     return;

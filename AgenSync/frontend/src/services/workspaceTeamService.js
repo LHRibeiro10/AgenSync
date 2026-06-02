@@ -9,7 +9,8 @@ import {
   listWorkspaceInvitesApi,
   listWorkspaceMembersApi,
   updateWorkspaceMemberApi,
-  validateWorkspaceInviteApi
+  validateWorkspaceInviteApi,
+  workspaceTeamOverviewApi
 } from "../api/modules/workspaceApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
 
@@ -17,6 +18,13 @@ export function listWorkspaceMembers() {
   return executeDataSource({
     feature: "workspace.members.list",
     remote: () => listWorkspaceMembersApi()
+  });
+}
+
+export function getWorkspaceTeamOverview(params) {
+  return executeDataSource({
+    feature: "workspace.team.overview",
+    remote: () => workspaceTeamOverviewApi(params)
   });
 }
 

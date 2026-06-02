@@ -10,6 +10,7 @@ export const endpoints = Object.freeze({
   },
   workspace: {
     members: "/workspace/members",
+    teamOverview: "/workspace/team-overview",
     memberById: (id) => `/workspace/members/${id}`,
     disableMember: (id) => `/workspace/members/${id}/disable`,
     enableMember: (id) => `/workspace/members/${id}/enable`,
@@ -90,6 +91,7 @@ export const endpoints = Object.freeze({
   },
   sales: {
     list: "/sales",
+    overview: "/sales/overview",
     byId: (id) => `/sales/${id}`
   },
   expenses: {

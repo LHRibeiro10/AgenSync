@@ -13,11 +13,14 @@ import {
   requireWorkspaceOwner
 } from "../utils/accessControl.js";
 import { normalizeEnvValue } from "../utils/env.js";
-import { publicUser } from "../utils/formatters.js";
+import { publicProfessional, publicUser } from "../utils/formatters.js";
 import { hydrateUserWorkspace } from "../utils/workspaceContext.js";
 import { optionalString, parsePagination, requiredString, validateEmail } from "../utils/validation.js";
 
 const router = Router();
+const TEAM_OVERVIEW_CACHE_TTL_MS = Math.max(5_000, Number(process.env.TEAM_OVERVIEW_CACHE_TTL_MS || 10_000));
+const TEAM_OVERVIEW_CACHE_MAX_ITEMS = Math.max(50, Number(process.env.TEAM_OVERVIEW_CACHE_MAX_ITEMS || 200));
+const teamOverviewCache = new Map();
 
 const INVITE_TTL_DAYS = 7;
 const INITIAL_ADMIN_EMAIL = "luiz.henrique.ribeiro770@gmail.com";
@@ -208,6 +211,39 @@ function publicMember(member) {
     createdAt: member.createdAt,
     updatedAt: member.updatedAt
   };
+}
+
+function teamOverviewCacheKey(req) {
+  return JSON.stringify({
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    includeAudit: String(req.query?.includeAudit || "").trim().toLowerCase() === "true",
+    auditTake: req.query?.take || ""
+  });
+}
+
+function getCachedTeamOverview(key) {
+  const cached = teamOverviewCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    teamOverviewCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setTeamOverviewCache(key, value) {
+  if (teamOverviewCache.size >= TEAM_OVERVIEW_CACHE_MAX_ITEMS) {
+    const oldestKey = teamOverviewCache.keys().next().value;
+    if (oldestKey) teamOverviewCache.delete(oldestKey);
+  }
+  teamOverviewCache.set(key, {
+    value,
+    expiresAt: Date.now() + TEAM_OVERVIEW_CACHE_TTL_MS
+  });
+}
+
+export function clearTeamOverviewCache() {
+  teamOverviewCache.clear();
 }
 
 function optionalAuth(req, res, next) {
@@ -569,6 +605,54 @@ router.use((req, res, next) => {
 });
 
 router.get(
+  "/team-overview",
+  asyncHandler(async (req, res) => {
+    requireWorkspaceManager(req);
+    const cacheKey = teamOverviewCacheKey(req);
+    const cached = getCachedTeamOverview(cacheKey);
+    if (cached) return res.json(cached);
+
+    const includeAudit = String(req.query.includeAudit || "").trim().toLowerCase() === "true";
+    const auditTake = Math.min(200, Math.max(1, Number(req.query.take || 60)));
+    const plan = req.plan || getPlanConfig(req.workspace?.plan);
+    const canViewAudit = planHasFeature(plan, PLAN_FEATURES.AUDIT);
+
+    const [members, professionals, logs] = await Promise.all([
+      prisma.workspaceMember.findMany({
+        where: { workspaceId: req.workspaceId },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          professional: { select: { id: true, name: true } }
+        },
+        orderBy: [{ role: "asc" }, { createdAt: "asc" }]
+      }),
+      prisma.professional.findMany({
+        where: { workspaceId: req.workspaceId, isActive: true },
+        orderBy: [{ name: "asc" }],
+        take: 300
+      }),
+      includeAudit && canViewAudit
+        ? prisma.auditLog.findMany({
+            where: { workspaceId: req.workspaceId },
+            take: auditTake,
+            select: auditSelect,
+            orderBy: [{ createdAt: "desc" }]
+          })
+        : Promise.resolve([])
+    ]);
+
+    const payload = {
+      members: members.map(publicMember),
+      professionals: professionals.map(publicProfessional),
+      logs: logs.map(publicAuditLog),
+      canViewAudit
+    };
+    setTeamOverviewCache(cacheKey, payload);
+    res.json(payload);
+  })
+);
+
+router.get(
   "/members",
   asyncHandler(async (req, res) => {
     requireWorkspaceManager(req);
@@ -869,6 +953,7 @@ router.patch(
       where: { id: member.userId, currentWorkspaceId: req.workspaceId },
       data: { workspaceRole: member.role, professionalId: member.professionalId || null }
     });
+    clearTeamOverviewCache();
     invalidateAuthUserCache(member.userId);
 
     await recordAuditEvent({
@@ -903,6 +988,7 @@ router.patch(
       where: { id: member.userId, currentWorkspaceId: req.workspaceId },
       data: { currentWorkspaceId: null }
     });
+    clearTeamOverviewCache();
     invalidateAuthUserCache(member.userId);
 
     await recordAuditEvent({
@@ -949,6 +1035,7 @@ router.patch(
         professionalId: member.professionalId || null
       }
     });
+    clearTeamOverviewCache();
     invalidateAuthUserCache(member.userId);
 
     await recordAuditEvent({
@@ -976,6 +1063,7 @@ router.delete(
       where: { id: current.userId, currentWorkspaceId: req.workspaceId },
       data: { currentWorkspaceId: null }
     });
+    clearTeamOverviewCache();
     invalidateAuthUserCache(current.userId);
 
     await recordAuditEvent({

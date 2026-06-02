@@ -4,6 +4,7 @@ import {
   deleteProductApi,
   listProductsApi,
   listSalesApi,
+  salesOverviewApi,
   updateProductApi
 } from "../api/modules/productsApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
@@ -94,6 +95,13 @@ export async function listProductSales(filters = {}) {
     remote: () => listSalesApi(filters)
   });
   return asList(response, "sales");
+}
+
+export async function getSalesOverview(filters = {}) {
+  return executeDataSource({
+    feature: "sales.overview",
+    remote: () => salesOverviewApi(filters)
+  });
 }
 
 export function sumProductSales(sales) {

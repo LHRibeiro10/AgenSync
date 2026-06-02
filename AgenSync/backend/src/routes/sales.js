@@ -1,12 +1,20 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
-import { clientAccessWhere, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
+import {
+  clientAccessWhere,
+  requireAnyWorkspacePermission,
+  requireWorkspacePermission,
+  workspaceWhere
+} from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
-import { publicProductSale } from "../utils/formatters.js";
+import { publicClient, publicProduct, publicProductSale, publicProfessional } from "../utils/formatters.js";
 import { optionalString, parsePagination, parsePositiveInteger, requiredString } from "../utils/validation.js";
 
 const router = Router();
+const SALES_OVERVIEW_CACHE_TTL_MS = Math.max(5_000, Number(process.env.SALES_OVERVIEW_CACHE_TTL_MS || 10_000));
+const SALES_OVERVIEW_CACHE_MAX_ITEMS = Math.max(50, Number(process.env.SALES_OVERVIEW_CACHE_MAX_ITEMS || 200));
+const salesOverviewCache = new Map();
 
 const productSaleSelect = {
   id: true,
@@ -27,6 +35,54 @@ const productSaleSelect = {
     }
   }
 };
+
+const productSelect = {
+  id: true,
+  name: true,
+  category: true,
+  costPrice: true,
+  salePrice: true,
+  stockQty: true,
+  minStock: true,
+  description: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true
+};
+
+function salesOverviewCacheKey(req) {
+  return JSON.stringify({
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    role: req.user?.workspaceRole || req.user?.workspaceMember?.role || "",
+    professionalId: req.user?.professionalId || "",
+    query: req.query || {}
+  });
+}
+
+function getCachedSalesOverview(key) {
+  const cached = salesOverviewCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    salesOverviewCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setSalesOverviewCache(key, value) {
+  if (salesOverviewCache.size >= SALES_OVERVIEW_CACHE_MAX_ITEMS) {
+    const oldestKey = salesOverviewCache.keys().next().value;
+    if (oldestKey) salesOverviewCache.delete(oldestKey);
+  }
+  salesOverviewCache.set(key, {
+    value,
+    expiresAt: Date.now() + SALES_OVERVIEW_CACHE_TTL_MS
+  });
+}
+
+export function clearSalesOverviewCache() {
+  salesOverviewCache.clear();
+}
 
 function saleWhere(req, query) {
   const where = workspaceWhere(req);
@@ -51,6 +107,79 @@ function saleWhere(req, query) {
   }
   return where;
 }
+
+router.get(
+  "/overview",
+  asyncHandler(async (req, res) => {
+    requireAnyWorkspacePermission(["canCreateSales", "canViewSalesReports"])(req, res, () => {});
+    const cacheKey = salesOverviewCacheKey(req);
+    const cached = getCachedSalesOverview(cacheKey);
+    if (cached) return res.json(cached);
+
+    const pagination = parsePagination(req.query, {
+      defaultPageSize: 120,
+      maxPageSize: 300
+    });
+
+    const [clients, professionals, products, sales] = await Promise.all([
+      prisma.client.findMany({
+        where: clientAccessWhere(req, { isActive: true }),
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          cpf: true,
+          cnpj: true,
+          rg: true,
+          birthDate: true,
+          zipCode: true,
+          address: true,
+          addressNumber: true,
+          addressComplement: true,
+          district: true,
+          state: true,
+          city: true,
+          tags: true,
+          source: true,
+          externalId: true,
+          notes: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        orderBy: [{ name: "asc" }],
+        take: 300
+      }),
+      prisma.professional.findMany({
+        where: workspaceWhere(req, { isActive: true }),
+        orderBy: [{ name: "asc" }],
+        take: 300
+      }),
+      prisma.product.findMany({
+        where: workspaceWhere(req, { isActive: true }),
+        select: productSelect,
+        orderBy: [{ name: "asc" }],
+        take: 300
+      }),
+      prisma.productSale.findMany({
+        where: saleWhere(req, req.query),
+        ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
+        select: productSaleSelect,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+      })
+    ]);
+
+    const payload = {
+      clients: clients.map(publicClient),
+      professionals: professionals.map(publicProfessional),
+      products: products.map(publicProduct),
+      sales: sales.map(publicProductSale)
+    };
+    setSalesOverviewCache(cacheKey, payload);
+    res.json(payload);
+  })
+);
 
 router.get(
   "/",
@@ -117,6 +246,7 @@ router.post(
       });
     });
 
+    clearSalesOverviewCache();
     res.status(201).json({ sale: publicProductSale(sale) });
   })
 );

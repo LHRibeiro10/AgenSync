@@ -21,6 +21,10 @@ export function listSalesApi(params) {
   return httpClient.get(endpoints.sales.list, { params, cacheTtlMs: 30000 });
 }
 
+export function salesOverviewApi(params) {
+  return httpClient.get(endpoints.sales.overview, { params, cacheTtlMs: 30000 });
+}
+
 export function createSaleApi(payload) {
   return httpClient.post(endpoints.sales.list, { body: payload });
 }

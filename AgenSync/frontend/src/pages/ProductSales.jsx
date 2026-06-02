@@ -11,8 +11,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import { useToast } from "../components/Toast.jsx";
 import {
   createProductSale,
-  listProductSales,
-  listProducts,
+  getSalesOverview,
   productSalesProfit,
   stockStatus,
   sumProductSales
@@ -118,35 +117,9 @@ export default function ProductSales({ mode = "new" }) {
   const [quickClientOpen, setQuickClientOpen] = useState(false);
   const [quickClientForm, setQuickClientForm] = useState({ name: "", phone: "", notes: "" });
   const [quickSaving, setQuickSaving] = useState(false);
+  const [saleSaving, setSaleSaving] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
-
-  useEffect(() => {
-    let active = true;
-
-    Promise.allSettled([api.listClients(), api.listProfessionals({ active: true })]).then(
-      ([clientsResult, professionalsResult]) => {
-        if (!active) return;
-
-        if (clientsResult.status === "fulfilled") {
-          setClients(clientsResult.value?.clients || []);
-        } else {
-          setClients([]);
-          setError(clientsResult.reason?.message || "Nao foi possivel carregar clientes.");
-        }
-
-        if (professionalsResult.status === "fulfilled") {
-          setProfessionals(professionalsResult.value?.professionals || []);
-        } else {
-          setProfessionals([]);
-        }
-      }
-    );
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const selectedProduct = products.find((product) => product.id === form.productId);
   const selectedCommissionProfessional = professionals.find((professional) => professional.id === commission.professionalId);
@@ -171,42 +144,31 @@ export default function ProductSales({ mode = "new" }) {
 
   useEffect(() => {
     let active = true;
-    listProducts({ activeOnly: true })
-      .then((activeProducts) => {
-        if (!active) return;
-        setProducts(activeProducts);
-        setLowStockProducts(activeProducts.filter((product) => ["low", "out"].includes(stockStatus(product))));
-      })
-      .catch((err) => {
-        if (!active) return;
-        setProducts([]);
-        setLowStockProducts([]);
-        showToast(err.message, "error");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [version, showToast]);
-
-  useEffect(() => {
-    let active = true;
     setLoading(true);
     setError("");
 
-    listProductSales({
+    getSalesOverview({
       startDate: filters.startDate,
       endDate: filters.endDate,
       productId: filters.productId,
       clientId: filters.clientId,
       search: filters.search
     })
-      .then((filteredSales) => {
+      .then((overview) => {
         if (!active) return;
-        setSales(filteredSales);
+        const activeProducts = overview?.products || [];
+        setClients(overview?.clients || []);
+        setProfessionals(overview?.professionals || []);
+        setProducts(activeProducts);
+        setLowStockProducts(activeProducts.filter((product) => ["low", "out"].includes(stockStatus(product))));
+        setSales(overview?.sales || []);
       })
       .catch((err) => {
         if (!active) return;
+        setClients([]);
+        setProfessionals([]);
+        setProducts([]);
+        setLowStockProducts([]);
         setSales([]);
         setError(err.message);
       })
@@ -254,7 +216,9 @@ export default function ProductSales({ mode = "new" }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (saleSaving) return;
     setError("");
+    setSaleSaving(true);
 
     const client = clients.find((item) => item.id === form.clientId);
 
@@ -270,6 +234,8 @@ export default function ProductSales({ mode = "new" }) {
     } catch (err) {
       setError(err.message);
       showToast(err.message, "error");
+    } finally {
+      setSaleSaving(false);
     }
   }
 
@@ -400,7 +366,7 @@ export default function ProductSales({ mode = "new" }) {
             />
           </Field>
 
-          <Button type="submit" className="w-full" size="lg">
+          <Button type="submit" className="w-full" size="lg" loading={saleSaving} loadingLabel="Registrando...">
             Registrar venda
           </Button>
         </Card>

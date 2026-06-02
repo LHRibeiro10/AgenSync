@@ -19,7 +19,6 @@ import {
 import {
   disablePushNotifications,
   enablePushNotifications,
-  getNotificationSettings,
   notificationOffsetOptions,
   notificationSupport,
   testNotification,
@@ -28,8 +27,7 @@ import {
 import {
   disableWorkspaceMember,
   enableWorkspaceMember,
-  listWorkspaceAuditLogs,
-  listWorkspaceMembers,
+  getWorkspaceTeamOverview,
   updateWorkspaceMember
 } from "../services/workspaceTeamService.js";
 import { money } from "../utils.js";
@@ -152,6 +150,19 @@ const defaultNotificationSettings = {
   whatsappReminderMessage: DEFAULT_REMINDER_MESSAGE,
   whatsappConfirmationMessage: DEFAULT_CONFIRMATION_MESSAGE
 };
+
+function notificationSettingsFromUser(user) {
+  return {
+    ...defaultNotificationSettings,
+    appointmentNotificationsEnabled: user?.appointmentNotificationsEnabled !== false,
+    appointmentNotificationOffsetMinutes: Number(user?.appointmentNotificationOffsetMinutes || 30),
+    appointmentNotificationChannels: Array.isArray(user?.appointmentNotificationChannels)
+      ? user.appointmentNotificationChannels
+      : defaultNotificationSettings.appointmentNotificationChannels,
+    whatsappReminderMessage: user?.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE,
+    whatsappConfirmationMessage: user?.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE
+  };
+}
 
 const previewAppointment = {
   client: { name: "Maria", phone: "(11) 99999-9999" },
@@ -286,6 +297,20 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
   const [editingMemberId, setEditingMemberId] = useState("");
   const [memberDraft, setMemberDraft] = useState({ role: "professional", professionalId: "", permissions: {} });
   const [teamLoading, setTeamLoading] = useState(false);
+  const [memberAction, setMemberAction] = useState("");
+
+  function teamOverviewParams() {
+    return {
+      includeAudit: shouldLoadAudit,
+      take: shouldLoadAudit ? 60 : undefined
+    };
+  }
+
+  function applyTeamOverview(overview) {
+    setMembers(overview?.members || []);
+    setAuditLogs(overview?.logs || []);
+    setProfessionals(overview?.professionals || []);
+  }
 
   useEffect(() => {
     if (!isManager) return;
@@ -294,22 +319,9 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
     async function loadTeam() {
       setTeamLoading(true);
       try {
-        const [membersData, professionalsData] = await Promise.all([
-          listWorkspaceMembers(),
-          api.listProfessionals({ active: "true" })
-        ]);
-        let auditData = { logs: [] };
-        if (shouldLoadAudit) {
-          try {
-            auditData = await listWorkspaceAuditLogs({ take: 60 });
-          } catch {
-            auditData = { logs: [] };
-          }
-        }
+        const overview = await getWorkspaceTeamOverview(teamOverviewParams());
         if (!active) return;
-        setMembers(membersData.members || []);
-        setAuditLogs(auditData.logs || []);
-        setProfessionals(professionalsData.professionals || []);
+        applyTeamOverview(overview);
       } catch (err) {
         if (active) onError?.(err.message || "Nao foi possivel carregar equipe.");
       } finally {
@@ -324,21 +336,8 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
   }, [isManager, onError, shouldLoadAudit]);
 
   async function reloadTeam() {
-    const [membersData, professionalsData] = await Promise.all([
-      listWorkspaceMembers(),
-      api.listProfessionals({ active: "true" })
-    ]);
-    let auditData = { logs: [] };
-    if (shouldLoadAudit) {
-      try {
-        auditData = await listWorkspaceAuditLogs({ take: 60 });
-      } catch {
-        auditData = { logs: [] };
-      }
-    }
-    setMembers(membersData.members || []);
-    setAuditLogs(auditData.logs || []);
-    setProfessionals(professionalsData.professionals || []);
+    const overview = await getWorkspaceTeamOverview(teamOverviewParams());
+    applyTeamOverview(overview);
   }
 
   function startMemberEdit(member) {
@@ -365,6 +364,10 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
   }
 
   async function handleSaveMember(member) {
+    const actionKey = `save:${member.id}`;
+    if (memberAction) return;
+    setMemberAction(actionKey);
+
     try {
       await updateWorkspaceMember(member.id, {
         role: memberDraft.role,
@@ -377,10 +380,16 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
     } catch (err) {
       onError?.(err.message || "Nao foi possivel atualizar o membro.");
       showToast(err.message || "Nao foi possivel atualizar o membro.", "error");
+    } finally {
+      setMemberAction("");
     }
   }
 
   async function handleMemberStatus(member) {
+    const actionKey = `status:${member.id}`;
+    if (memberAction) return;
+    setMemberAction(actionKey);
+
     try {
       if (member.status === "disabled") {
         await enableWorkspaceMember(member.id);
@@ -393,6 +402,8 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
     } catch (err) {
       onError?.(err.message || "Nao foi possivel atualizar o membro.");
       showToast(err.message || "Nao foi possivel atualizar o membro.", "error");
+    } finally {
+      setMemberAction("");
     }
   }
 
@@ -525,7 +536,16 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
                             Editar
                           </Button>
                         ) : null}
-                        <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => handleMemberStatus(member)}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-lg"
+                          loading={memberAction === `status:${member.id}`}
+                          loadingLabel={member.status === "disabled" ? "Reativando..." : "Desativando..."}
+                          disabled={Boolean(memberAction)}
+                          onClick={() => handleMemberStatus(member)}
+                        >
                           {member.status === "disabled" ? "Reativar" : "Desativar"}
                         </Button>
                       </div>
@@ -571,7 +591,14 @@ function TeamSection({ user, workspaceRole, showToast, onError, mode = "specialP
                           </div>
                         ) : null}
                         <div className="flex flex-wrap gap-2">
-                          <Button type="button" size="sm" className="rounded-lg" onClick={() => handleSaveMember(member)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-lg"
+                            loading={memberAction === `save:${member.id}`}
+                            disabled={Boolean(memberAction)}
+                            onClick={() => handleSaveMember(member)}
+                          >
                             Salvar
                           </Button>
                           <Button type="button" variant="secondary" size="sm" className="rounded-lg" onClick={() => setEditingMemberId("")}>
@@ -622,9 +649,8 @@ function SettingsGeneral() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedFeedback, setSavedFeedback] = useState(false);
-  const [notificationSettings, setNotificationSettings] = useState(defaultNotificationSettings);
-  const [initialNotificationSettings, setInitialNotificationSettings] = useState(defaultNotificationSettings);
-  const [notificationLoading, setNotificationLoading] = useState(true);
+  const [notificationSettings, setNotificationSettings] = useState(() => notificationSettingsFromUser(user));
+  const [initialNotificationSettings, setInitialNotificationSettings] = useState(() => notificationSettingsFromUser(user));
   const [notificationTesting, setNotificationTesting] = useState(false);
   const [pushStatus, setPushStatus] = useState(() => notificationSupport());
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -634,37 +660,20 @@ function SettingsGeneral() {
     setBusinessName(user?.businessName || "");
     setBusinessLogo(user?.businessLogo || "");
     if (user?.businessType) setBusinessType(user.businessType);
-  }, [user?.businessLogo, user?.businessName, user?.businessType]);
-
-  useEffect(() => {
-    let active = true;
-    setNotificationLoading(true);
-
-    getNotificationSettings()
-      .then((data) => {
-        if (!active) return;
-        const settings = {
-          ...defaultNotificationSettings,
-          ...(data.settings || {})
-        };
-        setNotificationSettings(settings);
-        setInitialNotificationSettings(settings);
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err.message || "Nao foi possivel carregar configuracoes de notificacao.");
-        }
-      })
-      .finally(() => {
-        if (active) setNotificationLoading(false);
-      });
-
+    const settings = notificationSettingsFromUser(user);
+    setNotificationSettings(settings);
+    setInitialNotificationSettings(settings);
     setPushStatus(notificationSupport());
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [
+    user?.appointmentNotificationChannels,
+    user?.appointmentNotificationOffsetMinutes,
+    user?.appointmentNotificationsEnabled,
+    user?.businessLogo,
+    user?.businessName,
+    user?.businessType,
+    user?.whatsappConfirmationMessage,
+    user?.whatsappReminderMessage
+  ]);
 
   const typeOptions = useMemo(() => {
     if (!businessType || businessTypes.some((type) => type.label === businessType)) {
@@ -1076,12 +1085,6 @@ function SettingsGeneral() {
             />
 
             <div className="space-y-5 p-4 sm:p-5">
-              {notificationLoading ? (
-                <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm font-black text-muted">
-                  Carregando preferências de notificação...
-                </div>
-              ) : null}
-
               <SwitchControl
                 checked={notificationSettings.appointmentNotificationsEnabled}
                 onChange={(checked) => updateLocalNotificationSettings({ appointmentNotificationsEnabled: checked })}

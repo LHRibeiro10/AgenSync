@@ -10,6 +10,7 @@ import {
 } from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
 import { publicProduct, publicProductSale } from "../utils/formatters.js";
+import { clearSalesOverviewCache } from "./sales.js";
 import {
   optionalString,
   parsePagination,
@@ -121,6 +122,7 @@ router.post(
       }
     });
 
+    clearSalesOverviewCache();
     res.status(201).json({ product: publicProduct(product) });
   })
 );
@@ -144,6 +146,7 @@ router.put(
       }
     });
 
+    clearSalesOverviewCache();
     res.json({ product: publicProduct(product) });
   })
 );
@@ -156,6 +159,7 @@ router.delete(
     const sales = await prisma.productSale.count({ where: workspaceWhere(req, { productId: req.params.id }) });
     if (sales) throw new ApiError(409, "Produto com vendas registradas deve ser inativado.");
     await prisma.product.delete({ where: { id: req.params.id } });
+    clearSalesOverviewCache();
     res.status(204).send();
   })
 );
@@ -249,6 +253,7 @@ router.post(
       });
     });
 
+    clearSalesOverviewCache();
     res.status(201).json({ sale: publicProductSale(sale) });
   })
 );
