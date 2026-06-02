@@ -12,6 +12,42 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
+const SERVICE_LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.SERVICE_LIST_CACHE_TTL_MS || 15_000));
+const SERVICE_LIST_CACHE_MAX_ITEMS = Math.max(50, Number(process.env.SERVICE_LIST_CACHE_MAX_ITEMS || 200));
+const serviceListCache = new Map();
+
+function serviceListCacheKey(req) {
+  return JSON.stringify({
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    role: req.user?.workspaceRole || req.user?.workspaceMember?.role || "",
+    query: req.query || {}
+  });
+}
+
+function getCachedServiceList(key) {
+  const cached = serviceListCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    serviceListCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setServiceListCache(key, value) {
+  if (serviceListCache.size >= SERVICE_LIST_CACHE_MAX_ITEMS) {
+    const oldestKey = serviceListCache.keys().next().value;
+    if (oldestKey) serviceListCache.delete(oldestKey);
+  }
+  serviceListCache.set(key, {
+    value,
+    expiresAt: Date.now() + SERVICE_LIST_CACHE_TTL_MS
+  });
+}
+
+function clearServiceListCache() {
+  serviceListCache.clear();
+}
 
 async function findServiceOrFail(req, id) {
   const service = await prisma.service.findFirst({ where: workspaceWhere(req, { id }) });
@@ -24,6 +60,10 @@ async function findServiceOrFail(req, id) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const cacheKey = serviceListCacheKey(req);
+    const cached = getCachedServiceList(cacheKey);
+    if (cached) return res.json(cached);
+
     const where = workspaceWhere(req);
     if (req.query.active === "true" || isWorkspaceProfessional(req.user)) {
       where.isActive = true;
@@ -39,7 +79,9 @@ router.get(
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 
-    res.json({ services: services.map(publicService) });
+    const payload = { services: services.map(publicService) };
+    setServiceListCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
@@ -56,6 +98,7 @@ router.post(
       data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, priceDefault, durationMinutes, isActive }
     });
 
+    clearServiceListCache();
     res.status(201).json({ service: publicService(service) });
   })
 );
@@ -87,6 +130,7 @@ router.put(
       data: { name, priceDefault, durationMinutes, isActive }
     });
 
+    clearServiceListCache();
     res.json({ service: publicService(service) });
   })
 );
@@ -106,6 +150,7 @@ router.delete(
     }
 
     await prisma.service.delete({ where: { id: req.params.id } });
+    clearServiceListCache();
     res.status(204).send();
   })
 );

@@ -26,7 +26,6 @@ import {
   DEFAULT_CONFIRMATION_MESSAGE,
   DEFAULT_REMINDER_MESSAGE
 } from "../services/appointmentWhatsApp.js";
-import { getNotificationSettings } from "../services/notificationService.js";
 import { cancelFutureSubscriptionAppointments } from "../services/subscriptions.js";
 import { todayInputValue } from "../utils.js";
 
@@ -138,11 +137,14 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   const [workingHours, setWorkingHours] = useState(loadWorkingHours);
   const [workingHoursOpen, setWorkingHoursOpen] = useState(focus === "workingHours");
   const [whatsAppAction, setWhatsAppAction] = useState(null);
-  const [whatsAppTemplates, setWhatsAppTemplates] = useState({
-    reminder: DEFAULT_REMINDER_MESSAGE,
-    confirmation: DEFAULT_CONFIRMATION_MESSAGE,
-    cancellation: DEFAULT_CANCELLATION_MESSAGE
-  });
+  const whatsAppTemplates = useMemo(
+    () => ({
+      reminder: user?.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE,
+      confirmation: user?.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE,
+      cancellation: DEFAULT_CANCELLATION_MESSAGE
+    }),
+    [user?.whatsappConfirmationMessage, user?.whatsappReminderMessage]
+  );
   const lastLoadedAppointmentsKey = useRef("");
 
   const weekDays = useMemo(() => buildWeekDays(weekStart, workingHours), [weekStart, workingHours]);
@@ -172,25 +174,6 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
   useEffect(() => {
     setWorkingHoursOpen(focus === "workingHours");
   }, [focus]);
-
-  useEffect(() => {
-    let active = true;
-
-    getNotificationSettings()
-      .then((data) => {
-        if (!active) return;
-        setWhatsAppTemplates({
-          reminder: data.settings?.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE,
-          confirmation: data.settings?.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE,
-          cancellation: data.settings?.whatsappCancellationMessage || DEFAULT_CANCELLATION_MESSAGE
-        });
-      })
-      .catch(() => null);
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!viewReady) return undefined;

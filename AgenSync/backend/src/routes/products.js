@@ -21,6 +21,9 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
+const PRODUCT_LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.PRODUCT_LIST_CACHE_TTL_MS || 15_000));
+const PRODUCT_LIST_CACHE_MAX_ITEMS = Math.max(50, Number(process.env.PRODUCT_LIST_CACHE_MAX_ITEMS || 200));
+const productListCache = new Map();
 
 const clientSelect = {
   id: true,
@@ -56,6 +59,39 @@ const productSelect = {
   updatedAt: true
 };
 
+function productListCacheKey(req) {
+  return JSON.stringify({
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    role: req.user?.workspaceRole || req.user?.workspaceMember?.role || "",
+    query: req.query || {}
+  });
+}
+
+function getCachedProductList(key) {
+  const cached = productListCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    productListCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setProductListCache(key, value) {
+  if (productListCache.size >= PRODUCT_LIST_CACHE_MAX_ITEMS) {
+    const oldestKey = productListCache.keys().next().value;
+    if (oldestKey) productListCache.delete(oldestKey);
+  }
+  productListCache.set(key, {
+    value,
+    expiresAt: Date.now() + PRODUCT_LIST_CACHE_TTL_MS
+  });
+}
+
+function clearProductListCache() {
+  productListCache.clear();
+}
+
 async function findProductOrFail(req, id) {
   const product = await prisma.product.findFirst({ where: workspaceWhere(req, { id }) });
   if (!product) throw new ApiError(404, "Produto não encontrado.");
@@ -87,6 +123,10 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     requireAnyWorkspacePermission(["canManageProducts", "canCreateSales"])(req, res, () => {});
+    const cacheKey = productListCacheKey(req);
+    const cached = getCachedProductList(cacheKey);
+    if (cached) return res.json(cached);
+
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
@@ -99,7 +139,9 @@ router.get(
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 
-    res.json({ products: products.map(publicProduct) });
+    const payload = { products: products.map(publicProduct) };
+    setProductListCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
@@ -122,6 +164,7 @@ router.post(
       }
     });
 
+    clearProductListCache();
     clearSalesOverviewCache();
     res.status(201).json({ product: publicProduct(product) });
   })
@@ -146,6 +189,7 @@ router.put(
       }
     });
 
+    clearProductListCache();
     clearSalesOverviewCache();
     res.json({ product: publicProduct(product) });
   })
@@ -159,6 +203,7 @@ router.delete(
     const sales = await prisma.productSale.count({ where: workspaceWhere(req, { productId: req.params.id }) });
     if (sales) throw new ApiError(409, "Produto com vendas registradas deve ser inativado.");
     await prisma.product.delete({ where: { id: req.params.id } });
+    clearProductListCache();
     clearSalesOverviewCache();
     res.status(204).send();
   })
@@ -253,6 +298,7 @@ router.post(
       });
     });
 
+    clearProductListCache();
     clearSalesOverviewCache();
     res.status(201).json({ sale: publicProductSale(sale) });
   })

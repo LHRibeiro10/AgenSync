@@ -10,6 +10,10 @@ const router = Router();
 
 const NOTIFICATION_OFFSETS = new Set([10, 15, 30, 60, 120, 1440]);
 const DEFAULT_CHANNELS = ["internal", "push"];
+const NOTIFICATIONS_CACHE_TTL_MS = Math.max(5_000, Number(process.env.NOTIFICATIONS_CACHE_TTL_MS || 20_000));
+const NOTIFICATIONS_CACHE_MAX_ITEMS = Math.max(100, Number(process.env.NOTIFICATIONS_CACHE_MAX_ITEMS || 300));
+const notificationsCache = new Map();
+const notificationsInflight = new Map();
 
 const DEFAULT_WHATSAPP_REMINDER_MESSAGE =
   "Olá, {cliente}! Passando para lembrar do seu atendimento de {servico} no dia {data} às {hora}.";
@@ -34,6 +38,48 @@ function notificationWhere(req, extra = {}) {
       { workspaceId: null }
     ]
   };
+}
+
+function notificationsCacheKey(req) {
+  return JSON.stringify({
+    userId: req.user?.id || "",
+    workspaceId: req.workspaceId || "",
+    legacy: Boolean(req.workspaceLegacy),
+    limit: limitFromQuery(req.query.limit)
+  });
+}
+
+function getCachedNotifications(key) {
+  const cached = notificationsCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    notificationsCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedNotifications(key, value) {
+  if (notificationsCache.size >= NOTIFICATIONS_CACHE_MAX_ITEMS) {
+    const oldestKey = notificationsCache.keys().next().value;
+    if (oldestKey) notificationsCache.delete(oldestKey);
+  }
+  notificationsCache.set(key, {
+    value,
+    expiresAt: Date.now() + NOTIFICATIONS_CACHE_TTL_MS
+  });
+}
+
+function clearNotificationsCacheForUser(userId = "") {
+  if (!userId) {
+    notificationsCache.clear();
+    return;
+  }
+  for (const key of notificationsCache.keys()) {
+    if (key.includes(`"userId":"${userId}"`)) notificationsCache.delete(key);
+  }
+  for (const key of notificationsInflight.keys()) {
+    if (key.includes(`"userId":"${userId}"`)) notificationsInflight.delete(key);
+  }
 }
 
 function notificationSettingsFromUser(user) {
@@ -197,6 +243,7 @@ router.post(
       actionUrl: "/agenda"
     });
 
+    clearNotificationsCacheForUser(req.user.id);
     res.status(201).json({ notification: publicNotification(notification) });
   })
 );
@@ -204,19 +251,32 @@ router.post(
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const [notifications, unreadCount] = await Promise.all([
+    const cacheKey = notificationsCacheKey(req);
+    const cached = getCachedNotifications(cacheKey);
+    if (cached) return res.json(cached);
+    const inflight = notificationsInflight.get(cacheKey);
+    if (inflight) return res.json(await inflight);
+
+    const payloadPromise = Promise.all([
       prisma.notification.findMany({
         where: notificationWhere(req),
         orderBy: [{ createdAt: "desc" }],
         take: limitFromQuery(req.query.limit)
       }),
       prisma.notification.count({ where: notificationWhere(req, { readAt: null }) })
-    ]);
+    ])
+      .then(([notifications, unreadCount]) => ({
+        notifications: notifications.map(publicNotification),
+        unreadCount
+      }))
+      .finally(() => {
+        notificationsInflight.delete(cacheKey);
+      });
 
-    res.json({
-      notifications: notifications.map(publicNotification),
-      unreadCount
-    });
+    notificationsInflight.set(cacheKey, payloadPromise);
+    const payload = await payloadPromise;
+    setCachedNotifications(cacheKey, payload);
+    res.json(payload);
   })
 );
 
@@ -228,6 +288,7 @@ router.patch(
       data: { readAt: new Date() }
     });
 
+    clearNotificationsCacheForUser(req.user.id);
     res.json({ ok: true });
   })
 );
@@ -239,6 +300,7 @@ router.delete(
       where: notificationWhere(req)
     });
 
+    clearNotificationsCacheForUser(req.user.id);
     res.json({ ok: true, deletedCount: result.count });
   })
 );
@@ -257,6 +319,7 @@ router.patch(
       data: { readAt: notification.readAt || new Date() }
     });
 
+    clearNotificationsCacheForUser(req.user.id);
     res.json({ notification: publicNotification(updated) });
   })
 );
@@ -270,6 +333,7 @@ router.delete(
 
     if (!result.count) throw new ApiError(404, "Notificacao nao encontrada.");
 
+    clearNotificationsCacheForUser(req.user.id);
     res.json({ ok: true });
   })
 );

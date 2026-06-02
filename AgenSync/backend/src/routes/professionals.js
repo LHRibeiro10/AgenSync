@@ -25,6 +25,43 @@ import { clearTeamOverviewCache } from "./workspace.js";
 
 const router = Router();
 const accessRoles = new Set(["ADMIN", "PROFESSIONAL"]);
+const PROFESSIONAL_LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.PROFESSIONAL_LIST_CACHE_TTL_MS || 15_000));
+const PROFESSIONAL_LIST_CACHE_MAX_ITEMS = Math.max(50, Number(process.env.PROFESSIONAL_LIST_CACHE_MAX_ITEMS || 200));
+const professionalListCache = new Map();
+
+function professionalListCacheKey(req) {
+  return JSON.stringify({
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    role: req.user?.workspaceRole || req.user?.workspaceMember?.role || "",
+    professionalId: req.user?.professionalId || "",
+    query: req.query || {}
+  });
+}
+
+function getCachedProfessionalList(key) {
+  const cached = professionalListCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    professionalListCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setProfessionalListCache(key, value) {
+  if (professionalListCache.size >= PROFESSIONAL_LIST_CACHE_MAX_ITEMS) {
+    const oldestKey = professionalListCache.keys().next().value;
+    if (oldestKey) professionalListCache.delete(oldestKey);
+  }
+  professionalListCache.set(key, {
+    value,
+    expiresAt: Date.now() + PROFESSIONAL_LIST_CACHE_TTL_MS
+  });
+}
+
+export function clearProfessionalListCache() {
+  professionalListCache.clear();
+}
 
 function includeStatsFromQuery(query) {
   return String(query?.includeStats || "").trim().toLowerCase() === "true";
@@ -157,6 +194,10 @@ async function assertCanCreateWorkspaceAccess(req, role) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const cacheKey = professionalListCacheKey(req);
+    const cached = getCachedProfessionalList(cacheKey);
+    if (cached) return res.json(cached);
+
     const where = workspaceWhere(req);
     if (isWorkspaceProfessional(req.user)) {
       if (!req.user.professionalId) {
@@ -197,7 +238,9 @@ router.get(
         }))
       : professionals;
 
-    res.json({ professionals: responseProfessionals.map(publicProfessional) });
+    const payload = { professionals: responseProfessionals.map(publicProfessional) };
+    setProfessionalListCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
@@ -221,6 +264,7 @@ router.post(
       data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, role, email, phone, monthlyGoal, isActive }
     });
 
+    clearProfessionalListCache();
     clearTeamOverviewCache();
     res.status(201).json({ professional: publicProfessional(professional) });
   })
@@ -295,6 +339,7 @@ router.post(
       return { user, member, professional: updatedProfessional };
     });
 
+    clearProfessionalListCache();
     clearTeamOverviewCache();
     invalidateAuthUserCache(result.user.id);
     await recordAuditEvent({
@@ -390,6 +435,7 @@ router.put(
       return { user: updatedUser, member: updatedMember, professional: updatedProfessional };
     });
 
+    clearProfessionalListCache();
     clearTeamOverviewCache();
     invalidateAuthUserCache(result.user.id);
     await recordAuditEvent({
@@ -497,6 +543,7 @@ router.put(
       });
     });
 
+    clearProfessionalListCache();
     clearTeamOverviewCache();
     professional.workspaceMembers.forEach((member) => invalidateAuthUserCache(member.userId));
 
@@ -542,6 +589,7 @@ router.delete(
       await tx.professional.delete({ where: { id: req.params.id } });
     });
 
+    clearProfessionalListCache();
     clearTeamOverviewCache();
     accessUserIds.forEach((userId) => invalidateAuthUserCache(userId));
     res.status(204).send();

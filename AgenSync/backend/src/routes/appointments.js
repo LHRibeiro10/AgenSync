@@ -13,6 +13,7 @@ import {
 } from "../utils/accessControl.js";
 import { normalizeStatus, publicAppointment, publicClient, publicProfessional, publicService } from "../utils/formatters.js";
 import { syncAppointmentReminders } from "../services/appointmentReminderService.js";
+import { clearProfessionalListCache } from "./professionals.js";
 import {
   optionalString,
   parseBoolean,
@@ -23,6 +24,9 @@ import {
 } from "../utils/validation.js";
 
 const router = Router();
+const APPOINTMENTS_CACHE_TTL_MS = Math.max(5_000, Number(process.env.APPOINTMENTS_CACHE_TTL_MS || 10_000));
+const APPOINTMENTS_CACHE_MAX_ITEMS = Math.max(100, Number(process.env.APPOINTMENTS_CACHE_MAX_ITEMS || 300));
+const appointmentsCache = new Map();
 
 const clientSelect = {
   id: true,
@@ -80,6 +84,42 @@ const appointmentSelect = {
     }
   }
 };
+
+function appointmentsCacheKey(req, suffix = "list") {
+  return JSON.stringify({
+    suffix,
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    role: req.user?.workspaceRole || req.user?.workspaceMember?.role || "",
+    professionalId: req.user?.professionalId || "",
+    query: req.query || {}
+  });
+}
+
+function getCachedAppointments(key) {
+  const cached = appointmentsCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    appointmentsCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setAppointmentsCache(key, value) {
+  if (appointmentsCache.size >= APPOINTMENTS_CACHE_MAX_ITEMS) {
+    const oldestKey = appointmentsCache.keys().next().value;
+    if (oldestKey) appointmentsCache.delete(oldestKey);
+  }
+  appointmentsCache.set(key, {
+    value,
+    expiresAt: Date.now() + APPOINTMENTS_CACHE_TTL_MS
+  });
+}
+
+function clearAppointmentReadCaches() {
+  appointmentsCache.clear();
+  clearProfessionalListCache();
+}
 
 async function findAppointmentOrFail(user, id) {
   const scope = isWorkspaceProfessional(user)
@@ -254,6 +294,10 @@ async function listAppointmentBootstrap(req) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const cacheKey = appointmentsCacheKey(req);
+    const cached = getCachedAppointments(cacheKey);
+    if (cached) return res.json(cached);
+
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
@@ -267,13 +311,19 @@ router.get(
       orderBy: [{ startsAt: "asc" }]
     });
 
-    res.json({ appointments: appointments.map(publicAppointment) });
+    const payload = { appointments: appointments.map(publicAppointment) };
+    setAppointmentsCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
 router.get(
   "/overview",
   asyncHandler(async (req, res) => {
+    const cacheKey = appointmentsCacheKey(req, "overview");
+    const cached = getCachedAppointments(cacheKey);
+    if (cached) return res.json(cached);
+
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
@@ -290,10 +340,12 @@ router.get(
       req.query.includeBootstrap === "false" ? Promise.resolve(null) : listAppointmentBootstrap(req)
     ]);
 
-    res.json({
+    const payload = {
       appointments: appointments.map(publicAppointment),
       ...(bootstrap ? { bootstrap } : {})
-    });
+    };
+    setAppointmentsCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
@@ -361,6 +413,7 @@ router.post(
 
     await syncAppointmentReminders(appointment);
 
+    clearAppointmentReadCaches();
     res.status(201).json({ appointment: publicAppointment(appointment) });
   })
 );
@@ -463,6 +516,7 @@ router.put(
 
     await syncAppointmentReminders(appointment);
 
+    clearAppointmentReadCaches();
     res.json({ appointment: publicAppointment(appointment) });
   })
 );
@@ -472,6 +526,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     await findAppointmentOrFail(req.user, req.params.id);
     await prisma.appointment.delete({ where: { id: req.params.id } });
+    clearAppointmentReadCaches();
     res.status(204).send();
   })
 );

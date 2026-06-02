@@ -23,6 +23,9 @@ import { listSubscriptionCycles, subscriptionSummary, sumPaidSubscriptionCycles 
 import { money } from "../utils.js";
 
 const MONTHLY_GOAL_KEY = "agensync_monthly_goal";
+const DASHBOARD_VIEW_CACHE_KEY = "agensync_dashboard_view_cache_v1";
+const DASHBOARD_VIEW_CACHE_TTL_MS = 5 * 60 * 1000;
+const DASHBOARD_PROFESSIONALS_CACHE_KEY = "agensync_dashboard_professionals_cache_v1";
 const DEFAULT_MONTHLY_GOAL = 3000;
 const WORKDAY_SLOTS = 8;
 
@@ -151,6 +154,64 @@ function readMonthlyGoal() {
   return Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_MONTHLY_GOAL;
 }
 
+function dashboardCacheId(user, filters) {
+  return [
+    user?.id || "",
+    user?.currentWorkspaceId || user?.currentWorkspace?.id || "",
+    filterKey(filters)
+  ].join("|");
+}
+
+function readJsonCache(key) {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(window.sessionStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function writeJsonCache(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage failures in restricted browser contexts.
+  }
+}
+
+function readDashboardSnapshot(user, filters) {
+  const cached = readJsonCache(DASHBOARD_VIEW_CACHE_KEY);
+  if (!cached || cached.cacheId !== dashboardCacheId(user, filters)) return null;
+  if (Date.now() - Number(cached.savedAt || 0) > DASHBOARD_VIEW_CACHE_TTL_MS) return null;
+  return cached.snapshot || null;
+}
+
+function writeDashboardSnapshot(user, filters, snapshot) {
+  writeJsonCache(DASHBOARD_VIEW_CACHE_KEY, {
+    cacheId: dashboardCacheId(user, filters),
+    savedAt: Date.now(),
+    snapshot
+  });
+}
+
+function readProfessionalsSnapshot(user) {
+  const cached = readJsonCache(DASHBOARD_PROFESSIONALS_CACHE_KEY);
+  const workspaceId = user?.currentWorkspaceId || user?.currentWorkspace?.id || "";
+  if (!cached || cached.userId !== user?.id || cached.workspaceId !== workspaceId) return null;
+  if (Date.now() - Number(cached.savedAt || 0) > DASHBOARD_VIEW_CACHE_TTL_MS) return null;
+  return Array.isArray(cached.professionals) ? cached.professionals : null;
+}
+
+function writeProfessionalsSnapshot(user, professionals) {
+  writeJsonCache(DASHBOARD_PROFESSIONALS_CACHE_KEY, {
+    userId: user?.id || "",
+    workspaceId: user?.currentWorkspaceId || user?.currentWorkspace?.id || "",
+    savedAt: Date.now(),
+    professionals
+  });
+}
+
 function bestClientFrom(appointments, sales = [], subscriptionCycles = []) {
   const totals = new Map();
 
@@ -275,9 +336,25 @@ export default function Dashboard() {
   const { showToast } = useToast();
   const { progress } = useOnboarding();
 
+  function applyDashboardSnapshot(snapshot) {
+    setData(snapshot.data || null);
+    setPreviousAppointments(snapshot.previousAppointments || []);
+    setTeamAppointments(snapshot.teamAppointments || []);
+    setPreviousSales(snapshot.previousSales || []);
+    setPreviousExpenses(snapshot.previousExpenses || []);
+    setPreviousSubscriptions(snapshot.previousSubscriptions || []);
+    setTomorrowAppointments(snapshot.tomorrowAppointments || []);
+  }
+
   async function load(nextFilters = appliedFilters) {
     lastLoadedFiltersKey.current = filterKey(nextFilters);
-    setLoading(true);
+    const cachedSnapshot = readDashboardSnapshot(user, nextFilters);
+    if (cachedSnapshot) {
+      applyDashboardSnapshot(cachedSnapshot);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError("");
 
     try {
@@ -338,7 +415,8 @@ export default function Dashboard() {
           const grossMonth = servicesMonth + visibleProductsMonth + visibleSubscriptionsMonth;
           const totalExpensesMonth = isProfessionalScope ? 0 : sumExpenses(monthExpenses);
 
-          setData({
+          const snapshot = {
+            data: {
             ...dashboardData,
             appointmentsToday: periodAppointments.length,
             earnedToday: grossPeriod,
@@ -366,13 +444,16 @@ export default function Dashboard() {
             subscriptionSummary: isProfessionalScope
               ? { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 }
               : currentSubscriptionSummary
-          });
-          setPreviousAppointments(previousPeriodAppointments);
-          setTeamAppointments(overview.appointments?.team || periodAppointments);
-          setPreviousSales(isProfessionalScope ? [] : comparisonSales);
-          setPreviousExpenses(isProfessionalScope ? [] : comparisonExpenses);
-          setPreviousSubscriptions(isProfessionalScope ? [] : comparisonSubscriptions);
-          setTomorrowAppointments(tomorrowPeriodAppointments);
+            },
+            previousAppointments: previousPeriodAppointments,
+            teamAppointments: overview.appointments?.team || periodAppointments,
+            previousSales: isProfessionalScope ? [] : comparisonSales,
+            previousExpenses: isProfessionalScope ? [] : comparisonExpenses,
+            previousSubscriptions: isProfessionalScope ? [] : comparisonSubscriptions,
+            tomorrowAppointments: tomorrowPeriodAppointments
+          };
+          applyDashboardSnapshot(snapshot);
+          writeDashboardSnapshot(user, nextFilters, snapshot);
           return;
         }
       } catch (overviewError) {
@@ -471,7 +552,8 @@ export default function Dashboard() {
       const grossMonth = servicesMonth + visibleProductsMonth + visibleSubscriptionsMonth;
       const totalExpensesMonth = isProfessionalScope ? 0 : sumExpenses(monthExpenses);
 
-      setData({
+      const snapshot = {
+        data: {
         ...dashboardData,
         appointmentsToday: appointmentsData.appointments.length,
         earnedToday: grossPeriod,
@@ -499,13 +581,16 @@ export default function Dashboard() {
         subscriptionSummary: isProfessionalScope
           ? { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0 }
           : currentSubscriptionSummary
-      });
-      setPreviousAppointments(previousData.appointments);
-      setTeamAppointments(teamData?.appointments || appointmentsData.appointments);
-      setPreviousSales(isProfessionalScope ? [] : comparisonSales);
-      setPreviousExpenses(isProfessionalScope ? [] : comparisonExpenses);
-      setPreviousSubscriptions(isProfessionalScope ? [] : comparisonSubscriptions);
-      setTomorrowAppointments(tomorrowData.appointments);
+        },
+        previousAppointments: previousData.appointments,
+        teamAppointments: teamData?.appointments || appointmentsData.appointments,
+        previousSales: isProfessionalScope ? [] : comparisonSales,
+        previousExpenses: isProfessionalScope ? [] : comparisonExpenses,
+        previousSubscriptions: isProfessionalScope ? [] : comparisonSubscriptions,
+        tomorrowAppointments: tomorrowData.appointments
+      };
+      applyDashboardSnapshot(snapshot);
+      writeDashboardSnapshot(user, nextFilters, snapshot);
     } catch (err) {
       setData(null);
       setTeamAppointments([]);
@@ -548,13 +633,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (!viewReady) return undefined;
     let ignore = false;
+    const cachedProfessionals = readProfessionalsSnapshot(user);
+    if (cachedProfessionals) setProfessionals(cachedProfessionals);
 
     async function loadProfessionals() {
       try {
         const result = await listProfessionals({ active: true });
-        if (!ignore) setProfessionals(result.professionals || []);
+        if (!ignore) {
+          const nextProfessionals = result.professionals || [];
+          setProfessionals(nextProfessionals);
+          writeProfessionalsSnapshot(user, nextProfessionals);
+        }
       } catch {
-        if (!ignore) setProfessionals([]);
+        if (!ignore && !cachedProfessionals) setProfessionals([]);
       }
     }
 
@@ -563,7 +654,7 @@ export default function Dashboard() {
     return () => {
       ignore = true;
     };
-  }, [viewReady]);
+  }, [user, viewReady]);
 
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));
