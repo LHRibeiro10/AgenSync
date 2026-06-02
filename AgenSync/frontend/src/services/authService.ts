@@ -121,6 +121,18 @@ function safeTokenForAuthHeader(token: string) {
   return safeToken;
 }
 
+const BACKEND_ME_CACHE_TTL_MS = 15_000;
+const backendMeCache = new Map<string, { expiresAt: number; value: any; inflight?: Promise<any> }>();
+
+function clearBackendMeCache() {
+  backendMeCache.clear();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("agensync:http-cache-cleared", clearBackendMeCache);
+  window.addEventListener("agensync:clear-user-cache", clearBackendMeCache);
+}
+
 async function requestBackendMe(token: string, authEvent = "") {
   const safeToken = safeTokenForAuthHeader(token);
   const apiBaseUrl = resolveApiBaseUrl();
@@ -131,40 +143,61 @@ async function requestBackendMe(token: string, authEvent = "") {
   });
   if (!apiBaseUrl || !safeToken) return null;
 
+  const cacheKey = `${apiBaseUrl}:${safeToken}`;
+  const cached = backendMeCache.get(cacheKey);
+  if (cached?.value && cached.expiresAt > Date.now()) return cached.value;
+  if (cached?.inflight) return cached.inflight;
+
   try {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${safeToken}`
-    };
-    if (authEvent) headers["X-AgenSync-Auth-Event"] = authEvent;
+    const requestPromise = (async () => {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${safeToken}`
+      };
+      if (authEvent) headers["X-AgenSync-Auth-Event"] = authEvent;
 
-    const response = await fetch(`${apiBaseUrl}/auth/me`, {
-      method: "GET",
-      headers
+      const response = await fetch(`${apiBaseUrl}/auth/me`, {
+        method: "GET",
+        headers
+      });
+      authDebug("backend_me.response", { status: response.status, ok: response.ok });
+
+      if (!response.ok) {
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          const backendCode = payload?.details?.code || payload?.code || "";
+          throw authError(payload?.message || "Sua sessao nao esta mais ativa.", "BACKEND_AUTH_DENIED", {
+            ...(payload?.details || {}),
+            backendCode,
+            status: response.status
+          });
+        }
+
+        return null;
+      }
+      const payload = await response.json();
+      return payload?.user || null;
+    })();
+
+    backendMeCache.set(cacheKey, {
+      value: null,
+      expiresAt: 0,
+      inflight: requestPromise
     });
-    authDebug("backend_me.response", { status: response.status, ok: response.ok });
 
-    if (!response.ok) {
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-
-      if (response.status === 401 || response.status === 403) {
-        const backendCode = payload?.details?.code || payload?.code || "";
-        throw authError(payload?.message || "Sua sessao nao esta mais ativa.", "BACKEND_AUTH_DENIED", {
-          ...(payload?.details || {}),
-          backendCode,
-          status: response.status
-        });
-      }
-
-      return null;
-    }
-    const payload = await response.json();
-    return payload?.user || null;
+    const user = await requestPromise;
+    backendMeCache.set(cacheKey, {
+      value: user,
+      expiresAt: Date.now() + BACKEND_ME_CACHE_TTL_MS
+    });
+    return user;
   } catch (error) {
+    backendMeCache.delete(cacheKey);
     if (isBackendAuthDeniedError(error)) throw error;
     return null;
   }

@@ -238,7 +238,7 @@ export default function Appointments() {
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const { markStepComplete } = useOnboarding();
-  const { selectedProfessionalId } = useWorkspaceView();
+  const { selectedProfessionalId, viewReady } = useWorkspaceView();
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === form.serviceId),
@@ -259,6 +259,7 @@ export default function Appointments() {
   }
 
   async function load() {
+    if (!viewReady) return;
     setLoading(true);
     setError("");
     try {
@@ -280,8 +281,9 @@ export default function Appointments() {
   }
 
   useEffect(() => {
+    if (!viewReady) return;
     load();
-  }, [markStepComplete, selectedProfessionalId]);
+  }, [markStepComplete, selectedProfessionalId, viewReady]);
 
   useEffect(() => {
     if (loading || editing || form.professionalId) return;

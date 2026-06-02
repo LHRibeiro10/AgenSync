@@ -24,6 +24,8 @@ function httpDebug(label, data = {}) {
 export function createHttpClient({
   baseURL,
   defaultHeaders = { "Content-Type": "application/json" },
+  defaultGetCacheTtlMs = 15_000,
+  maxCacheEntries = 300,
   getAuthToken,
   onUnauthorized
 } = {}) {
@@ -46,6 +48,11 @@ export function createHttpClient({
   }
 
   function setCachedResponse(key, value, ttlMs) {
+    if (responseCache.size >= maxCacheEntries) {
+      const oldestKey = responseCache.keys().next().value;
+      if (oldestKey) responseCache.delete(oldestKey);
+    }
+
     responseCache.set(key, {
       value,
       expiresAt: Date.now() + ttlMs
@@ -55,6 +62,9 @@ export function createHttpClient({
   function clearResponseCache() {
     responseCache.clear();
     inflightRequests.clear();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("agensync:http-cache-cleared"));
+    }
   }
 
   async function request(path, options = {}) {
@@ -65,7 +75,7 @@ export function createHttpClient({
       body,
       rawBody = false,
       omitAuth = false,
-      cacheTtlMs = 0,
+      cacheTtlMs,
       ...rest
     } = options;
     const requestHeaders = { ...defaultHeaders, ...headers };
@@ -100,7 +110,11 @@ export function createHttpClient({
     const url = resolveUrl(baseURL, context.path, params);
     const requestMethod = String(context.config.method || method).toUpperCase();
     const canShareInflight = requestMethod === "GET";
-    const canUseCache = canShareInflight && cacheTtlMs > 0;
+    const effectiveCacheTtlMs =
+      canShareInflight && cacheTtlMs !== 0
+        ? Number(cacheTtlMs ?? defaultGetCacheTtlMs)
+        : 0;
+    const canUseCache = canShareInflight && effectiveCacheTtlMs > 0;
     const cacheKey = canShareInflight ? buildCacheKey(url, requestHeaders.Authorization) : "";
 
     if (canShareInflight) {
@@ -160,7 +174,7 @@ export function createHttpClient({
       }
 
       if (canUseCache) {
-        setCachedResponse(cacheKey, result, cacheTtlMs);
+        setCachedResponse(cacheKey, result, effectiveCacheTtlMs);
       } else if (requestMethod !== "GET") {
         clearResponseCache();
       }

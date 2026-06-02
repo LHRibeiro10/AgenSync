@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../api/client.js";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "./AuthContext.jsx";
+import { getInitialOnboardingStatus } from "../services/initialOnboardingService.js";
 
 const OnboardingContext = createContext(null);
 
@@ -159,16 +159,13 @@ export function OnboardingProvider({ children }) {
 
     setChecklistLoading(true);
     try {
-      const [servicesData, clientsData, appointmentsData] = await Promise.all([
-        api.listServices({ take: 1 }),
-        api.listClients({ take: 1 }),
-        api.listAppointments({ take: 1 })
-      ]);
+      const status = await getInitialOnboardingStatus();
+      const counts = status?.counts || {};
 
       const nextSteps = {
-        service: Array.isArray(servicesData?.services) && servicesData.services.length > 0,
-        client: Array.isArray(clientsData?.clients) && clientsData.clients.length > 0,
-        appointment: Array.isArray(appointmentsData?.appointments) && appointmentsData.appointments.length > 0
+        service: Number(counts.services || 0) > 0,
+        client: Number(counts.clients || 0) > 0,
+        appointment: Number(counts.appointments || 0) > 0
       };
       const hasExistingSetup = Object.values(nextSteps).some(Boolean);
 

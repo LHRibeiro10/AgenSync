@@ -179,9 +179,10 @@ export default function Finance() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const { showToast } = useToast();
-  const { selectedProfessionalId } = useWorkspaceView();
+  const { selectedProfessionalId, viewReady } = useWorkspaceView();
 
   useEffect(() => {
+    if (!viewReady) return undefined;
     let active = true;
     const selected = parseDate(appliedFilters.endDate);
     const currentWeekStart = formatInputDate(addDays(selected, -6));
@@ -293,7 +294,7 @@ export default function Finance() {
     return () => {
       active = false;
     };
-  }, [appliedFilters, reloadKey, selectedProfessionalId]);
+  }, [appliedFilters, reloadKey, selectedProfessionalId, viewReady]);
 
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));
