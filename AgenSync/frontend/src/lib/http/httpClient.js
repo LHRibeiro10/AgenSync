@@ -21,6 +21,15 @@ function httpDebug(label, data = {}) {
   console.info(`[HTTP_DEBUG] ${label}`, data);
 }
 
+function hashKey(value) {
+  let hash = 5381;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 33) ^ text.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function createHttpClient({
   baseURL,
   defaultHeaders = { "Content-Type": "application/json" },
@@ -33,21 +42,45 @@ export function createHttpClient({
   const responseInterceptors = [];
   const responseCache = new Map();
   const inflightRequests = new Map();
+  const persistentCachePrefix = "agensync_http_cache_v1:";
 
   function buildCacheKey(url, authHeader) {
     return `${authHeader || "public"}:${url}`;
+  }
+
+  function persistentCacheKey(key) {
+    return `${persistentCachePrefix}${hashKey(key)}`;
+  }
+
+  function getPersistentCachedResponse(key) {
+    if (typeof window === "undefined" || !window.sessionStorage) return null;
+    try {
+      const cached = JSON.parse(window.sessionStorage.getItem(persistentCacheKey(key)) || "null");
+      if (!cached || cached.expiresAt <= Date.now()) {
+        window.sessionStorage.removeItem(persistentCacheKey(key));
+        return null;
+      }
+      responseCache.set(key, {
+        value: cached.value,
+        expiresAt: cached.expiresAt
+      });
+      return cached.value;
+    } catch {
+      return null;
+    }
   }
 
   function getCachedResponse(key) {
     const cached = responseCache.get(key);
     if (!cached || cached.expiresAt <= Date.now()) {
       responseCache.delete(key);
-      return null;
+      return getPersistentCachedResponse(key);
     }
     return cached.value;
   }
 
   function setCachedResponse(key, value, ttlMs) {
+    const expiresAt = Date.now() + ttlMs;
     if (responseCache.size >= maxCacheEntries) {
       const oldestKey = responseCache.keys().next().value;
       if (oldestKey) responseCache.delete(oldestKey);
@@ -55,14 +88,29 @@ export function createHttpClient({
 
     responseCache.set(key, {
       value,
-      expiresAt: Date.now() + ttlMs
+      expiresAt
     });
+
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem(persistentCacheKey(key), JSON.stringify({ value, expiresAt }));
+      } catch {
+        // Session storage can be full or unavailable; memory cache still works.
+      }
+    }
   }
 
   function clearResponseCache() {
     responseCache.clear();
     inflightRequests.clear();
     if (typeof window !== "undefined") {
+      try {
+        Object.keys(window.sessionStorage || {})
+          .filter((key) => key.startsWith(persistentCachePrefix))
+          .forEach((key) => window.sessionStorage.removeItem(key));
+      } catch {
+        // Ignore storage cleanup failures.
+      }
       window.dispatchEvent(new Event("agensync:http-cache-cleared"));
     }
   }

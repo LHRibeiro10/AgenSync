@@ -28,38 +28,22 @@ export default function History() {
     setLoading(true);
     setError("");
     try {
-      const appointmentsData = await api.listAppointments({
+      const appointmentsData = await api.appointmentsOverview({
         startDate: nextFilters.startDate,
         endDate: nextFilters.endDate,
         clientId: nextFilters.clientId,
         status: nextFilters.status
       });
       setAppointments(appointmentsData.appointments);
+      if (appointmentsData.bootstrap?.clients) {
+        setClients(appointmentsData.bootstrap.clients);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    let active = true;
-    api
-      .listClients()
-      .then((clientsData) => {
-        if (!active) return;
-        setClients(clientsData.clients);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setClients([]);
-        setError(err.message);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     load();

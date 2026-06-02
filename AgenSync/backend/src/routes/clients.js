@@ -6,6 +6,44 @@ import { publicClient, publicClientCareRecord, publicProduct, publicService } fr
 import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
 
 const router = Router();
+const CLIENT_LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.CLIENT_LIST_CACHE_TTL_MS || 15_000));
+const CLIENT_LIST_CACHE_MAX_ITEMS = Math.max(50, Number(process.env.CLIENT_LIST_CACHE_MAX_ITEMS || 200));
+const clientListCache = new Map();
+
+function clientListCacheKey(req, scope = "list") {
+  return JSON.stringify({
+    scope,
+    workspaceId: req.workspaceId || "",
+    userId: req.user?.id || "",
+    role: req.user?.workspaceRole || req.user?.workspaceMember?.role || "",
+    professionalId: req.user?.professionalId || "",
+    query: req.query || {}
+  });
+}
+
+function getCachedClientList(key) {
+  const cached = clientListCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    clientListCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setClientListCache(key, value) {
+  if (clientListCache.size >= CLIENT_LIST_CACHE_MAX_ITEMS) {
+    const oldestKey = clientListCache.keys().next().value;
+    if (oldestKey) clientListCache.delete(oldestKey);
+  }
+  clientListCache.set(key, {
+    value,
+    expiresAt: Date.now() + CLIENT_LIST_CACHE_TTL_MS
+  });
+}
+
+function clearClientListCache() {
+  clientListCache.clear();
+}
 
 async function findClientOrFail(req, id) {
   const client = await prisma.client.findFirst({ where: clientAccessWhere(req, { id }) });
@@ -83,6 +121,10 @@ function normalizeImportedClient(row, index) {
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const cacheKey = clientListCacheKey(req);
+    const cached = getCachedClientList(cacheKey);
+    if (cached) return res.json(cached);
+
     const pagination = parsePagination(req.query, {
       defaultPageSize: 120,
       maxPageSize: 300
@@ -98,13 +140,19 @@ router.get(
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
 
-    res.json({ clients: clients.map(publicClient) });
+    const payload = { clients: clients.map(publicClient) };
+    setClientListCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
 router.get(
   "/overview",
   asyncHandler(async (req, res) => {
+    const cacheKey = clientListCacheKey(req, "overview");
+    const cached = getCachedClientList(cacheKey);
+    if (cached) return res.json(cached);
+
     const includeInactive = parseBoolean(req.query.includeInactive, true);
     const [clients, services, products] = await Promise.all([
       prisma.client.findMany({
@@ -127,13 +175,15 @@ router.get(
       })
     ]);
 
-    res.json({
+    const payload = {
       clients: clients.map(publicClient),
       bootstrap: {
         services: services.map(publicService),
         products: products.map(publicProduct)
       }
-    });
+    };
+    setClientListCache(cacheKey, payload);
+    res.json(payload);
   })
 );
 
@@ -150,6 +200,7 @@ router.post(
       data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, phone, email, notes }
     });
 
+    clearClientListCache();
     res.status(201).json({ client: publicClient(client) });
   })
 );
@@ -222,6 +273,7 @@ router.post(
       imported = created.count;
     }
 
+    clearClientListCache();
     res.status(201).json({
       summary: {
         totalRows: rows.length,
@@ -308,6 +360,7 @@ router.put(
       }
     });
 
+    clearClientListCache();
     res.json({ client: publicClient(client) });
   })
 );
@@ -327,6 +380,7 @@ router.delete(
     }
 
     await prisma.client.delete({ where: { id: req.params.id } });
+    clearClientListCache();
     res.status(204).send();
   })
 );
