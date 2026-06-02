@@ -36,7 +36,7 @@ function cellXml(cell, rowIndex, columnIndex) {
 }
 
 function buildSheetXml(rows, merges = []) {
-  const widths = [17, 26, 28, 18, 24, 14];
+  const widths = [17, 26, 28, 18, 24, 18, 18];
   const cols = widths
     .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
     .join("");
@@ -322,14 +322,15 @@ function sanitizeFilePart(value) {
 export function exportFinancialReportExcel(report) {
   const rows = [];
   const merges = [];
+  const paidSubscriptions = (report.periodSubscriptions || []).filter((cycle) => cycle.status === "paid");
 
   rows.push(titleRow("AgenSync"));
-  merges.push("A1:F1");
+  merges.push("A1:G1");
   rows.push(row([{ value: `Relatório financeiro · ${report.periodLabel}`, style: 2 }], 22));
-  merges.push("A2:F2");
+  merges.push("A2:G2");
 
   rows.push(section("ATENDIMENTOS"));
-  merges.push(`A${rows.length}:F${rows.length}`);
+  merges.push(`A${rows.length}:G${rows.length}`);
   rows.push(header(["Data", "Hora", "Cliente", "Serviço", "Valor", "Status"]));
   if (report.completedAppointments.length) {
     report.completedAppointments.forEach((appointment) => {
@@ -344,12 +345,12 @@ export function exportFinancialReportExcel(report) {
     });
   } else {
     rows.push(row([{ value: "Nenhum atendimento concluído no período.", style: 13 }]));
-    merges.push(`A${rows.length}:F${rows.length}`);
+    merges.push(`A${rows.length}:G${rows.length}`);
   }
   rows.push(blank());
 
   rows.push(section("DESPESAS"));
-  merges.push(`A${rows.length}:F${rows.length}`);
+  merges.push(`A${rows.length}:G${rows.length}`);
   rows.push(header(["Data", "Descrição", "Categoria", "Valor", "Observações", ""]));
   if (report.periodExpenses.length) {
     report.periodExpenses.forEach((expense) => {
@@ -364,12 +365,12 @@ export function exportFinancialReportExcel(report) {
     });
   } else {
     rows.push(row([{ value: "Nenhuma despesa no período.", style: 13 }]));
-    merges.push(`A${rows.length}:F${rows.length}`);
+    merges.push(`A${rows.length}:G${rows.length}`);
   }
   rows.push(blank());
 
   rows.push(section("VENDAS DE PRODUTOS"));
-  merges.push(`A${rows.length}:F${rows.length}`);
+  merges.push(`A${rows.length}:G${rows.length}`);
   rows.push(header(["Data", "Produto", "Quantidade", "Valor total", "Cliente", ""]));
   if (report.periodSales.length) {
     report.periodSales.forEach((sale) => {
@@ -384,14 +385,36 @@ export function exportFinancialReportExcel(report) {
     });
   } else {
     rows.push(row([{ value: "Nenhuma venda de produto no período.", style: 13 }]));
-    merges.push(`A${rows.length}:F${rows.length}`);
+    merges.push(`A${rows.length}:G${rows.length}`);
+  }
+
+  rows.push(blank());
+  rows.push(section("MENSALIDADES PAGAS"));
+  merges.push(`A${rows.length}:G${rows.length}`);
+  rows.push(header(["Data pagamento", "Cliente", "Plano", "Competencia", "Vencimento", "Valor", "Forma"]));
+  if (paidSubscriptions.length) {
+    paidSubscriptions.forEach((cycle) => {
+      rows.push(row([
+        { value: cycle.paidAt || cycle.dueDate || "", style: 5 },
+        { value: cycle.clientName || "", style: 5 },
+        { value: cycle.planName || "", style: 5 },
+        { value: cycle.month || "", style: 5 },
+        { value: cycle.dueDate || "", style: 5 },
+        { value: Number(cycle.amount || 0), style: 7 },
+        { value: cycle.paymentMethod || "", style: 5 }
+      ]));
+    });
+  } else {
+    rows.push(row([{ value: "Nenhuma mensalidade paga no periodo.", style: 13 }]));
+    merges.push(`A${rows.length}:G${rows.length}`);
   }
 
   rows.push(blank());
   rows.push(section("RESUMO"));
-  merges.push(`A${rows.length}:F${rows.length}`);
+  merges.push(`A${rows.length}:G${rows.length}`);
   rows.push(header([
     "Receita com produtos",
+    "Receita com mensalidades",
     "Receita com serviços",
     "Atendimentos concluídos",
     "Faturamento bruto",
@@ -400,6 +423,7 @@ export function exportFinancialReportExcel(report) {
   ]));
   rows.push(row([
     { value: report.productsPeriod, style: 6 },
+    { value: report.subscriptionsPeriod || 0, style: 6 },
     { value: report.servicesPeriod, style: 6 },
     { value: report.completedAppointments.length, style: 5 },
     { value: report.grossPeriod, style: 7 },

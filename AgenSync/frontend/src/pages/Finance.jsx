@@ -403,12 +403,14 @@ export default function Finance() {
         netPeriod,
         servicesPeriod,
         productsPeriod,
+        subscriptionsPeriod,
         completedAppointments,
         periodExpenses: periodExpenses.map((expense) => ({
           ...expense,
           categoryLabel: expenseCategoryLabel(expense.category)
         })),
-        periodSales
+        periodSales,
+        periodSubscriptions
       });
       showToast(`Planilha ${filename} gerada.`);
     } catch {
