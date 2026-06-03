@@ -166,6 +166,7 @@ export default function Finance() {
   const [previousWeekSales, setPreviousWeekSales] = useState([]);
   const [currentWeekSubscriptions, setCurrentWeekSubscriptions] = useState([]);
   const [previousWeekSubscriptions, setPreviousWeekSubscriptions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [chartReady, setChartReady] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
@@ -179,6 +180,7 @@ export default function Finance() {
     const scopedParams = selectedProfessionalId ? { professionalId: selectedProfessionalId } : {};
 
     setError("");
+    setLoading(true);
     setChartReady(false);
 
     api
@@ -211,6 +213,9 @@ export default function Finance() {
       })
       .catch((err) => {
         if (active) setError(err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
 
     return () => {
@@ -388,6 +393,8 @@ export default function Finance() {
     periodSales.length > 0 ||
     periodExpenses.length > 0 ||
     paidSubscriptionsCount > 0;
+  const isInitialLoading = loading && !data && !error;
+  const isRefreshing = loading && Boolean(data);
 
   function handleExportExcel() {
     if (!data || exporting) return;
@@ -429,15 +436,13 @@ export default function Finance() {
     return () => window.removeEventListener("agensync:export-finance", exportFromMobileHeader);
   });
 
-  if (!data && !error) return <Loading label="Carregando financeiro..." />;
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Financeiro"
         description="Entradas, despesas e resultado líquido para entender quanto realmente sobra."
         action={
-          <Button onClick={handleExportExcel} loading={exporting} loadingLabel="Gerando...">
+          <Button onClick={handleExportExcel} loading={exporting} loadingLabel="Gerando..." disabled={!data}>
             Exportar Excel
           </Button>
         }
@@ -445,6 +450,7 @@ export default function Finance() {
       <Message type="error" actionLabel="Tentar novamente" onAction={() => setReloadKey((value) => value + 1)}>
         {error}
       </Message>
+      <Message>{isRefreshing ? "Atualizando informações financeiras..." : ""}</Message>
 
       <div className="no-print">
         <FilterBar
@@ -467,6 +473,8 @@ export default function Finance() {
           resultLabel={periodLabel(appliedFilters)}
         />
       </div>
+
+      {isInitialLoading ? <Loading label="Carregando financeiro..." /> : null}
 
       {data ? (
         <>

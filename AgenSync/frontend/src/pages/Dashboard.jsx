@@ -5,7 +5,6 @@ import Card, { CardHeader } from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import FilterBar, { periodLabel, rangeForPeriod } from "../components/FilterBar.jsx";
 import InstallAppCard from "../components/InstallAppCard.jsx";
-import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import FirstStepsCard from "../components/onboarding/FirstStepsCard.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -28,6 +27,34 @@ const DASHBOARD_VIEW_CACHE_TTL_MS = 5 * 60 * 1000;
 const DASHBOARD_PROFESSIONALS_CACHE_KEY = "agensync_dashboard_professionals_cache_v1";
 const DEFAULT_MONTHLY_GOAL = 3000;
 const WORKDAY_SLOTS = 8;
+const EMPTY_SUBSCRIPTION_SUMMARY = { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0, pendingAmount: 0 };
+const EMPTY_DASHBOARD_DATA = {
+  appointmentsToday: 0,
+  earnedToday: 0,
+  servicesPeriod: 0,
+  productsPeriod: 0,
+  subscriptionsPeriod: 0,
+  grossPeriod: 0,
+  expensesPeriod: 0,
+  netPeriod: 0,
+  servicesDay: 0,
+  productsDay: 0,
+  subscriptionsDay: 0,
+  grossDay: 0,
+  expensesDay: 0,
+  netDay: 0,
+  servicesMonth: 0,
+  productsMonth: 0,
+  subscriptionsMonth: 0,
+  grossMonth: 0,
+  expensesMonth: 0,
+  netMonth: 0,
+  todayAppointments: [],
+  productSales: [],
+  subscriptionCycles: [],
+  subscriptionSummary: EMPTY_SUBSCRIPTION_SUMMARY,
+  nextAppointment: null
+};
 
 const weekdayFormatter = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
 
@@ -296,6 +323,17 @@ function InsightCard({ label, value, detail, tone = "blue" }) {
       <p className="mt-3 text-base font-black leading-6 text-ink">{value}</p>
       {detail ? <p className="mt-2 text-sm font-medium leading-6 text-muted">{detail}</p> : null}
     </article>
+  );
+}
+
+function LoadingValue({ loading, children, className = "h-7 w-28" }) {
+  if (!loading) return children;
+
+  return (
+    <span
+      className={`skeleton-line inline-block max-w-full rounded-full align-middle ${className}`}
+      aria-label="Carregando"
+    />
   );
 }
 
@@ -695,18 +733,21 @@ export default function Dashboard() {
     showToast("Meta mensal atualizada.");
   }
 
-  const periodAppointments = data?.todayAppointments || [];
-  const periodSales = data?.productSales || [];
-  const periodSubscriptions = data?.subscriptionCycles || [];
+  const isInitialLoading = !data;
+  const isRefreshing = loading && Boolean(data);
+  const dashboard = data || EMPTY_DASHBOARD_DATA;
+  const periodAppointments = dashboard.todayAppointments || [];
+  const periodSales = dashboard.productSales || [];
+  const periodSubscriptions = dashboard.subscriptionCycles || [];
   const isScopedView = Boolean(appliedFilters.professionalId);
   const viewLabel = selectedProfessionalLabel(appliedFilters.professionalId, professionals);
-  const recurring = data?.subscriptionSummary || { activeCount: 0, pending: 0, overdue: 0, expected: 0, received: 0, pendingAmount: 0 };
+  const recurring = dashboard.subscriptionSummary || EMPTY_SUBSCRIPTION_SUMMARY;
   const previousEarned = earnedCompleted(previousAppointments);
   const previousNet =
     previousEarned + sumProductSales(previousSales) + sumPaidSubscriptionCycles(previousSubscriptions) - sumExpenses(previousExpenses);
   const growth =
     previousNet > 0 && data
-      ? Math.round(((data.netPeriod - previousNet) / previousNet) * 100)
+      ? Math.round(((dashboard.netPeriod - previousNet) / previousNet) * 100)
       : null;
   const cancellations = periodAppointments.filter((appointment) => appointment.status === "cancelado").length;
   const tomorrowBooked = tomorrowAppointments.filter((appointment) => appointment.status !== "cancelado").length;
@@ -719,9 +760,9 @@ export default function Dashboard() {
     () => bestDayFrom(periodAppointments, periodSales, periodSubscriptions),
     [periodAppointments, periodSales, periodSubscriptions]
   );
-  const goalProgress = data ? Math.min((data.netMonth / monthlyGoal) * 100, 100) : 0;
-  const goalRemaining = data ? Math.max(monthlyGoal - data.netMonth, 0) : monthlyGoal;
-  const netMargin = data && data.grossPeriod > 0 ? Math.round((data.netPeriod / data.grossPeriod) * 100) : 0;
+  const goalProgress = data ? Math.min((dashboard.netMonth / monthlyGoal) * 100, 100) : 0;
+  const goalRemaining = data ? Math.max(monthlyGoal - dashboard.netMonth, 0) : monthlyGoal;
+  const netMargin = data && dashboard.grossPeriod > 0 ? Math.round((dashboard.netPeriod / dashboard.grossPeriod) * 100) : 0;
   const teamComparison = useMemo(
     () => buildTeamComparison(teamAppointments, professionals, monthlyGoal),
     [monthlyGoal, professionals, teamAppointments]
@@ -735,8 +776,6 @@ export default function Dashboard() {
     ? Math.min(selectedProfessionalStats.goalProgress, 100)
     : goalProgress;
 
-  if (loading && !data && !error) return <Loading label="Carregando dashboard..." />;
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
@@ -747,6 +786,7 @@ export default function Dashboard() {
       <Message type="error" actionLabel="Tentar novamente" onAction={() => load(appliedFilters)}>
         {error}
       </Message>
+      <Message>{isRefreshing ? "Atualizando indicadores do dashboard..." : ""}</Message>
 
       <FilterBar
         title="Filtrar dashboard"
@@ -773,26 +813,32 @@ export default function Dashboard() {
       {!progress.hasSeenWelcome ? <FirstStepsCard /> : null}
       <InstallAppCard />
 
-      {data ? (
-        <>
+      <>
           <section className="grid gap-3 lg:hidden">
             <article className="rounded-[24px] border border-blue-200/70 bg-blue-50/80 p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Líquido hoje</p>
-              <p className="mt-1 text-3xl font-black tracking-tight text-blue-800">{money(data.netDay)}</p>
+              <p className="mt-1 text-3xl font-black tracking-tight text-blue-800">
+                <LoadingValue loading={isInitialLoading} className="h-9 w-32">{money(dashboard.netDay)}</LoadingValue>
+              </p>
               <p className="mt-1 text-xs font-bold text-blue-700/80">
-                Entradas {money(data.grossDay)} · Saídas {money(data.expensesDay)}
+                Entradas <LoadingValue loading={isInitialLoading} className="h-3 w-16">{money(dashboard.grossDay)}</LoadingValue> · Saídas{" "}
+                <LoadingValue loading={isInitialLoading} className="h-3 w-16">{money(dashboard.expensesDay)}</LoadingValue>
               </p>
             </article>
 
             <div className="grid grid-cols-2 gap-3">
               <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-soft">
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Atendimentos</p>
-                <p className="mt-1 text-2xl font-black text-ink">{data.appointmentsToday}</p>
+                <p className="mt-1 text-2xl font-black text-ink">
+                  <LoadingValue loading={isInitialLoading} className="h-7 w-10">{dashboard.appointmentsToday}</LoadingValue>
+                </p>
               </article>
               <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-soft">
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Próximo</p>
                 <p className="mt-1 text-2xl font-black text-brand">
-                  {data.nextAppointment ? data.nextAppointment.startTime : "Livre"}
+                  <LoadingValue loading={isInitialLoading} className="h-7 w-16">
+                    {dashboard.nextAppointment ? dashboard.nextAppointment.startTime : "Livre"}
+                  </LoadingValue>
                 </p>
               </article>
             </div>
@@ -806,18 +852,23 @@ export default function Dashboard() {
                   Controle sua agenda e seus ganhos em tempo real.
                 </h2>
                 <p className="mt-4 max-w-xl text-sm font-medium leading-6 text-slate-600">
-                  Em {periodLabel(appliedFilters).toLowerCase()}, entraram {money(data.grossPeriod)}, saíram {money(data.expensesPeriod)} e sobraram {money(data.netPeriod)}.
+                  Em {periodLabel(appliedFilters).toLowerCase()}, entraram{" "}
+                  <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.grossPeriod)}</LoadingValue>, saíram{" "}
+                  <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.expensesPeriod)}</LoadingValue> e sobraram{" "}
+                  <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.netPeriod)}</LoadingValue>.
                 </p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">Meta mensal líquida</p>
-                    <h3 className="mt-2 text-3xl font-black tracking-tight text-ink">{money(data.netMonth)}</h3>
+                    <h3 className="mt-2 text-3xl font-black tracking-tight text-ink">
+                      <LoadingValue loading={isInitialLoading} className="h-9 w-36">{money(dashboard.netMonth)}</LoadingValue>
+                    </h3>
                     <p className="mt-1 text-sm font-bold text-slate-500">de {money(monthlyGoal)} definidos para este mês</p>
                   </div>
                   <span className="rounded-full bg-[#DBEAFE] px-3 py-1 text-sm font-black text-brand">
-                    {Math.round(goalProgress)}%
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-9">{Math.round(goalProgress)}%</LoadingValue>
                   </span>
                 </div>
                 <div className="mt-5 h-3 overflow-hidden rounded-full bg-[#E2E8F0]">
@@ -827,7 +878,7 @@ export default function Dashboard() {
                   />
                 </div>
                 <p className="mt-4 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
-                  Faltam {money(goalRemaining)} para bater a meta.
+                  Faltam <LoadingValue loading={isInitialLoading} className="h-4 w-24">{money(goalRemaining)}</LoadingValue> para bater a meta.
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <input
@@ -846,8 +897,12 @@ export default function Dashboard() {
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Líquido do período</p>
-                <p className="mt-2 text-4xl font-extrabold text-success">{money(data.netPeriod)}</p>
-                <p className="mt-2 text-sm font-semibold text-slate-500">{freeTomorrowSlots} horário(s) livre(s) amanhã</p>
+                <p className="mt-2 text-4xl font-extrabold text-success">
+                  <LoadingValue loading={isInitialLoading} className="h-10 w-36">{money(dashboard.netPeriod)}</LoadingValue>
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-500">
+                  <LoadingValue loading={isInitialLoading} className="h-4 w-44">{freeTomorrowSlots} horário(s) livre(s) amanhã</LoadingValue>
+                </p>
               </div>
             </div>
           </section>
@@ -856,29 +911,51 @@ export default function Dashboard() {
             <StatCard
               to="/agenda"
               label={isScopedView ? `Faturamento de ${viewLabel}` : "Faturamento geral"}
-              value={money(data.servicesPeriod)}
-              detail={`${data.appointmentsToday} atendimento(s) no recorte`}
+              value={<LoadingValue loading={isInitialLoading} className="h-8 w-24">{money(dashboard.servicesPeriod)}</LoadingValue>}
+              detail={
+                <LoadingValue loading={isInitialLoading} className="h-3 w-32">
+                  {`${dashboard.appointmentsToday} atendimento(s) no recorte`}
+                </LoadingValue>
+              }
               icon="agenda"
               tone="blue"
             />
             <StatCard
               to="/agenda"
               label="Atendimentos"
-              value={data.appointmentsToday}
+              value={<LoadingValue loading={isInitialLoading} className="h-8 w-10">{dashboard.appointmentsToday}</LoadingValue>}
               detail={isScopedView ? `Agenda de ${viewLabel}` : "Todos os profissionais"}
               icon="dashboard"
               tone="default"
             />
             <StatCard
               label={isScopedView ? "Ticket medio" : "Top profissional"}
-              value={isScopedView ? money(scopedTicket) : topProfessional?.name || "Sem ranking"}
-              detail={isScopedView ? "Media dos atendimentos concluidos" : topProfessional ? money(topProfessional.revenue) : "Conclua atendimentos para medir"}
+              value={
+                <LoadingValue loading={isInitialLoading} className="h-8 w-28">
+                  {isScopedView ? money(scopedTicket) : topProfessional?.name || "Sem ranking"}
+                </LoadingValue>
+              }
+              detail={
+                isInitialLoading ? (
+                  <LoadingValue loading className="h-3 w-32">Carregando</LoadingValue>
+                ) : isScopedView ? (
+                  "Media dos atendimentos concluidos"
+                ) : topProfessional ? (
+                  money(topProfessional.revenue)
+                ) : (
+                  "Conclua atendimentos para medir"
+                )
+              }
               icon="finance"
               tone="leaf"
             />
             <StatCard
               label={isScopedView ? "Meta do profissional" : "Meta da equipe"}
-              value={`${Math.round(contextualGoalProgress)}%`}
+              value={
+                <LoadingValue loading={isInitialLoading} className="h-8 w-14">
+                  {`${Math.round(contextualGoalProgress)}%`}
+                </LoadingValue>
+              }
               detail={isScopedView ? `Base: ${money(selectedProfessionalStats?.goal || 0)}` : `Base mensal: ${money(monthlyGoal)}`}
               icon="finance"
               tone="blue"
@@ -886,8 +963,16 @@ export default function Dashboard() {
             <StatCard
               to={isScopedView ? "/agenda" : "/financeiro"}
               label={isScopedView ? "Cancelamentos" : "Liquido no periodo"}
-              value={isScopedView ? cancellations : money(data.netPeriod)}
-              detail={isScopedView ? "No periodo selecionado" : `Margem ${netMargin}% do periodo`}
+              value={
+                <LoadingValue loading={isInitialLoading} className="h-8 w-24">
+                  {isScopedView ? cancellations : money(dashboard.netPeriod)}
+                </LoadingValue>
+              }
+              detail={
+                <LoadingValue loading={isInitialLoading} className="h-3 w-28">
+                  {isScopedView ? "No periodo selecionado" : `Margem ${netMargin}% do periodo`}
+                </LoadingValue>
+              }
               tone={isScopedView && cancellations ? "expense" : "leaf"}
             />
           </section>
@@ -895,24 +980,36 @@ export default function Dashboard() {
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Previsto no mes</p>
-              <p className="mt-2 text-2xl font-black text-brand">{money(recurring.expected)}</p>
-              <p className="mt-1 text-xs font-bold text-muted">{recurring.activeCount} mensalista(s) ativo(s)</p>
+              <p className="mt-2 text-2xl font-black text-brand">
+                <LoadingValue loading={isInitialLoading} className="h-7 w-28">{money(recurring.expected)}</LoadingValue>
+              </p>
+              <p className="mt-1 text-xs font-bold text-muted">
+                <LoadingValue loading={isInitialLoading} className="h-3 w-32">{recurring.activeCount} mensalista(s) ativo(s)</LoadingValue>
+              </p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Realizado</p>
-              <p className="mt-2 text-2xl font-black text-success">{money(recurring.received)}</p>
+              <p className="mt-2 text-2xl font-black text-success">
+                <LoadingValue loading={isInitialLoading} className="h-7 w-28">{money(recurring.received)}</LoadingValue>
+              </p>
               <p className="mt-1 text-xs font-bold text-muted">Concluido ou pago</p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Pendente</p>
               <p className="mt-2 text-2xl font-black text-ink">
-                {money(recurring.pendingAmount || Math.max((recurring.expected || 0) - (recurring.received || 0), 0))}
+                <LoadingValue loading={isInitialLoading} className="h-7 w-28">
+                  {money(recurring.pendingAmount || Math.max((recurring.expected || 0) - (recurring.received || 0), 0))}
+                </LoadingValue>
               </p>
-              <p className="mt-1 text-xs font-bold text-muted">{recurring.pending} competencia(s)</p>
+              <p className="mt-1 text-xs font-bold text-muted">
+                <LoadingValue loading={isInitialLoading} className="h-3 w-28">{recurring.pending} competencia(s)</LoadingValue>
+              </p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Atrasadas</p>
-              <p className="mt-2 text-2xl font-black text-red-600">{recurring.overdue}</p>
+              <p className="mt-2 text-2xl font-black text-red-600">
+                <LoadingValue loading={isInitialLoading} className="h-7 w-10">{recurring.overdue}</LoadingValue>
+              </p>
               <p className="mt-1 text-xs font-bold text-muted">Mensalidades vencidas</p>
             </article>
           </section>
@@ -920,25 +1017,29 @@ export default function Dashboard() {
           <section className="grid gap-4 sm:grid-cols-3">
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:shadow-panel">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Hoje</p>
-              <p className="mt-2 text-sm font-bold text-muted">Serviços {money(data.servicesDay)}</p>
-              <p className="mt-1 text-sm font-bold text-muted">Produtos {money(data.productsDay)}</p>
-              <p className="mt-1 text-sm font-bold text-muted">Mensalidades {money(data.subscriptionsDay)}</p>
-              <p className="mt-1 text-sm font-bold text-red-600">Despesas {money(data.expensesDay)}</p>
-              <p className="mt-3 text-2xl font-black text-success">Líquido {money(data.netDay)}</p>
+              <p className="mt-2 text-sm font-bold text-muted">Serviços <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.servicesDay)}</LoadingValue></p>
+              <p className="mt-1 text-sm font-bold text-muted">Produtos <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.productsDay)}</LoadingValue></p>
+              <p className="mt-1 text-sm font-bold text-muted">Mensalidades <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.subscriptionsDay)}</LoadingValue></p>
+              <p className="mt-1 text-sm font-bold text-red-600">Despesas <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.expensesDay)}</LoadingValue></p>
+              <p className="mt-3 text-2xl font-black text-success">Líquido <LoadingValue loading={isInitialLoading} className="h-7 w-28">{money(dashboard.netDay)}</LoadingValue></p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:shadow-panel">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Mês</p>
-              <p className="mt-2 text-sm font-bold text-muted">Serviços {money(data.servicesMonth)}</p>
-              <p className="mt-1 text-sm font-bold text-muted">Produtos {money(data.productsMonth)}</p>
-              <p className="mt-1 text-sm font-bold text-muted">Mensalidades {money(data.subscriptionsMonth)}</p>
-              <p className="mt-1 text-sm font-bold text-red-600">Despesas {money(data.expensesMonth)}</p>
-              <p className="mt-3 text-2xl font-black text-success">Líquido {money(data.netMonth)}</p>
+              <p className="mt-2 text-sm font-bold text-muted">Serviços <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.servicesMonth)}</LoadingValue></p>
+              <p className="mt-1 text-sm font-bold text-muted">Produtos <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.productsMonth)}</LoadingValue></p>
+              <p className="mt-1 text-sm font-bold text-muted">Mensalidades <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.subscriptionsMonth)}</LoadingValue></p>
+              <p className="mt-1 text-sm font-bold text-red-600">Despesas <LoadingValue loading={isInitialLoading} className="h-4 w-20">{money(dashboard.expensesMonth)}</LoadingValue></p>
+              <p className="mt-3 text-2xl font-black text-success">Líquido <LoadingValue loading={isInitialLoading} className="h-7 w-28">{money(dashboard.netMonth)}</LoadingValue></p>
             </article>
             <article className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:shadow-panel">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Agenda amanhã</p>
-              <p className="mt-2 text-3xl font-black text-brand">{freeTomorrowSlots} livres</p>
+              <p className="mt-2 text-3xl font-black text-brand">
+                <LoadingValue loading={isInitialLoading} className="h-9 w-24">{freeTomorrowSlots} livres</LoadingValue>
+              </p>
               <p className="mt-1 text-sm font-bold text-muted">
-                {tomorrowBooked} ocupado(s) de {WORKDAY_SLOTS} horários
+                <LoadingValue loading={isInitialLoading} className="h-4 w-40">
+                  {tomorrowBooked} ocupado(s) de {WORKDAY_SLOTS} horários
+                </LoadingValue>
               </p>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
                 <div
@@ -1013,7 +1114,21 @@ export default function Dashboard() {
             <Card>
               <CardHeader title="Agenda do período" description={periodLabel(appliedFilters)} />
               <div className="compact-scroll-list divide-y divide-[#E2E8F0]">
-                {periodAppointments.length ? (
+                {isInitialLoading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <article
+                      key={`appointment-loading-${index}`}
+                      className="grid gap-3 p-4 md:grid-cols-[92px_minmax(0,1fr)_auto] md:items-center"
+                    >
+                      <div className="skeleton-line h-14 rounded-xl" />
+                      <div className="min-w-0 space-y-2">
+                        <div className="skeleton-line h-4 w-48 max-w-full rounded-full" />
+                        <div className="skeleton-line h-3 w-32 max-w-full rounded-full" />
+                      </div>
+                      <div className="skeleton-line h-8 w-24 rounded-full" />
+                    </article>
+                  ))
+                ) : periodAppointments.length ? (
                   periodAppointments.map((appointment) => (
                     <article
                       key={appointment.id}
@@ -1041,15 +1156,24 @@ export default function Dashboard() {
 
             <Card className="p-5">
               <p className="text-sm font-black uppercase tracking-[0.14em] text-brand">Próximo horário</p>
-              {data.nextAppointment ? (
+              {isInitialLoading ? (
                 <div className="mt-5 space-y-3">
-                  <p className="text-5xl font-black text-brand">{data.nextAppointment.startTime}</p>
+                  <div className="skeleton-line h-12 w-24 rounded-full" />
+                  <div className="space-y-2">
+                    <div className="skeleton-line h-5 w-44 rounded-full" />
+                    <div className="skeleton-line h-4 w-32 rounded-full" />
+                  </div>
+                  <div className="skeleton-line h-10 rounded-xl" />
+                </div>
+              ) : dashboard.nextAppointment ? (
+                <div className="mt-5 space-y-3">
+                  <p className="text-5xl font-black text-brand">{dashboard.nextAppointment.startTime}</p>
                   <div>
-                    <p className="text-lg font-black text-ink">{data.nextAppointment.client.name}</p>
-                    <p className="text-sm text-muted">{data.nextAppointment.service.name}</p>
+                    <p className="text-lg font-black text-ink">{dashboard.nextAppointment.client.name}</p>
+                    <p className="text-sm text-muted">{dashboard.nextAppointment.service.name}</p>
                   </div>
                   <p className="rounded-xl bg-[#F8FAFC] px-3 py-2 text-sm font-bold text-muted">
-                    {data.nextAppointment.date} · {money(data.nextAppointment.price)}
+                    {dashboard.nextAppointment.date} · {money(dashboard.nextAppointment.price)}
                   </p>
                 </div>
               ) : (
@@ -1065,39 +1189,81 @@ export default function Dashboard() {
                 <InsightCard
                   label="Crescimento"
                   value={
-                    growth !== null
-                      ? `${growth >= 0 ? "+" : ""}${growth}% vs período anterior`
-                      : "Sem base anterior suficiente"
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-40">
+                      {growth !== null
+                        ? `${growth >= 0 ? "+" : ""}${growth}% vs período anterior`
+                        : "Sem base anterior suficiente"}
+                    </LoadingValue>
                   }
                   detail="Comparação com o mesmo número de dias antes do período atual."
                   tone={growth !== null && growth >= 0 ? "green" : "blue"}
                 />
                 <InsightCard
                   label="Melhor dia"
-                  value={bestDay ? `${bestDay.label} foi seu melhor dia` : "Ainda sem melhor dia"}
-                  detail={bestDay ? `${money(bestDay.total)} confirmado nesse dia.` : "Conclua atendimentos para medir desempenho."}
+                  value={
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-40">
+                      {bestDay ? `${bestDay.label} foi seu melhor dia` : "Ainda sem melhor dia"}
+                    </LoadingValue>
+                  }
+                  detail={
+                    isInitialLoading ? (
+                      <LoadingValue loading className="h-4 w-36">Carregando</LoadingValue>
+                    ) : bestDay ? (
+                      `${money(bestDay.total)} confirmado nesse dia.`
+                    ) : (
+                      "Conclua atendimentos para medir desempenho."
+                    )
+                  }
                 />
                 <InsightCard
                   label="Horários livres"
-                  value={`${freeTomorrowSlots} horário(s) livre(s) amanhã`}
+                  value={
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-36">
+                      {`${freeTomorrowSlots} horário(s) livre(s) amanhã`}
+                    </LoadingValue>
+                  }
                   detail="Estimativa baseada em uma agenda comercial de 8 horários."
                 />
                 <InsightCard
                   label="Cancelamentos"
-                  value={`${cancellations} cancelamento(s) no período`}
+                  value={
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-36">
+                      {`${cancellations} cancelamento(s) no período`}
+                    </LoadingValue>
+                  }
                   detail={cancellations ? "Vale tentar preencher esses espaços com clientes recorrentes." : "Boa previsibilidade para seu atendimento."}
                   tone={cancellations ? "red" : "green"}
                 />
                 <InsightCard
                   label="Cliente destaque"
-                  value={bestClient ? `${bestClient.name} · ${money(bestClient.total)}` : "Sem cliente destaque"}
-                  detail={bestClient ? `${bestClient.count} movimentação(ões) com receita no período.` : "O ranking aparece quando houver faturamento concluído."}
+                  value={
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-44">
+                      {bestClient ? `${bestClient.name} · ${money(bestClient.total)}` : "Sem cliente destaque"}
+                    </LoadingValue>
+                  }
+                  detail={
+                    isInitialLoading ? (
+                      <LoadingValue loading className="h-4 w-44">Carregando</LoadingValue>
+                    ) : bestClient ? (
+                      `${bestClient.count} movimentação(ões) com receita no período.`
+                    ) : (
+                      "O ranking aparece quando houver faturamento concluído."
+                    )
+                  }
                   tone="green"
                 />
                 <InsightCard
                   label="Produtos"
-                  value={`${money(data.productsPeriod)} em vendas`}
-                  detail={`${periodSales.length} venda(s) registrada(s) fora dos serviços.`}
+                  value={
+                    <LoadingValue loading={isInitialLoading} className="h-5 w-32">
+                      {`${money(dashboard.productsPeriod)} em vendas`}
+                    </LoadingValue>
+                  }
+                  detail={
+                    <LoadingValue loading={isInitialLoading} className="h-4 w-44">
+                      {`${periodSales.length} venda(s) registrada(s) fora dos serviços.`}
+                    </LoadingValue>
+                  }
                 />
               </div>
             </Card>
@@ -1106,7 +1272,7 @@ export default function Dashboard() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">Meta mensal líquida</p>
-                  <h2 className="mt-2 text-2xl font-black tracking-tight text-ink">{money(data.netMonth)}</h2>
+                  <h2 className="mt-2 text-2xl font-black tracking-tight text-ink">{money(dashboard.netMonth)}</h2>
                   <p className="mt-1 text-sm font-medium text-muted">de {money(monthlyGoal)} definidos para este mês</p>
                 </div>
                 <span className="rounded-full bg-[#DBEAFE] px-3 py-1 text-sm font-black text-brand">
@@ -1143,8 +1309,8 @@ export default function Dashboard() {
               </div>
             </Card>
           </section>
-        </>
-      ) : null}
+      </>
     </div>
   );
 }
+
