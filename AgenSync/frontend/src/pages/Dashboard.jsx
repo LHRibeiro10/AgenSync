@@ -810,7 +810,7 @@ export default function Dashboard() {
         )}
       />
 
-      {!progress.hasSeenWelcome ? <FirstStepsCard /> : null}
+      {!isInitialLoading && !progress.hasSeenWelcome ? <FirstStepsCard /> : null}
       <InstallAppCard />
 
       <>
