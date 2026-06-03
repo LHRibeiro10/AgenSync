@@ -9,6 +9,7 @@ import Message from "../components/Message.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { PLAN_SLUGS, PLANS_CONFIG } from "../config/plans.js";
 import { businessTypes, getSuggestedServices } from "../data/businessOnboarding.js";
 import {
   DEFAULT_CONFIRMATION_MESSAGE,
@@ -194,6 +195,148 @@ function SwitchControl({ checked, onChange, label, description }) {
         <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
       </span>
     </button>
+  );
+}
+
+const planCardFeatures = {
+  [PLAN_SLUGS.PADRAO]: ["1 usuário", "1 profissional", "Agenda, clientes e financeiro básico"],
+  [PLAN_SLUGS.EQUIPE]: ["Até 3 profissionais", "Equipe", "Filtros por profissional e comparativo básico"],
+  [PLAN_SLUGS.PRO]: ["Até 10 profissionais", "Até 3 admins", "Permissões especiais e recursos premium"]
+};
+
+function billingStatusLabel(status) {
+  if (status === "trialing") return "Teste grátis";
+  if (status === "active") return "Ativa";
+  if (status === "past_due") return "Vencida";
+  if (status === "open") return "Aberta";
+  if (status === "overdue") return "Vencida";
+  if (status === "paid") return "Paga";
+  if (status === "refunded") return "Estornada";
+  if (status === "blocked") return "Bloqueada";
+  if (status === "canceled") return "Cancelada";
+  if (status === "manual_unlocked") return "Liberada manualmente";
+  return status || "Pendente";
+}
+
+function dateLabel(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleDateString("pt-BR");
+}
+
+function PlanBillingSection({ user, billingStatus, loading, actionPlan, onCheckout, onPortal }) {
+  const workspace = billingStatus?.workspace || user?.currentWorkspace || {};
+  const currentPlan = workspace.plan || user?.plan || PLAN_SLUGS.PADRAO;
+  const access = user?.currentWorkspace?.accessStatus || {};
+  const invoices = billingStatus?.invoices || [];
+  const trialDays = access.trialDaysRemaining ?? user?.currentWorkspace?.accessStatus?.trialDaysRemaining;
+  const currentPlanConfig = PLANS_CONFIG[currentPlan] || PLANS_CONFIG[PLAN_SLUGS.PADRAO];
+  const nextInvoice = invoices.find((invoice) => invoice.status === "open" || invoice.status === "overdue");
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
+      <SectionHeader
+        eyebrow="Assinatura"
+        title="Plano e assinatura"
+        description="Gerencie o plano do AgenSync. O plano só muda definitivamente depois da confirmação segura do pagamento."
+        icon="finance"
+      />
+
+      <div className="space-y-5 p-4 sm:p-5">
+        {access.planStatus === "trialing" ? (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-brand">
+            Seu teste grátis termina em {trialDays ?? 0} dia(s).
+          </div>
+        ) : null}
+        {["past_due", "blocked", "canceled"].includes(access.planStatus) ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-black text-danger">
+            Regularize seu pagamento para continuar usando.
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Plano atual</p>
+            <p className="mt-1 text-xl font-black text-ink">{currentPlanConfig.displayName}</p>
+          </div>
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Status</p>
+            <p className="mt-1 text-xl font-black text-ink">{billingStatusLabel(access.planStatus || workspace.planStatus)}</p>
+          </div>
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Valor</p>
+            <p className="mt-1 text-xl font-black text-success">{money(currentPlanConfig.price)}/mês</p>
+          </div>
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Próxima cobrança</p>
+            <p className="mt-1 text-xl font-black text-ink">{nextInvoice?.dueAt ? dateLabel(nextInvoice.dueAt) : "A definir"}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          {Object.values(PLANS_CONFIG).map((plan) => {
+            const isCurrent = plan.slug === currentPlan;
+            return (
+              <article key={plan.slug} className="flex min-h-[260px] flex-col rounded-lg border border-[#E2E8F0] bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-black text-ink">{plan.displayName}</h3>
+                    <p className="mt-1 text-2xl font-black text-brand">{money(plan.price)}/mês</p>
+                  </div>
+                  {isCurrent ? <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-success">Plano atual</span> : null}
+                </div>
+                <ul className="mt-4 flex-1 space-y-2 text-sm font-bold leading-6 text-muted">
+                  {(planCardFeatures[plan.slug] || []).map((feature) => (
+                    <li key={feature}>{feature}</li>
+                  ))}
+                </ul>
+                <Button
+                  type="button"
+                  variant={isCurrent ? "secondary" : "primary"}
+                  loading={actionPlan === plan.slug}
+                  disabled={isCurrent && access.planStatus === "active"}
+                  onClick={() => onCheckout(plan.slug)}
+                  className="mt-4"
+                >
+                  {isCurrent ? "Assinar agora" : "Alterar para este plano"}
+                </Button>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="secondary" loading={actionPlan === "portal"} onClick={onPortal}>
+            Regularizar pagamento
+          </Button>
+          {loading ? <span className="self-center text-sm font-black text-muted">Atualizando assinatura...</span> : null}
+        </div>
+
+        <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+          <p className="text-sm font-black text-ink">Histórico de cobranças</p>
+          <div className="mt-3 space-y-2">
+            {invoices.length ? (
+              invoices.slice(0, 6).map((invoice) => (
+                <div key={invoice.id} className="grid gap-2 rounded-lg bg-white p-3 text-sm font-bold text-muted sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                  <span>{invoice.dueAt ? dateLabel(invoice.dueAt) : dateLabel(invoice.createdAt)}</span>
+                  <span>{money(invoice.amount)}</span>
+                  {invoice.hostedUrl ? (
+                    <a className="font-black text-brand" href={invoice.hostedUrl} target="_blank" rel="noreferrer">
+                      Abrir fatura
+                    </a>
+                  ) : (
+                    <span>{billingStatusLabel(invoice.status)}</span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-[#D8E0EA] bg-white px-4 py-3 text-sm font-bold text-muted">
+                Nenhuma cobrança registrada ainda.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -655,6 +798,9 @@ function SettingsGeneral() {
   const [pushStatus, setPushStatus] = useState(() => notificationSupport());
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [billingStatus, setBillingStatus] = useState(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingAction, setBillingAction] = useState("");
 
   useEffect(() => {
     setBusinessName(user?.businessName || "");
@@ -674,6 +820,25 @@ function SettingsGeneral() {
     user?.whatsappConfirmationMessage,
     user?.whatsappReminderMessage
   ]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadBilling() {
+      setBillingLoading(true);
+      try {
+        const status = await api.getBillingStatus();
+        if (active) setBillingStatus(status);
+      } catch (err) {
+        if (active) setError(err.message || "Nao foi possivel carregar assinatura.");
+      } finally {
+        if (active) setBillingLoading(false);
+      }
+    }
+    loadBilling();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const typeOptions = useMemo(() => {
     if (!businessType || businessTypes.some((type) => type.label === businessType)) {
@@ -846,6 +1011,44 @@ function SettingsGeneral() {
     }
   }
 
+  async function startBillingCheckout(planSlug) {
+    setBillingAction(planSlug);
+    setError("");
+    try {
+      const response = await api.createBillingCheckoutSession({
+        planSlug,
+        successUrl: `${window.location.origin}/configuracoes`,
+        cancelUrl: `${window.location.origin}/configuracoes`
+      });
+      const checkout = response.checkout || response;
+      const url = checkout.checkoutUrl || checkout.invoiceUrl || checkout.url;
+      if (!url) throw new Error("Nenhuma URL de pagamento foi retornada.");
+      window.location.assign(url);
+    } catch (err) {
+      setError(err.message || "Nao foi possivel iniciar pagamento.");
+      showToast(err.message || "Nao foi possivel iniciar pagamento.", "error");
+    } finally {
+      setBillingAction("");
+    }
+  }
+
+  async function openBillingPortal() {
+    setBillingAction("portal");
+    setError("");
+    try {
+      const response = await api.createBillingPortalSession();
+      const portal = response.portal || response;
+      const url = portal.portalUrl || portal.url || portal.invoiceUrl;
+      if (!url) throw new Error(portal.message || "Nenhuma fatura aberta encontrada.");
+      window.location.assign(url);
+    } catch (err) {
+      setError(err.message || "Nao foi possivel abrir a fatura.");
+      showToast(err.message || "Nao foi possivel abrir a fatura.", "error");
+    } finally {
+      setBillingAction("");
+    }
+  }
+
   async function handleDeleteAccount() {
     if (deleteConfirmation.trim().toUpperCase() !== "EXCLUIR") {
       showToast("Digite EXCLUIR para confirmar.", "error");
@@ -894,6 +1097,15 @@ function SettingsGeneral() {
           Configurações salvas com sucesso.
         </div>
       ) : null}
+
+      <PlanBillingSection
+        user={user}
+        billingStatus={billingStatus}
+        loading={billingLoading}
+        actionPlan={billingAction}
+        onCheckout={startBillingCheckout}
+        onPortal={openBillingPortal}
+      />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-5">
@@ -1165,32 +1377,6 @@ function SettingsGeneral() {
                 <Icon name="bell" className="h-5 w-5" />
                 Testar notificação
               </Button>
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
-            <SectionHeader
-              eyebrow="WhatsApp manual"
-              title="Mensagens do WhatsApp"
-              description="Edite os textos usados no preview antes de copiar ou abrir o WhatsApp. O envio continua manual."
-              icon="message"
-            />
-
-            <div className="space-y-4 bg-[#F8FAFC] p-4 sm:p-5">
-              <MessageEditor
-                title="Lembrete de atendimento"
-                value={notificationSettings.whatsappReminderMessage || DEFAULT_REMINDER_MESSAGE}
-                onChange={(value) => updateLocalNotificationSettings({ whatsappReminderMessage: value })}
-                onRestore={() => updateLocalNotificationSettings({ whatsappReminderMessage: DEFAULT_REMINDER_MESSAGE })}
-                preview={reminderPreview}
-              />
-              <MessageEditor
-                title="Confirmação de comparecimento"
-                value={notificationSettings.whatsappConfirmationMessage || DEFAULT_CONFIRMATION_MESSAGE}
-                onChange={(value) => updateLocalNotificationSettings({ whatsappConfirmationMessage: value })}
-                onRestore={() => updateLocalNotificationSettings({ whatsappConfirmationMessage: DEFAULT_CONFIRMATION_MESSAGE })}
-                preview={confirmationPreview}
-              />
             </div>
           </section>
 

@@ -1,6 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { api } from "./api/client.js";
 import AccessDenied from "./components/AccessDenied.jsx";
+import Button from "./components/Button.jsx";
 import Layout from "./components/Layout.jsx";
 import Loading from "./components/Loading.jsx";
 import PageTransition from "./components/PageTransition.jsx";
@@ -27,6 +29,64 @@ const Services = lazy(() => import("./pages/Services.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions.jsx"));
 
+function SubscriptionBlockedScreen() {
+  const { user, logout } = useAuth();
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
+  const [error, setError] = useState("");
+  const workspace = user?.currentWorkspace || {};
+  const access = workspace.accessStatus || {};
+  const trialExpired = access.reason === "trial_expired";
+  const title = trialExpired ? "Seu período de teste grátis terminou." : "Sua assinatura está vencida.";
+  const description = trialExpired
+    ? "Assine agora para continuar usando o AgenSync."
+    : "Regularize o pagamento para continuar usando o AgenSync.";
+  const primaryLabel = trialExpired ? "Assinar agora" : "Regularizar pagamento";
+
+  async function startCheckout() {
+    setLoadingCheckout(true);
+    setError("");
+    try {
+      const response = await api.createBillingCheckoutSession({
+        planSlug: workspace.plan || user?.plan || "padrao",
+        successUrl: `${window.location.origin}/configuracoes`,
+        cancelUrl: `${window.location.origin}/configuracoes`
+      });
+      const checkout = response.checkout || response;
+      const url = checkout.checkoutUrl || checkout.invoiceUrl || checkout.url;
+      if (!url) throw new Error("Nenhuma URL de pagamento foi retornada.");
+      window.location.assign(url);
+    } catch (err) {
+      setError(err.message || "Nao foi possivel iniciar o pagamento.");
+    } finally {
+      setLoadingCheckout(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-canvas px-4 py-8 text-ink sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl flex-col justify-center">
+        <section className="rounded-lg border border-[#DDE6F0] bg-white p-6 shadow-panel sm:p-8">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-brand">Plano e assinatura</p>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-ink">{title}</h1>
+          <p className="mt-3 text-base font-bold leading-7 text-muted">{description}</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <Button type="button" size="lg" loading={loadingCheckout} onClick={startCheckout}>
+              {primaryLabel}
+            </Button>
+            <Button type="button" variant="secondary" size="lg" onClick={() => window.location.assign("/configuracoes")}>
+              Ver planos
+            </Button>
+          </div>
+          {error ? <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-danger">{error}</p> : null}
+          <Button type="button" variant="ghost" className="mt-5" onClick={logout}>
+            Sair
+          </Button>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute() {
   const { loading, isAuthenticated, hasPlatformAccess, user, workspaceRole } = useAuth();
   const location = useLocation();
@@ -37,6 +97,11 @@ function ProtectedRoute() {
 
   if (loading) return <Loading label="Abrindo sua agenda..." />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const access = user?.currentWorkspace?.accessStatus;
+  const billingPathAllowed = location.pathname.startsWith("/configuracoes");
+  if (!hasPlatformAccess && access && access.allowed === false && !billingPathAllowed) {
+    return <SubscriptionBlockedScreen />;
+  }
   if (!hasPlatformAccess && workspaceRole === "owner" && user?.onboardingCompleted === false && location.pathname !== "/onboarding") {
     return <Navigate to="/onboarding" replace />;
   }

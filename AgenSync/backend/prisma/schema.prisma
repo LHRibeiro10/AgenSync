@@ -75,8 +75,12 @@ enum PlatformRole {
 enum AccountSubscriptionStatus {
   PAID
   TRIAL
+  TRIALING
+  ACTIVE
   PAST_DUE
+  BLOCKED
   CANCELED
+  MANUAL_UNLOCKED
 }
 
 enum BillingProvider {
@@ -90,9 +94,11 @@ enum BillingInvoiceStatus {
   DRAFT
   OPEN
   PAID
+  OVERDUE
   VOID
   UNCOLLECTIBLE
   CANCELED
+  REFUNDED
 }
 
 enum BillingWebhookStatus {
@@ -153,7 +159,7 @@ model User {
   platformPlan  String?
   accountStatus AccountOperationalStatus @default(ACTIVE)
   userStatus    UserAccountStatus @default(ACTIVE)
-  subscriptionStatus AccountSubscriptionStatus @default(PAID)
+  subscriptionStatus AccountSubscriptionStatus @default(TRIALING)
   subscriptionPaidUntil DateTime?
   temporaryAccessUntil DateTime?
   billingEnabled Boolean @default(false)
@@ -443,7 +449,7 @@ model Workspace {
   ownerId        String
   owner          User                      @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   plan           String                    @default("padrao")
-  planStatus     AccountSubscriptionStatus @default(PAID)
+  planStatus     AccountSubscriptionStatus @default(TRIALING)
   trialStartedAt DateTime?
   trialEndsAt    DateTime?
   currentUsers   User[]                    @relation("CurrentWorkspace")
@@ -501,7 +507,7 @@ model BillingSubscription {
   providerSubscriptionId String?
   providerPriceId        String?
   plan                   String
-  status                 AccountSubscriptionStatus @default(TRIAL)
+  status                 AccountSubscriptionStatus @default(TRIALING)
   currentPeriodStart     DateTime?
   currentPeriodEnd       DateTime?
   trialEndsAt            DateTime?

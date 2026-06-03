@@ -6,16 +6,24 @@ const styles = {
   cancelado: "bg-red-100 text-red-700 ring-red-200",
   nao_compareceu: "bg-amber-100 text-amber-800 ring-amber-200",
   paid: "bg-emerald-100 text-emerald-800 ring-emerald-200",
+  active: "bg-emerald-100 text-emerald-800 ring-emerald-200",
   trial: "bg-blue-100 text-blue-800 ring-blue-200",
+  trialing: "bg-blue-100 text-blue-800 ring-blue-200",
   past_due: "bg-amber-100 text-amber-800 ring-amber-200",
-  canceled: "bg-red-100 text-red-700 ring-red-200"
+  blocked: "bg-red-100 text-red-700 ring-red-200",
+  canceled: "bg-red-100 text-red-700 ring-red-200",
+  manual_unlocked: "bg-green-100 text-green-800 ring-green-200"
 };
 
 const labels = {
   paid: "Pago",
+  active: "Ativo",
   trial: "Teste",
+  trialing: "Teste",
   past_due: "Inadimplente",
-  canceled: "Cancelado"
+  blocked: "Bloqueado",
+  canceled: "Cancelado",
+  manual_unlocked: "Liberado"
 };
 
 export default function StatusBadge({ status }) {

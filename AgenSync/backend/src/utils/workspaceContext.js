@@ -1,6 +1,7 @@
 import { prisma } from "../prisma.js";
 import { getPlanConfig, normalizePlanSlug, publicPlan } from "../config/plans.js";
 import { ApiError } from "../middleware/error.js";
+import { getWorkspaceAccessStatus } from "../services/workspaceBillingAccess.js";
 
 const workspaceSelect = {
   id: true,
@@ -179,13 +180,15 @@ export function publicWorkspace(workspace) {
   if (!workspace) return null;
   const plan = publicPlan({ platformPlan: workspace.plan });
   const exceededResources = Array.isArray(workspace.exceededResources) ? workspace.exceededResources : [];
+  const accessStatus = getWorkspaceAccessStatus(workspace);
   return {
     id: workspace.id,
     name: workspace.name,
     slug: workspace.slug || "",
     ownerId: workspace.ownerId,
     plan: normalizePlanSlug(workspace.plan),
-    planStatus: String(workspace.planStatus || "PAID").toLowerCase(),
+    planStatus: accessStatus.planStatus,
+    accessStatus,
     trialStartedAt: workspace.trialStartedAt || null,
     trialEndsAt: workspace.trialEndsAt || null,
     planLimits: {

@@ -4,10 +4,16 @@ import { invalidateAuthUserCache } from "../middleware/auth.js";
 import { ApiError } from "../middleware/error.js";
 import { prisma } from "../prisma.js";
 import { normalizeEnvValue } from "../utils/env.js";
+import {
+  createAsaasBillingCheckout,
+  createAsaasPortalSession,
+  verifyAsaasWebhook
+} from "./asaasBillingService.js";
+import { getWorkspaceAccessStatus } from "./workspaceBillingAccess.js";
 
 const billingProviders = new Set(["MANUAL", "STRIPE", "MERCADO_PAGO", "ASAAS"]);
-const subscriptionStatuses = new Set(["PAID", "TRIAL", "PAST_DUE", "CANCELED"]);
-const invoiceStatuses = new Set(["DRAFT", "OPEN", "PAID", "VOID", "UNCOLLECTIBLE", "CANCELED"]);
+const subscriptionStatuses = new Set(["PAID", "TRIAL", "TRIALING", "ACTIVE", "PAST_DUE", "BLOCKED", "CANCELED", "MANUAL_UNLOCKED"]);
+const invoiceStatuses = new Set(["DRAFT", "OPEN", "PAID", "OVERDUE", "VOID", "UNCOLLECTIBLE", "CANCELED", "REFUNDED"]);
 
 function upper(value, fallback = "") {
   const normalized = String(value || "").trim().toUpperCase().replace(/-/g, "_");
@@ -21,6 +27,8 @@ export function normalizeBillingProvider(value) {
 
 function normalizeSubscriptionStatus(value, fallback = "TRIAL") {
   const status = upper(value, fallback);
+  if (status === "TRIAL") return "TRIALING";
+  if (status === "PAID") return "ACTIVE";
   return subscriptionStatuses.has(status) ? status : fallback;
 }
 
@@ -39,6 +47,12 @@ function toDate(value) {
   }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addMonths(date, amount) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + amount);
+  return next;
 }
 
 function optionalString(value, maxLength = 500) {
@@ -188,6 +202,7 @@ function verifyManualWebhook(req) {
 export function verifyBillingWebhook(providerValue, req) {
   const provider = normalizeBillingProvider(providerValue);
   if (provider === "MANUAL") return verifyManualWebhook(req);
+  if (provider === "ASAAS") return verifyAsaasWebhook(req);
 
   throw new ApiError(
     501,
@@ -316,13 +331,15 @@ export async function getBillingStatus(workspaceId) {
 
   if (!workspace) throw new ApiError(404, "Workspace nao encontrado.");
   const plan = getPlanConfig(workspace.plan);
+  const accessStatus = getWorkspaceAccessStatus(workspace);
 
   return {
     workspace: {
       id: workspace.id,
       name: workspace.name,
       plan: normalizePlanSlug(workspace.plan),
-      planStatus: String(workspace.planStatus || "PAID").toLowerCase(),
+      planStatus: accessStatus.planStatus,
+      accessStatus,
       planPrice: plan.price,
       trialStartedAt: workspace.trialStartedAt || null,
       trialEndsAt: workspace.trialEndsAt || null,
@@ -339,12 +356,16 @@ export async function getBillingStatus(workspaceId) {
 
 export async function createBillingCheckoutSession(workspaceId, options = {}) {
   const provider = normalizeBillingProvider();
-  const plan = normalizePlanSlug(options.plan || PLAN_SLUGS.PADRAO);
+  const plan = normalizePlanSlug(options.plan || options.planSlug || PLAN_SLUGS.PADRAO);
   const priceId = priceIdForPlan(plan);
   const customer = await ensureBillingCustomer(workspaceId, { provider });
 
   if (provider === "MANUAL") {
     throw new ApiError(501, "Gateway de pagamento ainda nao configurado. Billing interno preparado para integracao.");
+  }
+
+  if (provider === "ASAAS") {
+    return createAsaasBillingCheckout(workspaceId, { ...options, plan });
   }
 
   if (!priceId) {
@@ -363,6 +384,10 @@ export async function createBillingPortalSession(workspaceId) {
 
   if (provider === "MANUAL") {
     throw new ApiError(501, "Portal de pagamento indisponivel ate configurar um gateway.");
+  }
+
+  if (provider === "ASAAS") {
+    return createAsaasPortalSession(workspaceId);
   }
 
   if (!customer.providerCustomerId) {
@@ -474,7 +499,7 @@ async function applyInvoicePayload(provider, data = {}) {
   const subscription = providerSubscriptionId
     ? await prisma.billingSubscription.findUnique({
         where: { provider_providerSubscriptionId: { provider, providerSubscriptionId } },
-        select: { id: true }
+        select: { id: true, plan: true }
       })
     : null;
 
@@ -500,17 +525,46 @@ async function applyInvoicePayload(provider, data = {}) {
     metadata: data.metadata || {}
   };
 
+  let invoice;
   if (providerInvoiceId) {
-    await prisma.billingInvoice.upsert({
+    invoice = await prisma.billingInvoice.upsert({
       where: { provider_providerInvoiceId: { provider, providerInvoiceId } },
       create: invoiceData,
       update: invoiceData
     });
   } else {
-    await prisma.billingInvoice.create({ data: invoiceData });
+    invoice = await prisma.billingInvoice.create({ data: invoiceData });
   }
 
-  return { status: "PROCESSED", workspaceId };
+  const paidAt = invoiceData.paidAt || new Date();
+  if (status === "PAID") {
+    const currentPeriodStart = paidAt;
+    const currentPeriodEnd = addMonths(currentPeriodStart, 1);
+    if (subscription?.id) {
+      await prisma.billingSubscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: "ACTIVE",
+          currentPeriodStart,
+          currentPeriodEnd
+        }
+      });
+    }
+    const plan = normalizePlanSlug(data.plan || data.platformPlan || data.metadata?.plan || invoiceData.metadata?.plan || subscription?.plan);
+    await syncWorkspaceBillingState({ workspaceId, plan, status: "ACTIVE", currentPeriodEnd, billingEnabled: true });
+  } else if (status === "OVERDUE" || status === "UNCOLLECTIBLE") {
+    if (subscription?.id) {
+      await prisma.billingSubscription.update({ where: { id: subscription.id }, data: { status: "PAST_DUE" } });
+    }
+    await syncWorkspaceBillingState({ workspaceId, status: "PAST_DUE", billingEnabled: true });
+  } else if (status === "CANCELED" || status === "REFUNDED" || status === "VOID") {
+    if (subscription?.id) {
+      await prisma.billingSubscription.update({ where: { id: subscription.id }, data: { status: "CANCELED", canceledAt: new Date() } });
+    }
+    await syncWorkspaceBillingState({ workspaceId, status: status === "REFUNDED" ? "PAST_DUE" : "CANCELED", billingEnabled: true });
+  }
+
+  return { status: "PROCESSED", workspaceId, invoiceId: invoice?.id || "" };
 }
 
 async function applyBillingWebhook(provider, event) {
@@ -521,7 +575,23 @@ async function applyBillingWebhook(provider, event) {
     return applySubscriptionPayload(provider, data);
   }
 
-  if (["billing.invoice.updated", "invoice.updated", "invoice.payment_succeeded", "invoice.payment_failed", "payment.succeeded"].includes(type)) {
+  if (
+    [
+      "billing.invoice.updated",
+      "invoice.updated",
+      "invoice.payment_succeeded",
+      "invoice.payment_failed",
+      "payment.succeeded",
+      "PAYMENT_CREATED",
+      "PAYMENT_UPDATED",
+      "PAYMENT_CONFIRMED",
+      "PAYMENT_RECEIVED",
+      "PAYMENT_OVERDUE",
+      "PAYMENT_DELETED",
+      "PAYMENT_REFUNDED",
+      "PAYMENT_RESTORED"
+    ].includes(type)
+  ) {
     return applyInvoicePayload(provider, data);
   }
 

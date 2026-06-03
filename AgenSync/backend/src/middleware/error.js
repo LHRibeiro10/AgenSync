@@ -39,6 +39,11 @@ export function errorHandler(error, req, res, next) {
 
   if (error.details) {
     response.details = error.details;
+    if (error.details && typeof error.details === "object") {
+      ["code", "reason", "planStatus", "checkoutAvailable"].forEach((key) => {
+        if (error.details[key] !== undefined) response[key] = error.details[key];
+      });
+    }
   }
 
   if (statusCode === 500 && process.env.NODE_ENV !== "production") {

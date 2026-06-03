@@ -5,6 +5,7 @@ import { ApiError, asyncHandler } from "./error.js";
 import { PLAN_SLUGS } from "../config/plans.js";
 import { getSuggestedServices } from "../utils/businessOnboarding.js";
 import { normalizeEnvValue } from "../utils/env.js";
+import { ensureWorkspaceTrialInitialized } from "../services/workspaceBillingAccess.js";
 import { ensureSupabaseAuthUserExists } from "../utils/supabaseAuthAdmin.js";
 import {
   attachWorkspaceContext,
@@ -478,8 +479,8 @@ async function ensureSupabaseUser(payload, token) {
             platformRole: platformRoleForEmail(email),
             workspaceRole: "OWNER",
             platformPlan: PLAN_SLUGS.PADRAO,
-            subscriptionStatus: "PAID",
-            billingEnabled: false,
+            subscriptionStatus: isInitialPlatformOwnerEmail(email) ? "ACTIVE" : "TRIALING",
+            billingEnabled: !isInitialPlatformOwnerEmail(email),
             passwordHash: "supabase-auth",
             businessName: resolvedBusinessName,
             businessLogo: resolvedBusinessLogo,
@@ -535,6 +536,15 @@ async function finishAuthenticatedRequest(req, user, next) {
     throw new ApiError(403, "Usuario inativo. Entre em contato com o suporte.");
   }
   await attachWorkspaceContext(req);
+  if (!isPlatformOwner(req.user) && req.workspaceId) {
+    const beforeTrialEndsAt = req.workspace?.trialEndsAt ? new Date(req.workspace.trialEndsAt).getTime() : 0;
+    const initializedWorkspace = await ensureWorkspaceTrialInitialized(req.workspaceId);
+    const afterTrialEndsAt = initializedWorkspace?.trialEndsAt ? new Date(initializedWorkspace.trialEndsAt).getTime() : 0;
+    if (initializedWorkspace && afterTrialEndsAt !== beforeTrialEndsAt) {
+      invalidateWorkspaceContextCache(req.user.id);
+      await attachWorkspaceContext(req);
+    }
+  }
   debugAuthInfo("require_auth.resolved", {
     path: req.originalUrl,
     userId: req.user.id,

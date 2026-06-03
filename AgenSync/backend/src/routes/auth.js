@@ -8,9 +8,10 @@ import { PLAN_SLUGS } from "../config/plans.js";
 import { normalizeEnvValue } from "../utils/env.js";
 import { publicUser } from "../utils/formatters.js";
 import { recordAuditEvent } from "../utils/audit.js";
+import { ensureWorkspaceTrialInitialized } from "../services/workspaceBillingAccess.js";
 import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
 import { requireWorkspaceManager } from "../utils/accessControl.js";
-import { hydrateUserWorkspace } from "../utils/workspaceContext.js";
+import { hydrateUserWorkspace, invalidateWorkspaceContextCache } from "../utils/workspaceContext.js";
 import { requiredString, validateEmail } from "../utils/validation.js";
 
 const router = Router();
@@ -160,8 +161,8 @@ router.post(
           platformRole: isInitialAdminEmail(email) ? "PLATFORM_OWNER" : "USER",
           workspaceRole: "OWNER",
           platformPlan: PLAN_SLUGS.PADRAO,
-          subscriptionStatus: "PAID",
-          billingEnabled: false,
+          subscriptionStatus: isInitialAdminEmail(email) ? "ACTIVE" : "TRIALING",
+          billingEnabled: !isInitialAdminEmail(email),
           businessName,
           businessLogo,
           businessType,
@@ -179,7 +180,12 @@ router.post(
     });
 
     const hydratedUser = await hydrateUserWorkspace(user);
-    res.status(201).json({ token: signToken(user.id), user: publicUser(hydratedUser) });
+    if (!isInitialAdminEmail(email) && hydratedUser.currentWorkspaceId) {
+      await ensureWorkspaceTrialInitialized(hydratedUser.currentWorkspaceId);
+      invalidateWorkspaceContextCache(user.id);
+    }
+    const trialHydratedUser = await hydrateUserWorkspace(user);
+    res.status(201).json({ token: signToken(user.id), user: publicUser(trialHydratedUser) });
   })
 );
 
@@ -226,17 +232,22 @@ router.post(
     }
 
     const hydratedUser = await hydrateUserWorkspace(authenticatedUser);
+    if (!isInitialAdminEmail(authenticatedUser.email) && hydratedUser.currentWorkspaceId) {
+      await ensureWorkspaceTrialInitialized(hydratedUser.currentWorkspaceId);
+      invalidateWorkspaceContextCache(authenticatedUser.id);
+    }
+    const trialHydratedUser = await hydrateUserWorkspace(authenticatedUser);
 
     await recordAuditEvent({
       req,
-      workspaceId: hydratedUser.currentWorkspaceId || "",
+      workspaceId: trialHydratedUser.currentWorkspaceId || "",
       userId: authenticatedUser.id,
       email: authenticatedUser.email,
       eventType: "auth.login_success",
       message: "Login realizado com sucesso."
     });
 
-    res.json({ token: signToken(authenticatedUser.id), user: publicUser(hydratedUser) });
+    res.json({ token: signToken(authenticatedUser.id), user: publicUser(trialHydratedUser) });
   })
 );
 

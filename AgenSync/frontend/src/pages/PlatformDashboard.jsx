@@ -166,10 +166,12 @@ function ComparisonTable({ rows, filters, onFiltersChange, onSelect, selectedId 
         <Field label="Status">
           <select className={inputClass} value={filters.status} onChange={(event) => onFiltersChange({ ...filters, status: event.target.value })}>
             <option value="">Todos</option>
-            <option value="PAID">Pago</option>
-            <option value="TRIAL">Teste</option>
+            <option value="ACTIVE">Ativo</option>
+            <option value="TRIALING">Teste</option>
             <option value="PAST_DUE">Inadimplente</option>
+            <option value="BLOCKED">Bloqueado</option>
             <option value="CANCELED">Cancelado</option>
+            <option value="MANUAL_UNLOCKED">Liberado manualmente</option>
           </select>
         </Field>
         <Field label="Ordenar por">
@@ -358,7 +360,7 @@ function ActionPanel({ workspace, onRefresh }) {
           <Button
             variant="success"
             loading={busy === "paid"}
-            onClick={() => runAction("paid", "Marcar pagamento como pago", () => api.updatePlatformWorkspaceStatus(workspace.id, { subscriptionStatus: "PAID", reason }))}
+            onClick={() => runAction("paid", "Marcar pagamento como pago", () => api.updatePlatformWorkspaceStatus(workspace.id, { subscriptionStatus: "ACTIVE", reason }))}
           >
             Marcar como pago
           </Button>
@@ -369,7 +371,7 @@ function ActionPanel({ workspace, onRefresh }) {
               const until = new Date();
               until.setDate(until.getDate() + 7);
               return runAction("temp", "Liberar acesso temporario por 7 dias", () =>
-                api.updatePlatformWorkspaceStatus(workspace.id, { accountStatus: "ACTIVE", subscriptionStatus: "TRIAL", temporaryAccessUntil: until.toISOString(), reason })
+                api.updatePlatformWorkspaceStatus(workspace.id, { accountStatus: "ACTIVE", subscriptionStatus: "MANUAL_UNLOCKED", temporaryAccessUntil: until.toISOString(), reason })
               );
             }}
           >

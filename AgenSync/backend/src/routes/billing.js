@@ -27,7 +27,8 @@ router.post(
   asyncHandler(async (req, res) => {
     requireWorkspaceOwner(req);
     const checkout = await createBillingCheckoutSession(req.workspaceId, {
-      plan: req.body?.plan,
+      plan: req.body?.plan || req.body?.planSlug,
+      planSlug: req.body?.planSlug || req.body?.plan,
       successUrl: req.body?.successUrl,
       cancelUrl: req.body?.cancelUrl
     });

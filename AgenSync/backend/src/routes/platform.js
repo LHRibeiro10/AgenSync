@@ -9,7 +9,7 @@ import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
 
 const router = Router();
 
-const subscriptionStatuses = new Set(["PAID", "TRIAL", "PAST_DUE", "CANCELED"]);
+const subscriptionStatuses = new Set(["PAID", "TRIAL", "TRIALING", "ACTIVE", "PAST_DUE", "BLOCKED", "CANCELED", "MANUAL_UNLOCKED"]);
 const accountStatuses = new Set(["ACTIVE", "INACTIVE", "BLOCKED"]);
 const userStatuses = new Set(["ACTIVE", "INACTIVE"]);
 
@@ -466,9 +466,9 @@ router.get(
 
     const summary = {
       totalSubscribers: totalUsers,
-      activeSubscriptions: statusCount.paid || 0,
-      overdueSubscriptions: (statusCount.past_due || 0) + (statusCount.canceled || 0),
-      trialAccounts: statusCount.trial || 0,
+      activeSubscriptions: (statusCount.active || 0) + (statusCount.paid || 0) + (statusCount.manual_unlocked || 0),
+      overdueSubscriptions: (statusCount.past_due || 0) + (statusCount.blocked || 0) + (statusCount.canceled || 0),
+      trialAccounts: (statusCount.trialing || 0) + (statusCount.trial || 0),
       estimatedMrr: sumRows(rows, "financial.estimatedMrr"),
       totalWorkspaces: rows.length,
       totalUsers,
