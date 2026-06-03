@@ -6,7 +6,6 @@ import Card, { CardHeader } from "../components/Card.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass, readOnlyInputClass } from "../components/Field.jsx";
-import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -146,6 +145,17 @@ function SummaryCard({ label, value, helper, tone = "ink" }) {
       <p className={`mt-2 text-2xl font-black tracking-tight ${toneClass}`}>{value}</p>
       {helper ? <p className="mt-1 text-xs font-bold leading-5 text-muted">{helper}</p> : null}
     </article>
+  );
+}
+
+function LoadingValue({ loading, children, className = "h-7 w-24" }) {
+  if (!loading) return children;
+
+  return (
+    <span
+      className={`skeleton-line inline-block max-w-full rounded-full align-middle ${className}`}
+      aria-label="Carregando"
+    />
   );
 }
 
@@ -813,7 +823,12 @@ export default function Subscriptions() {
     };
   }, [clients, form, professionals, selectedProfessional, selectedService]);
 
-  if (loading) return <Loading label="Carregando mensalidades..." />;
+  const isInitialLoading =
+    loading &&
+    !subscriptions.length &&
+    !clients.length &&
+    !services.length &&
+    !professionals.length;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -825,15 +840,16 @@ export default function Subscriptions() {
       <Message type="error" actionLabel="Limpar" onAction={() => setError("")}>
         {error}
       </Message>
+      <Message>{loading && !isInitialLoading ? "Atualizando mensalidades..." : ""}</Message>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
-        <SummaryCard label="Ativos" value={summary.activeCount || 0} helper="mensalistas ativos" tone="blue" />
-        <SummaryCard label="Sessoes previstas" value={summary.sessionsExpected || 0} helper={formatMonth(currentMonth)} />
-        <SummaryCard label="Concluidas" value={summary.sessionsCompleted || 0} helper="no periodo" tone="green" />
-        <SummaryCard label="Receita prevista" value={money(summary.expected || 0)} helper="agenda + planos" />
-        <SummaryCard label="Realizado" value={money(summary.received || 0)} helper="concluido ou pago" tone="green" />
-        <SummaryCard label="Pendentes" value={summary.pending || 0} helper={money(summary.pendingAmount || 0)} tone="blue" />
-        <SummaryCard label="Atrasados" value={summary.overdue || 0} helper="competencias vencidas" tone="red" />
+        <SummaryCard label="Ativos" value={<LoadingValue loading={isInitialLoading} className="h-7 w-10">{summary.activeCount || 0}</LoadingValue>} helper="mensalistas ativos" tone="blue" />
+        <SummaryCard label="Sessoes previstas" value={<LoadingValue loading={isInitialLoading} className="h-7 w-10">{summary.sessionsExpected || 0}</LoadingValue>} helper={formatMonth(currentMonth)} />
+        <SummaryCard label="Concluidas" value={<LoadingValue loading={isInitialLoading} className="h-7 w-10">{summary.sessionsCompleted || 0}</LoadingValue>} helper="no periodo" tone="green" />
+        <SummaryCard label="Receita prevista" value={<LoadingValue loading={isInitialLoading} className="h-7 w-24">{money(summary.expected || 0)}</LoadingValue>} helper="agenda + planos" />
+        <SummaryCard label="Realizado" value={<LoadingValue loading={isInitialLoading} className="h-7 w-24">{money(summary.received || 0)}</LoadingValue>} helper="concluido ou pago" tone="green" />
+        <SummaryCard label="Pendentes" value={<LoadingValue loading={isInitialLoading} className="h-7 w-10">{summary.pending || 0}</LoadingValue>} helper={<LoadingValue loading={isInitialLoading} className="h-3 w-20">{money(summary.pendingAmount || 0)}</LoadingValue>} tone="blue" />
+        <SummaryCard label="Atrasados" value={<LoadingValue loading={isInitialLoading} className="h-7 w-10">{summary.overdue || 0}</LoadingValue>} helper="competencias vencidas" tone="red" />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[430px_minmax(0,1fr)] xl:items-start">
@@ -1151,9 +1167,46 @@ export default function Subscriptions() {
           </Card>
 
           <Card className="min-w-0 overflow-hidden">
-            <CardHeader title="Clientes mensalistas" description={`${subscriptions.length} mensalidade(s) cadastrada(s)`} />
+            <CardHeader
+              title="Clientes mensalistas"
+              description={
+                isInitialLoading ? (
+                  <LoadingValue loading className="h-4 w-44">Carregando</LoadingValue>
+                ) : (
+                  `${subscriptions.length} mensalidade(s) cadastrada(s)`
+                )
+              }
+            />
             <div className="compact-scroll-list divide-y divide-[#E2E8F0]">
-              {subscriptions.length ? (
+              {isInitialLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <article
+                    key={`subscription-loading-${index}`}
+                    className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-center"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="skeleton-line h-5 w-40 rounded-full" />
+                        <div className="skeleton-line h-6 w-16 rounded-full" />
+                        <div className="skeleton-line h-6 w-20 rounded-full" />
+                      </div>
+                      <div className="mt-2 skeleton-line h-4 w-56 max-w-full rounded-full" />
+                      <div className="mt-3 skeleton-line h-4 w-72 max-w-full rounded-full" />
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <div className="skeleton-line h-14 rounded-lg" />
+                        <div className="skeleton-line h-14 rounded-lg" />
+                        <div className="skeleton-line h-14 rounded-lg" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2 skeleton-line h-11 rounded-xl" />
+                      <div className="skeleton-line h-11 rounded-xl" />
+                      <div className="skeleton-line h-11 rounded-xl" />
+                      <div className="col-span-2 skeleton-line h-11 rounded-xl" />
+                    </div>
+                  </article>
+                ))
+              ) : subscriptions.length ? (
                 subscriptions.map((plan) => (
                   <article key={plan.id} className="grid gap-4 p-4 transition hover:bg-[#F8FAFC] xl:grid-cols-[minmax(0,1fr)_300px] xl:items-center">
                     <div className="min-w-0">
