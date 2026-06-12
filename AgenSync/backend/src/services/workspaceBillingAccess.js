@@ -27,6 +27,13 @@ function addDays(date, amount) {
   return next;
 }
 
+function trialAnchorDate(workspace) {
+  const startedAt = workspace?.trialStartedAt ? new Date(workspace.trialStartedAt) : null;
+  if (startedAt && !Number.isNaN(startedAt.getTime())) return startedAt;
+
+  return new Date();
+}
+
 function normalizeStatus(value, fallback = BILLING_ACCESS_STATUSES.TRIALING) {
   const status = String(value || "").trim().toUpperCase();
   if (status === "TRIAL") return BILLING_ACCESS_STATUSES.TRIALING;
@@ -138,8 +145,8 @@ export async function ensureWorkspaceTrialInitialized(workspaceOrId, { client = 
     return workspace;
   }
 
-  const now = new Date();
-  const trialEndsAt = addDays(now, TRIAL_DAYS);
+  const trialStartedAt = trialAnchorDate(workspace);
+  const trialEndsAt = addDays(trialStartedAt, TRIAL_DAYS);
   const plan = normalizePlanSlug(workspace.plan);
 
   const updated = await client.$transaction(async (tx) => {
@@ -150,7 +157,7 @@ export async function ensureWorkspaceTrialInitialized(workspaceOrId, { client = 
         plan,
         status: BILLING_ACCESS_STATUSES.TRIALING,
         trialEndsAt,
-        currentPeriodStart: now,
+        currentPeriodStart: trialStartedAt,
         currentPeriodEnd: trialEndsAt,
         metadata: { source: "trial_init" }
       }
@@ -161,7 +168,7 @@ export async function ensureWorkspaceTrialInitialized(workspaceOrId, { client = 
       data: {
         plan,
         planStatus: BILLING_ACCESS_STATUSES.TRIALING,
-        trialStartedAt: now,
+        trialStartedAt,
         trialEndsAt
       },
       include: {

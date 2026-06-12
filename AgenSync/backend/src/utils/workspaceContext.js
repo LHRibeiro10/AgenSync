@@ -124,6 +124,19 @@ function isMissingWorkspaceSchemaError(error) {
   return code === "P2021" || code === "P2022" || /Workspace(Member)?|currentWorkspaceId|workspaceId/i.test(message);
 }
 
+function addDays(date, amount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function trialWindowFrom(date = new Date()) {
+  return {
+    trialStartedAt: date,
+    trialEndsAt: addDays(date, 15)
+  };
+}
+
 function legacyWorkspaceFromUser(user) {
   if (!user?.id) return null;
   return {
@@ -505,12 +518,14 @@ export async function ensureDefaultWorkspaceForUser(user, client = prisma) {
       return { ...user, currentWorkspaceId: ownedWorkspace.id };
     }
 
+    const trialWindow = trialWindowFrom(new Date());
     const workspace = await client.workspace.create({
       data: {
         name: user.businessName || user.name || "Meu negocio",
         ownerId: user.id,
         plan: normalizePlanSlug(user.platformPlan),
-        planStatus: user.subscriptionStatus || "PAID"
+        planStatus: user.subscriptionStatus || "TRIALING",
+        ...trialWindow
       },
       select: { id: true }
     });
