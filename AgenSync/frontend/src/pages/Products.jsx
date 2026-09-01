@@ -9,6 +9,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
+import ModalShell, { FormSection } from "../components/ModalShell.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { useToast } from "../components/Toast.jsx";
 import {
@@ -333,6 +334,7 @@ export default function Products({ mode = "catalog" }) {
   const [filters, setFilters] = useState({ search: "", category: "", stock: mode === "stock" ? "attention" : "" });
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
+  const [modalMode, setModalMode] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [stockTarget, setStockTarget] = useState(null);
   const [stockAmount, setStockAmount] = useState("");
@@ -401,14 +403,26 @@ export default function Products({ mode = "catalog" }) {
 
   useEffect(() => {
     function handleNewProductRequest() {
-      setEditing(null);
-      setForm(emptyForm);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      openQuickCreate();
     }
 
     window.addEventListener("agensync:new-product", handleNewProductRequest);
     return () => window.removeEventListener("agensync:new-product", handleNewProductRequest);
   }, []);
+
+  function openQuickCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setError("");
+    setModalMode("quick");
+  }
+
+  function openCompleteCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setError("");
+    setModalMode("complete");
+  }
 
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));
@@ -425,6 +439,7 @@ export default function Products({ mode = "catalog" }) {
   function resetForm() {
     setEditing(null);
     setForm(emptyForm);
+    setModalMode(null);
   }
 
   function startEdit(product) {
@@ -447,7 +462,7 @@ export default function Products({ mode = "catalog" }) {
       usageType: product.usageType || "revenda"
     });
     setError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setModalMode("complete");
   }
 
   async function handleSubmit(event) {
@@ -619,189 +634,221 @@ export default function Products({ mode = "catalog" }) {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)] xl:items-start">
-        <Card as="form" onSubmit={handleSubmit} className="space-y-4 p-5 xl:sticky xl:top-4 xl:self-start">
+        <Card className="space-y-4 p-5 xl:sticky xl:top-4 xl:self-start">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">
-              {editing ? "Editar produto" : "Novo produto"}
-            </p>
-            <h2 className="mt-2 text-xl font-black tracking-tight text-ink">
-              {editing ? "Atualizar produto" : view.formTitle}
-            </h2>
-            <p className="mt-1 text-sm font-medium leading-6 text-muted">
-              {view.formDescription}
-            </p>
+            <h2 className="text-xl font-black tracking-tight text-ink">{view.formTitle}</h2>
+            <p className="mt-1 text-sm font-medium leading-6 text-muted">{view.formDescription}</p>
           </div>
 
-          <Field label="Nome">
-            <input
-              required
-              minLength={2}
-              value={form.name}
-              onChange={(event) => updateForm("name", event.target.value)}
-              className={inputClass}
-              placeholder="Ex: Óleo finalizador"
-            />
-          </Field>
-
-          <Field label="Categoria">
-            <select value={form.category} onChange={(event) => updateForm("category", event.target.value)} className={inputClass}>
-              {productCategories.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Preço de custo">
-              <input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.costPrice}
-                onChange={(event) => updateForm("costPrice", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Preço de venda">
-              <input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.salePrice}
-                onChange={(event) => updateForm("salePrice", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          {hasMarginInputs ? (
-            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-              <p className="text-sm font-black text-brand">
-                Margem: {marginPercent.toFixed(0)}% · Lucro por unidade: {money(profitPerUnit)}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Marca">
-              <input
-                value={form.brand}
-                onChange={(event) => updateForm("brand", event.target.value)}
-                className={inputClass}
-                placeholder="Ex: L'Oréal"
-              />
-            </Field>
-            <Field label="Código de barras / SKU">
-              <input
-                value={form.sku}
-                onChange={(event) => updateForm("sku", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Fornecedor">
-              <input
-                value={form.supplierName}
-                onChange={(event) => updateForm("supplierName", event.target.value)}
-                className={inputClass}
-                placeholder="Nome do fornecedor"
-              />
-            </Field>
-            <Field label="Contato do fornecedor">
-              <input
-                value={form.supplierContact}
-                onChange={(event) => updateForm("supplierContact", event.target.value)}
-                className={inputClass}
-                placeholder="Telefone ou e-mail"
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Unidade de medida">
-              <select value={form.unit} onChange={(event) => updateForm("unit", event.target.value)} className={inputClass}>
-                {unitOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Validade">
-              <input
-                type="date"
-                value={form.expirationDate}
-                onChange={(event) => updateForm("expirationDate", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <Field label="Uso do produto">
-            <select value={form.usageType} onChange={(event) => updateForm("usageType", event.target.value)} className={inputClass}>
-              {usageTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Estoque">
-              <input
-                required
-                type="number"
-                min="0"
-                value={form.stockQty}
-                onChange={(event) => updateForm("stockQty", Number(event.target.value))}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Estoque mínimo">
-              <input
-                required
-                type="number"
-                min="0"
-                value={form.minStock}
-                onChange={(event) => updateForm("minStock", Number(event.target.value))}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <Field label="Descrição">
-            <textarea
-              value={form.description}
-              onChange={(event) => updateForm("description", event.target.value)}
-              className={`${inputClass} min-h-24 resize-none`}
-              placeholder="Detalhes opcionais"
-            />
-          </Field>
-
-          <label className="flex min-h-14 items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-3">
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(event) => updateForm("isActive", event.target.checked)}
-              className="h-5 w-5 accent-brand"
-            />
-            <span className="text-sm font-bold text-ink">Ativo para venda</span>
-          </label>
-
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={resetForm} disabled={saving}>
-              {editing ? "Cancelar" : "Limpar"}
+          <div className="grid gap-2">
+            <Button size="lg" onClick={openQuickCreate}>
+              Cadastro rápido
             </Button>
-            <Button type="submit" loading={saving}>{editing ? "Atualizar" : "Cadastrar"}</Button>
+            <Button variant="secondary" size="lg" onClick={openCompleteCreate}>
+              Cadastro completo
+            </Button>
           </div>
         </Card>
+
+        {modalMode ? (
+          <ModalShell
+            title={editing ? "Editar produto" : modalMode === "quick" ? "Cadastro rápido" : "Cadastro completo"}
+            description={
+              modalMode === "quick"
+                ? "Nome, preço e estoque bastam para começar a vender."
+                : "Marca, fornecedor, validade e variações ficam disponíveis aqui."
+            }
+            onClose={resetForm}
+            wide={modalMode === "complete"}
+            footer={
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" onClick={resetForm} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button type="submit" form="product-form" loading={saving}>
+                  {editing ? "Atualizar" : "Cadastrar"}
+                </Button>
+              </div>
+            }
+          >
+            <form id="product-form" onSubmit={handleSubmit} className="space-y-5">
+              <FormSection title="Identificação">
+                <Field label="Nome">
+                  <input
+                    required
+                    minLength={2}
+                    value={form.name}
+                    onChange={(event) => updateForm("name", event.target.value)}
+                    className={inputClass}
+                    placeholder="Ex: Óleo finalizador"
+                  />
+                </Field>
+                <Field label="Categoria">
+                  <select value={form.category} onChange={(event) => updateForm("category", event.target.value)} className={inputClass}>
+                    {productCategories.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </FormSection>
+
+              <FormSection title="Preços">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Preço de custo">
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.costPrice}
+                      onChange={(event) => updateForm("costPrice", event.target.value)}
+                      className={inputClass}
+                    />
+                  </Field>
+                  <Field label="Preço de venda">
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.salePrice}
+                      onChange={(event) => updateForm("salePrice", event.target.value)}
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+
+                {hasMarginInputs ? (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                    <p className="text-sm font-black text-brand">
+                      Margem: {marginPercent.toFixed(0)}% · Lucro por unidade: {money(profitPerUnit)}
+                    </p>
+                  </div>
+                ) : null}
+              </FormSection>
+
+              {modalMode === "complete" ? (
+                <>
+                  <FormSection title="Marca e fornecedor">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Marca">
+                        <input
+                          value={form.brand}
+                          onChange={(event) => updateForm("brand", event.target.value)}
+                          className={inputClass}
+                          placeholder="Ex: L'Oréal"
+                        />
+                      </Field>
+                      <Field label="Código de barras / SKU">
+                        <input
+                          value={form.sku}
+                          onChange={(event) => updateForm("sku", event.target.value)}
+                          className={inputClass}
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Fornecedor">
+                        <input
+                          value={form.supplierName}
+                          onChange={(event) => updateForm("supplierName", event.target.value)}
+                          className={inputClass}
+                          placeholder="Nome do fornecedor"
+                        />
+                      </Field>
+                      <Field label="Contato do fornecedor">
+                        <input
+                          value={form.supplierContact}
+                          onChange={(event) => updateForm("supplierContact", event.target.value)}
+                          className={inputClass}
+                          placeholder="Telefone ou e-mail"
+                        />
+                      </Field>
+                    </div>
+                  </FormSection>
+
+                  <FormSection title="Unidade, validade e uso">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Unidade de medida">
+                        <select value={form.unit} onChange={(event) => updateForm("unit", event.target.value)} className={inputClass}>
+                          {unitOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Validade">
+                        <input
+                          type="date"
+                          value={form.expirationDate}
+                          onChange={(event) => updateForm("expirationDate", event.target.value)}
+                          className={inputClass}
+                        />
+                      </Field>
+                    </div>
+                    <Field label="Uso do produto">
+                      <select value={form.usageType} onChange={(event) => updateForm("usageType", event.target.value)} className={inputClass}>
+                        {usageTypeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </FormSection>
+                </>
+              ) : null}
+
+              <FormSection title="Estoque">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Estoque">
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      value={form.stockQty}
+                      onChange={(event) => updateForm("stockQty", Number(event.target.value))}
+                      className={inputClass}
+                    />
+                  </Field>
+                  <Field label="Estoque mínimo">
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      value={form.minStock}
+                      onChange={(event) => updateForm("minStock", Number(event.target.value))}
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+              </FormSection>
+
+              <FormSection title="Outros">
+                <Field label="Descrição">
+                  <textarea
+                    value={form.description}
+                    onChange={(event) => updateForm("description", event.target.value)}
+                    className={`${inputClass} min-h-24 resize-none`}
+                    placeholder="Detalhes opcionais"
+                  />
+                </Field>
+                <label className="flex min-h-14 items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(event) => updateForm("isActive", event.target.checked)}
+                    className="h-5 w-5 accent-brand"
+                  />
+                  <span className="text-sm font-bold text-ink">Ativo para venda</span>
+                </label>
+              </FormSection>
+            </form>
+          </ModalShell>
+        ) : null}
 
         <div className="min-w-0 space-y-5">
           <Card className="p-4 sm:p-5">
@@ -923,7 +970,13 @@ export default function Products({ mode = "catalog" }) {
                     title="Cadastre seu primeiro produto"
                     description={`Sugestões para o seu negócio: ${getSuggestedProductNames(user?.businessType).join(", ")}.`}
                     action={
-                      <Button size="sm" onClick={() => updateForm("name", getSuggestedProductNames(user?.businessType)[0] || "")}>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          openQuickCreate();
+                          updateForm("name", getSuggestedProductNames(user?.businessType)[0] || "");
+                        }}
+                      >
                         Usar primeira sugestão
                       </Button>
                     }

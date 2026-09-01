@@ -8,6 +8,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
+import ModalShell, { FormSection } from "../components/ModalShell.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -54,6 +55,7 @@ export default function Clients({ section = "clients" }) {
   const [clients, setClients] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
+  const [modalMode, setModalMode] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [activeTab, setActiveTab] = useState("data");
@@ -170,22 +172,25 @@ export default function Clients({ section = "clients" }) {
 
   useEffect(() => {
     function handleNewClientRequest() {
-      setEditing(null);
-      setForm(emptyForm);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      openQuickCreate();
     }
 
     window.addEventListener("agensync:new-client", handleNewClientRequest);
     return () => window.removeEventListener("agensync:new-client", handleNewClientRequest);
   }, []);
 
-  function focusCreateForm() {
-    const element = window.document.getElementById("clients-create-form");
-    element?.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.setTimeout(() => {
-      const firstInput = element?.querySelector("input");
-      firstInput?.focus();
-    }, 220);
+  function openQuickCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setError("");
+    setModalMode("quick");
+  }
+
+  function openCompleteCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setError("");
+    setModalMode("complete");
   }
 
   function openClient(client, tab = "data") {
@@ -214,12 +219,13 @@ export default function Clients({ section = "clients" }) {
       notes: client.notes || ""
     });
     setError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setModalMode("complete");
   }
 
   function resetForm() {
     setEditing(null);
     setForm(emptyForm);
+    setModalMode(null);
   }
 
   async function importContact() {
@@ -440,7 +446,7 @@ export default function Clients({ section = "clients" }) {
                       title="Voce ainda nao cadastrou clientes."
                       description="Comece adicionando seu primeiro cliente."
                       action={
-                        <Button onClick={focusCreateForm}>Adicionar primeiro cliente</Button>
+                        <Button onClick={openQuickCreate}>Adicionar primeiro cliente</Button>
                       }
                     />
                   </div>
@@ -469,211 +475,243 @@ export default function Clients({ section = "clients" }) {
           </div>
         ) : null}
 
-        <Card
-          as="form"
-          id="clients-create-form"
-          onSubmit={handleSubmit}
-          className="order-2 space-y-4 p-4 sm:p-5 xl:sticky xl:top-24 xl:col-start-1 xl:row-start-1 xl:self-start"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <h2 className="text-lg font-black text-ink">{editing ? "Editar cliente" : "Novo cliente"}</h2>
-              <p className="mt-1 text-sm text-muted">Telefone e observações ficam disponíveis nos agendamentos.</p>
-            </div>
-            {contactImportSupported ? (
-              <Button variant="secondary" size="sm" onClick={importContact}>
-                Importar contato
-              </Button>
-            ) : (
-              <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-muted">
-                Importacao de contatos nao disponivel neste dispositivo.
-              </p>
-            )}
+        <Card className="order-2 space-y-4 p-4 sm:p-5 xl:sticky xl:top-24 xl:col-start-1 xl:row-start-1 xl:self-start">
+          <div>
+            <h2 className="text-lg font-black text-ink">Novo cliente</h2>
+            <p className="mt-1 text-sm text-muted">Escolha um cadastro rápido ou preencha os dados completos.</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-slate-50 text-sm font-black text-slate-400">
-              {form.photoUrl ? (
-                <img src={form.photoUrl} alt="Foto do cliente" className="h-full w-full object-cover" />
-              ) : (
-                (form.name || "?").trim().charAt(0).toUpperCase()
-              )}
-            </span>
-            <div className="min-w-0">
-              <label
-                htmlFor="client-photo-input"
-                className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-xl border border-line bg-white px-3 text-xs font-black text-ink shadow-sm transition hover:border-brand/40 hover:text-brand"
-              >
-                {form.photoUrl ? "Trocar foto" : "Adicionar foto"}
-              </label>
-              <input
-                id="client-photo-input"
-                type="file"
-                accept={imageAccept()}
-                className="sr-only"
-                onChange={handlePhotoChange}
-              />
-              {photoError ? <p className="mt-1 text-xs font-bold text-danger">{photoError}</p> : null}
-            </div>
-          </div>
-
-          <Field label="Nome">
-            <input
-              required
-              minLength={2}
-              value={form.name}
-              onChange={(event) => update("name", event.target.value)}
-              className={inputClass}
-              placeholder="Nome do cliente"
-            />
-          </Field>
-          <Field label="Telefone">
-            <input
-              required
-              minLength={8}
-              value={form.phone}
-              onChange={(event) => update("phone", event.target.value)}
-              className={inputClass}
-              placeholder="(00) 00000-0000"
-            />
-          </Field>
-          <Field label="E-mail">
-            <input
-              type="email"
-              value={form.email}
-              onChange={(event) => update("email", event.target.value)}
-              className={inputClass}
-              placeholder="cliente@email.com"
-            />
-          </Field>
-          <Field label="Canal de origem">
-            <select
-              value={form.source}
-              onChange={(event) => update("source", event.target.value)}
-              className={inputClass}
-            >
-              <option value="">Não informado</option>
-              {originChannels.map((channel) => (
-                <option key={channel} value={channel}>
-                  {channel}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="CEP">
-              <input
-                value={form.zipCode}
-                onChange={(event) => update("zipCode", event.target.value)}
-                className={inputClass}
-                placeholder="00000-000"
-              />
-            </Field>
-            <Field label="Cidade">
-              <input
-                value={form.city}
-                onChange={(event) => update("city", event.target.value)}
-                className={inputClass}
-                placeholder="Cidade"
-              />
-            </Field>
-          </div>
-          <Field label="Endereço">
-            <input
-              value={form.address}
-              onChange={(event) => update("address", event.target.value)}
-              className={inputClass}
-              placeholder="Rua, avenida..."
-            />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Número">
-              <input
-                value={form.addressNumber}
-                onChange={(event) => update("addressNumber", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Complemento">
-              <input
-                value={form.addressComplement}
-                onChange={(event) => update("addressComplement", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Bairro">
-              <input
-                value={form.district}
-                onChange={(event) => update("district", event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <Field label="Tags">
-            <div className={`${inputClass} flex h-auto min-h-12 flex-wrap items-center gap-1.5 py-2`}>
-              {tagList.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-black text-brand"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    aria-label={`Remover tag ${tag}`}
-                    className="text-brand/70 hover:text-brand"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              <input
-                value={tagInput}
-                onChange={(event) => setTagInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === ",") {
-                    event.preventDefault();
-                    addTag(tagInput);
-                  }
-                }}
-                onBlur={() => addTag(tagInput)}
-                placeholder={tagList.length ? "" : "Ex.: VIP, Mensalista"}
-                className="min-w-[8rem] flex-1 border-0 bg-transparent p-0 text-sm font-bold text-ink outline-none placeholder:text-slate-400"
-              />
-            </div>
-          </Field>
-
-          <Field label="Observações">
-            <textarea
-              value={form.notes}
-              onChange={(event) => update("notes", event.target.value)}
-              className={`${inputClass} min-h-28 resize-none`}
-              placeholder="Preferências, restrições ou detalhes importantes"
-            />
-          </Field>
-          <Field label="Preferências internas (visível só para a equipe)">
-            <textarea
-              value={form.internalPreferences}
-              onChange={(event) => update("internalPreferences", event.target.value)}
-              className={`${inputClass} min-h-24 resize-none`}
-              placeholder="Notas internas que não aparecem para o cliente"
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-2">
-            {editing ? (
-              <Button variant="secondary" onClick={resetForm}>
-                Cancelar
-              </Button>
-            ) : null}
-            <Button type="submit" loading={saving} className={editing ? "" : "col-span-2"}>
-              {editing ? "Atualizar" : "Cadastrar"}
+          <div className="grid gap-2">
+            <Button size="lg" onClick={openQuickCreate}>
+              Cadastro rápido
+            </Button>
+            <Button variant="secondary" size="lg" onClick={openCompleteCreate}>
+              Cadastro completo
             </Button>
           </div>
+
+          {contactImportSupported ? (
+            <Button variant="ghost" className="w-full" onClick={importContact}>
+              Importar contato do celular
+            </Button>
+          ) : null}
         </Card>
       </section>
+
+      {modalMode ? (
+        <ModalShell
+          title={editing ? "Editar cliente" : modalMode === "quick" ? "Cadastro rápido" : "Cadastro completo"}
+          description={
+            modalMode === "quick"
+              ? "Nome e telefone bastam para começar. Complete os demais dados depois, se quiser."
+              : "Telefone e observações ficam disponíveis nos agendamentos."
+          }
+          onClose={resetForm}
+          wide={modalMode === "complete"}
+          footer={
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" onClick={resetForm} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button type="submit" form="client-form" loading={saving}>
+                {editing ? "Atualizar" : "Cadastrar"}
+              </Button>
+            </div>
+          }
+        >
+          <form id="client-form" onSubmit={handleSubmit} className="space-y-5">
+            <FormSection title="Identificação">
+              <div className="flex items-center gap-3">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-slate-50 text-sm font-black text-slate-400">
+                  {form.photoUrl ? (
+                    <img src={form.photoUrl} alt="Foto do cliente" className="h-full w-full object-cover" />
+                  ) : (
+                    (form.name || "?").trim().charAt(0).toUpperCase()
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <label
+                    htmlFor="client-photo-input"
+                    className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-xl border border-line bg-white px-3 text-xs font-black text-ink shadow-sm transition hover:border-brand/40 hover:text-brand"
+                  >
+                    {form.photoUrl ? "Trocar foto" : "Adicionar foto"}
+                  </label>
+                  <input
+                    id="client-photo-input"
+                    type="file"
+                    accept={imageAccept()}
+                    className="sr-only"
+                    onChange={handlePhotoChange}
+                  />
+                  {photoError ? <p className="mt-1 text-xs font-bold text-danger">{photoError}</p> : null}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Nome">
+                  <input
+                    required
+                    minLength={2}
+                    value={form.name}
+                    onChange={(event) => update("name", event.target.value)}
+                    className={inputClass}
+                    placeholder="Nome do cliente"
+                  />
+                </Field>
+                <Field label="Telefone">
+                  <input
+                    required
+                    minLength={8}
+                    value={form.phone}
+                    onChange={(event) => update("phone", event.target.value)}
+                    className={inputClass}
+                    placeholder="(00) 00000-0000"
+                  />
+                </Field>
+              </div>
+
+              {modalMode === "complete" ? (
+                <Field label="E-mail">
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => update("email", event.target.value)}
+                    className={inputClass}
+                    placeholder="cliente@email.com"
+                  />
+                </Field>
+              ) : null}
+            </FormSection>
+
+            {modalMode === "complete" ? (
+              <>
+                <FormSection title="Origem e tags">
+                  <Field label="Canal de origem">
+                    <select
+                      value={form.source}
+                      onChange={(event) => update("source", event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Não informado</option>
+                      {originChannels.map((channel) => (
+                        <option key={channel} value={channel}>
+                          {channel}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Tags">
+                    <div className={`${inputClass} flex h-auto min-h-12 flex-wrap items-center gap-1.5 py-2`}>
+                      {tagList.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-black text-brand"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            aria-label={`Remover tag ${tag}`}
+                            className="text-brand/70 hover:text-brand"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        value={tagInput}
+                        onChange={(event) => setTagInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === ",") {
+                            event.preventDefault();
+                            addTag(tagInput);
+                          }
+                        }}
+                        onBlur={() => addTag(tagInput)}
+                        placeholder={tagList.length ? "" : "Ex.: VIP, Mensalista"}
+                        className="min-w-[8rem] flex-1 border-0 bg-transparent p-0 text-sm font-bold text-ink outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                  </Field>
+                </FormSection>
+
+                <FormSection title="Endereço">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="CEP">
+                      <input
+                        value={form.zipCode}
+                        onChange={(event) => update("zipCode", event.target.value)}
+                        className={inputClass}
+                        placeholder="00000-000"
+                      />
+                    </Field>
+                    <Field label="Cidade">
+                      <input
+                        value={form.city}
+                        onChange={(event) => update("city", event.target.value)}
+                        className={inputClass}
+                        placeholder="Cidade"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Endereço">
+                    <input
+                      value={form.address}
+                      onChange={(event) => update("address", event.target.value)}
+                      className={inputClass}
+                      placeholder="Rua, avenida..."
+                    />
+                  </Field>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="Número">
+                      <input
+                        value={form.addressNumber}
+                        onChange={(event) => update("addressNumber", event.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Complemento">
+                      <input
+                        value={form.addressComplement}
+                        onChange={(event) => update("addressComplement", event.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Bairro">
+                      <input
+                        value={form.district}
+                        onChange={(event) => update("district", event.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
+                  </div>
+                </FormSection>
+              </>
+            ) : null}
+
+            <FormSection title="Notas">
+              <Field label="Observações">
+                <textarea
+                  value={form.notes}
+                  onChange={(event) => update("notes", event.target.value)}
+                  className={`${inputClass} min-h-28 resize-none`}
+                  placeholder="Preferências, restrições ou detalhes importantes"
+                />
+              </Field>
+              {modalMode === "complete" ? (
+                <Field label="Preferências internas (visível só para a equipe)">
+                  <textarea
+                    value={form.internalPreferences}
+                    onChange={(event) => update("internalPreferences", event.target.value)}
+                    className={`${inputClass} min-h-24 resize-none`}
+                    placeholder="Notas internas que não aparecem para o cliente"
+                  />
+                </Field>
+              ) : null}
+            </FormSection>
+          </form>
+        </ModalShell>
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}
