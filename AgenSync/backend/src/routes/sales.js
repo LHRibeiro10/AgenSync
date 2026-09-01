@@ -157,7 +157,7 @@ router.get(
         take: 300
       }),
       prisma.product.findMany({
-        where: workspaceWhere(req, { isActive: true }),
+        where: workspaceWhere(req, { isActive: true, usageType: { not: "uso_interno" } }),
         select: productSelect,
         orderBy: [{ name: "asc" }],
         take: 300

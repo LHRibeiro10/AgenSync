@@ -1,0 +1,3 @@
+ALTER TABLE "Client"
+  ADD COLUMN IF NOT EXISTS "photoUrl" TEXT,
+  ADD COLUMN IF NOT EXISTS "internalPreferences" TEXT;

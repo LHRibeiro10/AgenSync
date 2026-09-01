@@ -6,8 +6,27 @@ import Button from "./components/Button.jsx";
 import Layout from "./components/Layout.jsx";
 import Loading from "./components/Loading.jsx";
 import PageTransition from "./components/PageTransition.jsx";
+import SplashScreen from "./components/SplashScreen.jsx";
 import { canUsePlanFeature } from "./config/plans.js";
 import { useAuth } from "./contexts/AuthContext.jsx";
+
+const SPLASH_SHOWN_KEY = "agensync:splash-shown";
+
+function hasShownSplash() {
+  try {
+    return Boolean(window.sessionStorage.getItem(SPLASH_SHOWN_KEY));
+  } catch {
+    return true;
+  }
+}
+
+function markSplashShown() {
+  try {
+    window.sessionStorage.setItem(SPLASH_SHOWN_KEY, "1");
+  } catch {
+    // sessionStorage unavailable (private mode, etc.) — splash just won't persist across reloads.
+  }
+}
 
 const Agenda = lazy(() => import("./pages/Agenda.jsx"));
 const AcceptInvite = lazy(() => import("./pages/AcceptInvite.jsx"));
@@ -90,6 +109,7 @@ function SubscriptionBlockedScreen() {
 function ProtectedRoute() {
   const { loading, isAuthenticated, hasPlatformAccess, user, workspaceRole } = useAuth();
   const location = useLocation();
+  const [splashDone, setSplashDone] = useState(hasShownSplash);
   const isPlatformPath =
     location.pathname.startsWith("/platform") ||
     location.pathname.startsWith("/plataforma") ||
@@ -110,6 +130,17 @@ function ProtectedRoute() {
   }
   if (!hasPlatformAccess && isPlatformPath) {
     return <Navigate to="/" replace />;
+  }
+  if (!hasPlatformAccess && !splashDone) {
+    return (
+      <SplashScreen
+        firstName={user?.name?.trim().split(" ")[0] || ""}
+        onDone={() => {
+          markSplashShown();
+          setSplashDone(true);
+        }}
+      />
+    );
   }
   return <Layout />;
 }

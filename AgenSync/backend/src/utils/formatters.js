@@ -114,6 +114,8 @@ export function publicClient(client) {
     source: client.source || "",
     externalId: client.externalId || "",
     notes: client.notes || "",
+    photoUrl: client.photoUrl || "",
+    internalPreferences: client.internalPreferences || "",
     isActive: client.isActive !== false,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt
@@ -248,8 +250,41 @@ export function publicProduct(product) {
     minStock: product.minStock,
     description: product.description || "",
     isActive: product.isActive,
+    brand: product.brand || "",
+    supplierName: product.supplierName || "",
+    supplierContact: product.supplierContact || "",
+    sku: product.sku || "",
+    unit: product.unit || "unidade",
+    expirationDate: product.expirationDate ? formatDate(product.expirationDate) : "",
+    usageType: product.usageType || "revenda",
     createdAt: product.createdAt,
     updatedAt: product.updatedAt
+  };
+}
+
+export function publicProductVariant(variant) {
+  return {
+    id: variant.id,
+    productId: variant.productId,
+    label: variant.label,
+    sku: variant.sku || "",
+    costPrice: Number(variant.costPrice),
+    salePrice: Number(variant.salePrice),
+    stockQty: variant.stockQty,
+    isActive: variant.isActive
+  };
+}
+
+export function publicProductStockMovement(movement) {
+  return {
+    id: movement.id,
+    productId: movement.productId,
+    variantId: movement.variantId || "",
+    type: movement.type,
+    quantity: movement.quantity,
+    supplierName: movement.supplierName || "",
+    note: movement.note || "",
+    createdAt: movement.createdAt
   };
 }
 

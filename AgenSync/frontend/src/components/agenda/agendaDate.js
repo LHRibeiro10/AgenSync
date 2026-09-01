@@ -62,6 +62,10 @@ export function buildWeekDays(weekStart, workingHours) {
   });
 }
 
+export function formatMonthYearLabel(date) {
+  return `${longMonths[date.getMonth()]} ${date.getFullYear()}`;
+}
+
 export function formatWeekLabel(days) {
   const first = parseDateKey(days[0].date);
   const last = parseDateKey(days[days.length - 1].date);

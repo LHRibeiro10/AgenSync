@@ -210,11 +210,92 @@ export async function parseSimpleAgendaClientsFile(file) {
   };
 }
 
+const genericColumns = {
+  nome: "name",
+  telefone: "phone",
+  email: "email",
+  "data nascimento": "birthDate",
+  observacoes: "notes",
+  observacao: "notes"
+};
+
+export function downloadClientImportTemplate() {
+  const csv = "﻿Nome,Telefone,Email,DataNascimento,Observações\n";
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "modelo-importacao-clientes.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function normalizeGenericRow(row, lineNumber) {
+  const mapped = {};
+  Object.entries(row || {}).forEach(([column, value]) => {
+    const field = genericColumns[normalizeHeader(column)];
+    if (field) mapped[field] = value;
+  });
+
+  const client = {
+    name: cleanText(mapped.name) || "",
+    phone: normalizeImportPhone(mapped.phone),
+    email: cleanText(mapped.email) || "",
+    birthDate: normalizeBrazilianDate(mapped.birthDate),
+    notes: cleanText(mapped.notes) || ""
+  };
+
+  const errors = [];
+  if (!client.name || client.name.length < 2) errors.push("Nome e obrigatorio.");
+  if (!client.phone && !client.email) errors.push("Informe telefone ou e-mail.");
+
+  return {
+    lineNumber,
+    client,
+    errors,
+    status: errors.length ? "erro" : "pronto"
+  };
+}
+
+export async function parseGenericClientsFile(file) {
+  if (!file) throw new Error("Selecione uma planilha para importar.");
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (!["csv", "xlsx"].includes(extension || "")) {
+    throw new Error("Arquivo invalido. Use CSV ou XLSX.");
+  }
+
+  let rows = [];
+  if (extension === "csv") {
+    rows = parseCsvText(await file.text());
+  } else {
+    const { default: readXlsxFile } = await import("read-excel-file/browser");
+    rows = rowsFromMatrix(await readXlsxFile(file));
+  }
+
+  const nonEmptyRows = rows.filter((row) => !isEmptyRow(row));
+  if (!nonEmptyRows.length) {
+    throw new Error("Nenhum cliente encontrado na planilha.");
+  }
+
+  const headers = Object.keys(nonEmptyRows[0] || {});
+  const recognizedColumns = headers.filter((header) => genericColumns[normalizeHeader(header)]);
+
+  return {
+    rows: nonEmptyRows.map((row, index) => normalizeGenericRow(row, index + 2)),
+    recognizedColumns,
+    totalRows: nonEmptyRows.length
+  };
+}
+
 export function detectDuplicateClients(importRows, existingClients = []) {
   const existingKeys = new Set(
     existingClients.flatMap((client) => [
       client.phone ? `phone:${normalizeImportPhone(client.phone)}` : "",
       client.cpf ? `cpf:${normalizeDocument(client.cpf)}` : "",
+      client.email ? `email:${String(client.email).trim().toLowerCase()}` : "",
       client.phone ? `name_phone:${String(client.name || "").trim().toLowerCase()}_${normalizeImportPhone(client.phone)}` : ""
     ].filter(Boolean))
   );
@@ -227,6 +308,7 @@ export function detectDuplicateClients(importRows, existingClients = []) {
     const keys = [
       client.phone ? `phone:${client.phone}` : "",
       client.cpf ? `cpf:${client.cpf}` : "",
+      client.email ? `email:${String(client.email).trim().toLowerCase()}` : "",
       client.phone ? `name_phone:${client.name.trim().toLowerCase()}_${client.phone}` : ""
     ].filter(Boolean);
     const isDuplicate = keys.some((key) => existingKeys.has(key) || seenKeys.has(key));

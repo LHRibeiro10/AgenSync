@@ -10,7 +10,7 @@ export function ToastProvider({ children }) {
     setToast({ id, message, type });
     window.setTimeout(() => {
       setToast((current) => (current?.id === id ? null : current));
-    }, 2800);
+    }, 3000);
   }
 
   const value = useMemo(() => ({ showToast }), []);

@@ -319,6 +319,58 @@ function sanitizeFilePart(value) {
     .replace(/^-|-$/g, "");
 }
 
+function downloadWorkbook(rows, merges, filenamePrefix, filenameSuffix) {
+  const files = [
+    { name: "[Content_Types].xml", content: buildContentTypesXml() },
+    { name: "_rels/.rels", content: buildRootRelsXml() },
+    { name: "xl/workbook.xml", content: buildWorkbookXml() },
+    { name: "xl/_rels/workbook.xml.rels", content: buildWorkbookRelsXml() },
+    { name: "xl/styles.xml", content: buildStylesXml() },
+    { name: "xl/worksheets/sheet1.xml", content: buildSheetXml(rows, merges) }
+  ];
+
+  const bytes = createZip(files);
+  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const filename = `${filenamePrefix}-${sanitizeFilePart(filenameSuffix)}.xlsx`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return filename;
+}
+
+// Generic single-table export, reused by /historico, /vendas/historico and /despesas.
+export function exportSimpleTableExcel({ title, subtitle, headers, rows, emptyLabel, filenamePrefix, filenameSuffix }) {
+  const columnCount = headers.length;
+  const blankCells = (style) => Array.from({ length: columnCount - 1 }, () => ({ value: "", style }));
+  const sheetRows = [];
+  const merges = [];
+
+  sheetRows.push(row([{ value: "AgenSync", style: 1 }, ...blankCells(1)], 28));
+  merges.push(`A1:${columnName(columnCount)}1`);
+
+  if (subtitle) {
+    sheetRows.push(row([{ value: subtitle, style: 2 }, ...blankCells(2)], 22));
+    merges.push(`A2:${columnName(columnCount)}2`);
+  }
+
+  sheetRows.push(header(headers));
+
+  if (rows.length) {
+    rows.forEach((cells) => sheetRows.push(row(cells)));
+  } else {
+    sheetRows.push(row([{ value: emptyLabel || "Nenhum registro no período.", style: 13 }]));
+    merges.push(`A${sheetRows.length}:${columnName(columnCount)}${sheetRows.length}`);
+  }
+
+  return downloadWorkbook(sheetRows, merges, filenamePrefix, filenameSuffix);
+}
+
 export function exportFinancialReportExcel(report) {
   const rows = [];
   const merges = [];

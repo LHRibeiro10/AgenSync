@@ -4,6 +4,9 @@ import { ApiError, asyncHandler } from "../middleware/error.js";
 import { clientAccessWhere, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { publicClient, publicClientCareRecord, publicProduct, publicService } from "../utils/formatters.js";
 import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
+import { recordAuditEvent } from "../utils/audit.js";
+
+const CLIENT_FICHA_UPDATED_EVENT = "CLIENT_FICHA_UPDATED";
 
 const router = Router();
 const CLIENT_LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.CLIENT_LIST_CACHE_TTL_MS || 15_000));
@@ -118,6 +121,22 @@ function normalizeImportedClient(row, index) {
   };
 }
 
+function extendedClientFields(body) {
+  return {
+    zipCode: cleanDigits(body.zipCode, 12),
+    address: cleanString(body.address, 200),
+    addressNumber: cleanString(body.addressNumber, 40),
+    addressComplement: cleanString(body.addressComplement, 120),
+    district: cleanString(body.district, 120),
+    state: cleanString(body.state, 2)?.toUpperCase() || null,
+    city: cleanString(body.city, 120),
+    tags: cleanString(body.tags, 500),
+    source: cleanString(body.source, 120),
+    photoUrl: cleanString(body.photoUrl, 2_000_000),
+    internalPreferences: cleanString(body.internalPreferences, 3000)
+  };
+}
+
 router.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -197,7 +216,15 @@ router.post(
     const notes = optionalString(req.body.notes);
 
     const client = await prisma.client.create({
-      data: { workspaceId: req.workspaceId || null, userId: req.user.id, name, phone, email, notes }
+      data: {
+        workspaceId: req.workspaceId || null,
+        userId: req.user.id,
+        name,
+        phone,
+        email,
+        notes,
+        ...extendedClientFields(req.body)
+      }
     });
 
     clearClientListCache();
@@ -304,7 +331,7 @@ router.get(
 router.put(
   "/:id/care-record",
   asyncHandler(async (req, res) => {
-    await findClientOrFail(req, req.params.id);
+    const client = await findClientOrFail(req, req.params.id);
     requireWorkspacePermission("canManageClients")(req, res, () => {});
 
     const payload = {
@@ -316,6 +343,9 @@ router.put(
       evolutions: jsonArray(req.body.evolutions)
     };
 
+    const existing = await prisma.clientCareRecord.findUnique({ where: { clientId: req.params.id } });
+    const formsChanged = JSON.stringify(existing?.forms || []) !== JSON.stringify(payload.forms);
+
     const record = await prisma.clientCareRecord.upsert({
       where: { clientId: req.params.id },
       create: {
@@ -326,7 +356,42 @@ router.put(
       update: payload
     });
 
+    if (formsChanged) {
+      await recordAuditEvent({
+        req,
+        userId: req.user.id,
+        eventType: CLIENT_FICHA_UPDATED_EVENT,
+        message: `Ficha de ${client.name} atualizada.`,
+        metadata: { clientId: req.params.id }
+      });
+    }
+
     res.json({ care: publicClientCareRecord(record) });
+  })
+);
+
+router.get(
+  "/:id/ficha-history",
+  asyncHandler(async (req, res) => {
+    await findClientOrFail(req, req.params.id);
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        eventType: CLIENT_FICHA_UPDATED_EVENT,
+        metadata: { path: ["clientId"], equals: req.params.id }
+      },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
+
+    res.json({
+      history: logs.map((log) => ({
+        id: log.id,
+        editedBy: log.user?.name || log.email || "Equipe",
+        createdAt: log.createdAt
+      }))
+    });
   })
 );
 
@@ -356,6 +421,7 @@ router.put(
         phone,
         email,
         notes,
+        ...extendedClientFields(req.body),
         ...(req.body.isActive === undefined ? {} : { isActive: parseBoolean(req.body.isActive, true) })
       }
     });

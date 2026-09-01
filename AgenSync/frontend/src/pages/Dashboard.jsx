@@ -630,7 +630,10 @@ export default function Dashboard() {
       applyDashboardSnapshot(snapshot);
       writeDashboardSnapshot(user, nextFilters, snapshot);
     } catch (err) {
-      setData(null);
+      // Keep any previously loaded data on screen; only fall back to the empty
+      // snapshot when there was nothing yet, so cards show "R$ 0,00"/"-" instead
+      // of an indefinite loading skeleton (e.g. a brand-new, still-empty account).
+      setData((current) => current || EMPTY_DASHBOARD_DATA);
       setTeamAppointments([]);
       setPreviousAppointments([]);
       setPreviousSales([]);

@@ -17,6 +17,26 @@ export function deleteProductApi(productId) {
   return httpClient.delete(endpoints.products.byId(productId));
 }
 
+export function listProductStockMovementsApi(productId) {
+  return httpClient.get(endpoints.products.stockMovements(productId));
+}
+
+export function createProductStockMovementApi(productId, payload) {
+  return httpClient.post(endpoints.products.stockMovements(productId), { body: payload });
+}
+
+export function listProductVariantsApi(productId) {
+  return httpClient.get(endpoints.products.variants(productId));
+}
+
+export function createProductVariantApi(productId, payload) {
+  return httpClient.post(endpoints.products.variants(productId), { body: payload });
+}
+
+export function deleteProductVariantApi(productId, variantId) {
+  return httpClient.delete(endpoints.products.variantById(productId, variantId));
+}
+
 export function listSalesApi(params) {
   return httpClient.get(endpoints.sales.list, { params, cacheTtlMs: 30000 });
 }

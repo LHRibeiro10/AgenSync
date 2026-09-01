@@ -3,12 +3,14 @@ import Button from "../Button.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
 import EmptyState from "../EmptyState.jsx";
 import Field, { inputClass } from "../Field.jsx";
+import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
   createFormTemplate,
   deleteClientForm,
   deleteFormTemplate,
   duplicateClientForm,
   duplicateFormTemplate,
+  getFichaHistory,
   listFormTemplates,
   saveClientForm,
   updateFormTemplate
@@ -142,27 +144,33 @@ function RecordFieldShell({ field, children }) {
 }
 
 export default function ProntuaryFormsTab({ client, care, onCareChange, showToast }) {
-  const [templates, setTemplates] = useState(() => listFormTemplates());
-  const [templateForm, setTemplateForm] = useState(() => templateToForm(listFormTemplates()[0]));
+  const { user } = useAuth();
+  const businessType = user?.businessType;
+  const [templates, setTemplates] = useState(() => listFormTemplates(businessType));
+  const [templateForm, setTemplateForm] = useState(() => templateToForm(listFormTemplates(businessType)[0]));
   const [recordForm, setRecordForm] = useState(null);
   const [showLegacyAnamnesis, setShowLegacyAnamnesis] = useState(false);
   const [pendingTemplateDelete, setPendingTemplateDelete] = useState(null);
   const [pendingFormDelete, setPendingFormDelete] = useState(null);
+  const [fichaHistory, setFichaHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
-    const nextTemplates = listFormTemplates();
+    const nextTemplates = listFormTemplates(businessType);
     setTemplates(nextTemplates);
     setTemplateForm(templateToForm(nextTemplates[0]));
     setRecordForm(null);
     setShowLegacyAnamnesis(false);
     setPendingTemplateDelete(null);
     setPendingFormDelete(null);
-  }, [client.id]);
+    setShowHistory(false);
+    setFichaHistory([]);
+  }, [client.id, businessType]);
 
   useEffect(() => {
     function refreshFromStorage(event) {
       if (event.type === "storage" && event.key !== "agensync_form_templates_v1") return;
-      const nextTemplates = listFormTemplates();
+      const nextTemplates = listFormTemplates(businessType);
       setTemplates(nextTemplates);
       setTemplateForm((current) => {
         const selected = nextTemplates.find((template) => template.id === current.id) || nextTemplates[0];
@@ -177,7 +185,19 @@ export default function ProntuaryFormsTab({ client, care, onCareChange, showToas
       window.removeEventListener("storage", refreshFromStorage);
       window.removeEventListener("agensync:form-templates-updated", refreshFromStorage);
     };
-  }, []);
+  }, [businessType]);
+
+  function toggleHistory() {
+    setShowHistory((current) => {
+      const next = !current;
+      if (next && client.id) {
+        getFichaHistory(client.id)
+          .then(setFichaHistory)
+          .catch((err) => showToast(err.message, "error"));
+      }
+      return next;
+    });
+  }
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateForm.id) || templates[0],
@@ -651,7 +671,29 @@ export default function ProntuaryFormsTab({ client, care, onCareChange, showToas
         )}
 
         <div className="space-y-3">
-          <h3 className="text-lg font-black text-ink">Fichas salvas</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-black text-ink">Fichas salvas</h3>
+            <Button variant="secondary" size="sm" onClick={toggleHistory}>
+              {showHistory ? "Ocultar histórico" : "Histórico de alterações"}
+            </Button>
+          </div>
+
+          {showHistory ? (
+            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+              {fichaHistory.length ? (
+                <ul className="space-y-2">
+                  {fichaHistory.map((entry) => (
+                    <li key={entry.id} className="text-sm font-bold text-ink">
+                      {formatDateTime(entry.createdAt)} · editado por {entry.editedBy}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm font-semibold text-muted">Nenhuma alteração registrada ainda.</p>
+              )}
+            </div>
+          ) : null}
+
           {care.forms.length ? (
             care.forms.map((record) => (
               <article key={record.id} className="rounded-xl border border-[#E2E8F0] bg-white p-4">

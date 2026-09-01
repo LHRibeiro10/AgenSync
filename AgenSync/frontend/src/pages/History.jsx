@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
+import Button from "../components/Button.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import FilterBar, { periodLabel, rangeForPeriod } from "../components/FilterBar.jsx";
@@ -7,7 +8,8 @@ import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import { money, statusOptions } from "../utils.js";
+import { exportSimpleTableExcel } from "../services/excelReport.js";
+import { money, statusLabel, statusOptions } from "../utils.js";
 
 export default function History() {
   const initialRange = rangeForPeriod("thisMonth");
@@ -16,7 +18,7 @@ export default function History() {
     startDate: initialRange.startDate,
     endDate: initialRange.endDate,
     clientId: "",
-    status: "",
+    status: "concluido",
     search: ""
   });
   const [clients, setClients] = useState([]);
@@ -60,7 +62,7 @@ export default function History() {
       startDate: range.startDate,
       endDate: range.endDate,
       clientId: "",
-      status: "",
+      status: "concluido",
       search: ""
     };
     setFilters(next);
@@ -78,9 +80,39 @@ export default function History() {
     );
   }, [appointments, filters.search]);
 
+  function exportExcel() {
+    exportSimpleTableExcel({
+      title: "Histórico de atendimentos",
+      subtitle: periodLabel(filters),
+      headers: ["Data", "Hora", "Cliente", "Serviço", "Valor", "Status"],
+      rows: visibleAppointments.map((appointment) => [
+        { value: appointment.date, style: 5 },
+        { value: appointment.startTime, style: 5 },
+        { value: appointment.client?.name || "", style: 5 },
+        { value: appointment.service?.name || "", style: 5 },
+        { value: Number(appointment.price || 0), style: 7 },
+        { value: statusLabel(appointment.status), style: 5 }
+      ]),
+      emptyLabel: "Nenhum atendimento no período.",
+      filenamePrefix: "agensync-historico",
+      filenameSuffix: `${filters.startDate || "inicio"}-${filters.endDate || "fim"}`
+    });
+  }
+
   return (
     <div className="space-y-5">
-      <PageHeader title="Histórico" description="Filtre atendimentos por período, cliente e status." />
+      <PageHeader
+        title="Histórico"
+        description="Filtre atendimentos por período, cliente e status."
+        action={
+          <Button variant="secondary" onClick={exportExcel} disabled={!visibleAppointments.length}>
+            Exportar Excel
+          </Button>
+        }
+      />
+      <p className="-mt-3 text-xs font-bold text-muted" title="Ajuste o filtro de status para ver outros atendimentos">
+        Por padrão, mostra apenas atendimentos com status "Concluído".
+      </p>
       <Message type="error">{error}</Message>
 
       <FilterBar
@@ -129,7 +161,14 @@ export default function History() {
                 </article>
               ))
             ) : (
-              <EmptyState title="Nenhum atendimento encontrado" description="Ajuste os filtros para ampliar a busca." />
+              <EmptyState
+                title="Nenhum atendimento encontrado"
+                description={
+                  filters.status === "concluido"
+                    ? "O histórico mostra apenas atendimentos concluídos. Ajuste o filtro de status para ver outros."
+                    : "Ajuste os filtros para ampliar a busca."
+                }
+              />
             )}
           </div>
         )}

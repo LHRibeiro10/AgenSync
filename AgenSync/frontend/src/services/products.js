@@ -11,5 +11,10 @@
   listProductSales,
   getSalesOverview,
   sumProductSales,
-  productSalesProfit
+  productSalesProfit,
+  listProductStockMovements,
+  addProductStockMovement,
+  listProductVariants,
+  createProductVariant,
+  deleteProductVariant
 } from "./productService.js";

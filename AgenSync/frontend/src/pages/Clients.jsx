@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSubmitLock } from "../hooks/useSubmitLock.js";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
@@ -17,8 +18,27 @@ import {
   normalizeContactPhone,
   supportsContactPicker
 } from "../services/contactImportService.js";
+import { imageAccept, imageFileToDataUrl } from "../components/client-care/photoUtils.js";
 
-const emptyForm = { name: "", phone: "", notes: "" };
+const emptyForm = {
+  name: "",
+  phone: "",
+  email: "",
+  zipCode: "",
+  address: "",
+  addressNumber: "",
+  addressComplement: "",
+  district: "",
+  city: "",
+  state: "",
+  source: "",
+  tags: "",
+  internalPreferences: "",
+  photoUrl: "",
+  notes: ""
+};
+
+const originChannels = ["Instagram", "Indicação", "Google", "Passagem na rua", "Outro"];
 
 const clientSections = {
   clients: ["Clientes", "Cadastro, status e dados principais dos clientes.", "data", "Cadastro", "Atendimento", "Cadastre, edite e inative clientes sem misturar prontuario e documentos."],
@@ -43,9 +63,11 @@ export default function Clients({ section = "clients" }) {
   const [products, setProducts] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, guardSubmit] = useSubmitLock();
   const [statusUpdatingId, setStatusUpdatingId] = useState("");
   const [contactImportSupported, setContactImportSupported] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [photoError, setPhotoError] = useState("");
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const { markStepComplete } = useOnboarding();
@@ -146,6 +168,17 @@ export default function Clients({ section = "clients" }) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  useEffect(() => {
+    function handleNewClientRequest() {
+      setEditing(null);
+      setForm(emptyForm);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    window.addEventListener("agensync:new-client", handleNewClientRequest);
+    return () => window.removeEventListener("agensync:new-client", handleNewClientRequest);
+  }, []);
+
   function focusCreateForm() {
     const element = window.document.getElementById("clients-create-form");
     element?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -163,7 +196,23 @@ export default function Clients({ section = "clients" }) {
 
   function startEdit(client) {
     setEditing(client.id);
-    setForm({ name: client.name, phone: client.phone, notes: client.notes || "" });
+    setForm({
+      name: client.name,
+      phone: client.phone,
+      email: client.email || "",
+      zipCode: client.zipCode || "",
+      address: client.address || "",
+      addressNumber: client.addressNumber || "",
+      addressComplement: client.addressComplement || "",
+      district: client.district || "",
+      city: client.city || "",
+      state: client.state || "",
+      source: client.source || "",
+      tags: client.tags || "",
+      internalPreferences: client.internalPreferences || "",
+      photoUrl: client.photoUrl || "",
+      notes: client.notes || ""
+    });
     setError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -204,9 +253,45 @@ export default function Clients({ section = "clients" }) {
     showToast("Contato importado. Revise os dados antes de salvar.");
   }
 
+  const tagList = form.tags
+    ? form.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    : [];
+
+  function addTag(rawTag) {
+    const tag = rawTag.trim();
+    if (!tag) return;
+    if (tagList.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+      setTagInput("");
+      return;
+    }
+    update("tags", [...tagList, tag].join(","));
+    setTagInput("");
+  }
+
+  function removeTag(tag) {
+    update("tags", tagList.filter((item) => item !== tag).join(","));
+  }
+
+  async function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setPhotoError("");
+    try {
+      const dataUrl = await imageFileToDataUrl(file, 480);
+      update("photoUrl", dataUrl);
+    } catch (err) {
+      setPhotoError(err.message);
+      showToast(err.message, "error");
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
-    setSaving(true);
     setError("");
     const payload = {
       ...form,
@@ -217,27 +302,26 @@ export default function Clients({ section = "clients" }) {
       const message = "Informe um telefone valido.";
       setError(message);
       showToast(message, "error");
-      setSaving(false);
       return;
     }
 
-    try {
-      if (editing) {
-        await api.updateClient(editing, payload);
-        showToast("Cliente atualizado.");
-      } else {
-        await api.createClient(payload);
-        markStepComplete("client", { toast: false });
-        showToast("Cliente cadastrado.");
+    await guardSubmit(async () => {
+      try {
+        if (editing) {
+          await api.updateClient(editing, payload);
+          showToast("Cliente atualizado.");
+        } else {
+          await api.createClient(payload);
+          markStepComplete("client", { toast: false });
+          showToast("Cliente cadastrado.");
+        }
+        resetForm();
+        await loadClients();
+      } catch (err) {
+        setError(err.message);
+        showToast(err.message, "error");
       }
-      resetForm();
-      await loadClients();
-    } catch (err) {
-      setError(err.message);
-      showToast(err.message, "error");
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   async function confirmDelete() {
@@ -407,6 +491,32 @@ export default function Clients({ section = "clients" }) {
             )}
           </div>
 
+          <div className="flex items-center gap-3">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-slate-50 text-sm font-black text-slate-400">
+              {form.photoUrl ? (
+                <img src={form.photoUrl} alt="Foto do cliente" className="h-full w-full object-cover" />
+              ) : (
+                (form.name || "?").trim().charAt(0).toUpperCase()
+              )}
+            </span>
+            <div className="min-w-0">
+              <label
+                htmlFor="client-photo-input"
+                className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-xl border border-line bg-white px-3 text-xs font-black text-ink shadow-sm transition hover:border-brand/40 hover:text-brand"
+              >
+                {form.photoUrl ? "Trocar foto" : "Adicionar foto"}
+              </label>
+              <input
+                id="client-photo-input"
+                type="file"
+                accept={imageAccept()}
+                className="sr-only"
+                onChange={handlePhotoChange}
+              />
+              {photoError ? <p className="mt-1 text-xs font-bold text-danger">{photoError}</p> : null}
+            </div>
+          </div>
+
           <Field label="Nome">
             <input
               required
@@ -427,12 +537,128 @@ export default function Clients({ section = "clients" }) {
               placeholder="(00) 00000-0000"
             />
           </Field>
+          <Field label="E-mail">
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => update("email", event.target.value)}
+              className={inputClass}
+              placeholder="cliente@email.com"
+            />
+          </Field>
+          <Field label="Canal de origem">
+            <select
+              value={form.source}
+              onChange={(event) => update("source", event.target.value)}
+              className={inputClass}
+            >
+              <option value="">Não informado</option>
+              {originChannels.map((channel) => (
+                <option key={channel} value={channel}>
+                  {channel}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="CEP">
+              <input
+                value={form.zipCode}
+                onChange={(event) => update("zipCode", event.target.value)}
+                className={inputClass}
+                placeholder="00000-000"
+              />
+            </Field>
+            <Field label="Cidade">
+              <input
+                value={form.city}
+                onChange={(event) => update("city", event.target.value)}
+                className={inputClass}
+                placeholder="Cidade"
+              />
+            </Field>
+          </div>
+          <Field label="Endereço">
+            <input
+              value={form.address}
+              onChange={(event) => update("address", event.target.value)}
+              className={inputClass}
+              placeholder="Rua, avenida..."
+            />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Número">
+              <input
+                value={form.addressNumber}
+                onChange={(event) => update("addressNumber", event.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Complemento">
+              <input
+                value={form.addressComplement}
+                onChange={(event) => update("addressComplement", event.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Bairro">
+              <input
+                value={form.district}
+                onChange={(event) => update("district", event.target.value)}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+
+          <Field label="Tags">
+            <div className={`${inputClass} flex h-auto min-h-12 flex-wrap items-center gap-1.5 py-2`}>
+              {tagList.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-black text-brand"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    aria-label={`Remover tag ${tag}`}
+                    className="text-brand/70 hover:text-brand"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === ",") {
+                    event.preventDefault();
+                    addTag(tagInput);
+                  }
+                }}
+                onBlur={() => addTag(tagInput)}
+                placeholder={tagList.length ? "" : "Ex.: VIP, Mensalista"}
+                className="min-w-[8rem] flex-1 border-0 bg-transparent p-0 text-sm font-bold text-ink outline-none placeholder:text-slate-400"
+              />
+            </div>
+          </Field>
+
           <Field label="Observações">
             <textarea
               value={form.notes}
               onChange={(event) => update("notes", event.target.value)}
               className={`${inputClass} min-h-28 resize-none`}
               placeholder="Preferências, restrições ou detalhes importantes"
+            />
+          </Field>
+          <Field label="Preferências internas (visível só para a equipe)">
+            <textarea
+              value={form.internalPreferences}
+              onChange={(event) => update("internalPreferences", event.target.value)}
+              className={`${inputClass} min-h-24 resize-none`}
+              placeholder="Notas internas que não aparecem para o cliente"
             />
           </Field>
 
@@ -448,24 +674,6 @@ export default function Clients({ section = "clients" }) {
           </div>
         </Card>
       </section>
-
-      {/* Floating action button for mobile */}
-      <div className="fixed bottom-6 right-6 z-50 lg:hidden">
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setForm(emptyForm);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-          className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand shadow-[0_12px_24px_rgba(37,99,235,0.32)] transition active:scale-95"
-          aria-label="Cadastrar cliente"
-        >
-          <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      </div>
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}

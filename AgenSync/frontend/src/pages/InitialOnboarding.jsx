@@ -8,6 +8,7 @@ import Message from "../components/Message.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { businessTypes, createBlankService, findBusinessType, getSuggestedServices } from "../data/businessOnboarding.js";
+import { getCurrentPlan } from "../config/plans.js";
 import {
   completeInitialOnboarding,
   getInitialOnboardingStatus,
@@ -91,6 +92,8 @@ export default function InitialOnboarding() {
   const selectedType = findBusinessType(businessType);
   const selectedServices = services.filter((service) => service.selected !== false && service.name.trim());
   const validClients = clients.filter((client) => client.name.trim() && client.phone.trim());
+  const currentPlan = getCurrentPlan(user);
+  const reachedProfessionalLimit = professionals.length >= currentPlan.maxProfessionals;
   const summary = useMemo(
     () => ({
       businessName: business.businessName || user?.businessName || "Seu negócio",
@@ -289,8 +292,17 @@ export default function InitialOnboarding() {
             }}
           >
             <div className="border-b border-line p-4 sm:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-brand transition-all duration-300"
+                  style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
+                />
+              </div>
+              <p className="mt-3 text-xs font-black uppercase tracking-[0.2em] text-brand">
                 Etapa {stepIndex + 1} de {steps.length}
+                {stepIndex + 1 < steps.length
+                  ? ` · ~${Math.max(1, Math.ceil(((steps.length - stepIndex - 1) * 20) / 60))} minuto(s) restante(s)`
+                  : " · Quase lá!"}
               </p>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-ink sm:text-3xl">{activeStep.title}</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-muted">
@@ -448,6 +460,19 @@ export default function InitialOnboarding() {
 
               {activeStep.key === "professionals" ? (
                 <div className="space-y-3">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                    <p className="text-sm font-black text-brand">
+                      Seu plano {currentPlan.displayName} permite até {currentPlan.maxProfessionals} profissional
+                      {currentPlan.maxProfessionals === 1 ? "" : "is"}.
+                    </p>
+                    {reachedProfessionalLimit ? (
+                      <p className="mt-1 text-sm font-semibold leading-6 text-blue-900">
+                        Você atingiu o limite do seu plano. Faça upgrade para cadastrar mais profissionais agora, ou
+                        continue e adicione os demais depois.
+                      </p>
+                    ) : null}
+                  </div>
+
                   {professionals.map((professional) => (
                     <div key={professional.id} className="grid gap-3 rounded-xl border border-line bg-slate-50 p-3 sm:grid-cols-2">
                       <Field label="Nome">
@@ -484,9 +509,19 @@ export default function InitialOnboarding() {
                       </Field>
                     </div>
                   ))}
-                  <Button type="button" variant="secondary" onClick={() => setProfessionals((current) => [...current, professionalDraft(user)])}>
-                    Adicionar profissional
-                  </Button>
+                  {reachedProfessionalLimit ? (
+                    <Button type="button" variant="secondary" onClick={() => navigate("/configuracoes")}>
+                      Fazer upgrade de plano
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setProfessionals((current) => [...current, professionalDraft(user)])}
+                    >
+                      Adicionar profissional
+                    </Button>
+                  )}
                 </div>
               ) : null}
 

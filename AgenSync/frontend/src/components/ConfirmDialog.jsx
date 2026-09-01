@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSubmitLock } from "../hooks/useSubmitLock.js";
 import Button from "./Button.jsx";
 
 export default function ConfirmDialog({
@@ -11,18 +11,14 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel
 }) {
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, guardConfirm] = useSubmitLock();
 
   if (!open) return null;
 
-  async function handleConfirm() {
-    if (confirming) return;
-    setConfirming(true);
-    try {
+  function handleConfirm() {
+    return guardConfirm(async () => {
       await onConfirm?.();
-    } finally {
-      setConfirming(false);
-    }
+    });
   }
 
   return (

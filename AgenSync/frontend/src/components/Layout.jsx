@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { platformNavigation, workspaceNavigation } from "../config/navigation.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
@@ -155,6 +155,42 @@ function SidebarNavigation({ items, openModules, onToggleModule, onNavigate, pat
   );
 }
 
+const sidebarFadeMask = "linear-gradient(to bottom, black calc(100% - 28px), transparent)";
+
+function SidebarScrollNav({ className, children }) {
+  const ref = useRef(null);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+
+    function updateFade() {
+      setHasMoreBelow(node.scrollHeight - node.scrollTop - node.clientHeight > 4);
+    }
+
+    updateFade();
+    node.addEventListener("scroll", updateFade);
+    const observer = new ResizeObserver(updateFade);
+    observer.observe(node);
+
+    return () => {
+      node.removeEventListener("scroll", updateFade);
+      observer.disconnect();
+    };
+  }, [children]);
+
+  return (
+    <nav
+      ref={ref}
+      className={className}
+      style={hasMoreBelow ? { maskImage: sidebarFadeMask, WebkitMaskImage: sidebarFadeMask } : undefined}
+    >
+      {children}
+    </nav>
+  );
+}
+
 function titleFromPath(pathname) {
   if (pathname.startsWith("/admin")) return "Painel Admin";
   if (pathname.startsWith("/agendamentos")) return "Agendar";
@@ -182,6 +218,22 @@ function mobileActionFor(pathname, navigate) {
       label: "Excel",
       icon: "reports",
       onClick: () => window.dispatchEvent(new Event("agensync:export-finance"))
+    };
+  }
+
+  if (pathname.startsWith("/clientes")) {
+    return {
+      label: "Novo",
+      icon: "clients",
+      onClick: () => window.dispatchEvent(new Event("agensync:new-client"))
+    };
+  }
+
+  if (pathname.startsWith("/produtos")) {
+    return {
+      label: "Novo",
+      icon: "products",
+      onClick: () => window.dispatchEvent(new Event("agensync:new-product"))
     };
   }
 
@@ -249,14 +301,14 @@ export default function Layout() {
             </button>
           ) : null}
 
-          <nav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
+          <SidebarScrollNav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
             <SidebarNavigation
               items={visibleNavigation}
               openModules={openModules}
               onToggleModule={toggleModule}
               pathname={location.pathname}
             />
-          </nav>
+          </SidebarScrollNav>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
             <div className="mb-3 flex items-center gap-2">
@@ -352,7 +404,7 @@ export default function Layout() {
               </button>
             ) : null}
 
-            <nav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
+            <SidebarScrollNav className="agensync-sidebar-scroll mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
               <SidebarNavigation
                 items={visibleNavigation}
                 openModules={openModules}
@@ -361,7 +413,7 @@ export default function Layout() {
                 pathname={location.pathname}
                 linkClass={mobileLinkClass}
               />
-            </nav>
+            </SidebarScrollNav>
 
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
               <div className="mb-3 flex items-center gap-2">

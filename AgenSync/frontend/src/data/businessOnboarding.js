@@ -97,6 +97,22 @@ const suggestedServicesByType = {
   ]
 };
 
+const suggestedProductsByType = {
+  beleza_estetica: ["Óleo finalizador", "Máscara facial", "Protetor solar"],
+  barbearia: ["Pomada modeladora", "Óleo para barba", "Loção pós-barba"],
+  manicure: ["Esmalte", "Fortalecedor de unhas", "Óleo de cutícula"],
+  cabeleireiro: ["Shampoo", "Condicionador", "Máscara de hidratação"],
+  clinica_estetica: ["Sérum facial", "Protetor solar", "Creme pós-procedimento"],
+  academia: ["Whey protein", "Garrafa térmica", "Faixa elástica"],
+  outro: ["Produto principal"],
+  personalizada: ["Produto principal"]
+};
+
+export function getSuggestedProductNames(value) {
+  const businessType = findBusinessType(value);
+  return suggestedProductsByType[businessType.id] || suggestedProductsByType.outro;
+}
+
 export function findBusinessType(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return (

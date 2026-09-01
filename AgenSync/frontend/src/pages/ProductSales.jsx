@@ -16,6 +16,7 @@ import {
   stockStatus,
   sumProductSales
 } from "../services/products.js";
+import { exportSimpleTableExcel } from "../services/excelReport.js";
 import { money } from "../utils.js";
 
 const emptyForm = {
@@ -259,9 +260,38 @@ export default function ProductSales({ mode = "new" }) {
     }
   }
 
+  function exportExcel() {
+    exportSimpleTableExcel({
+      title: "Histórico de vendas",
+      subtitle: periodLabel(filters),
+      headers: ["Data", "Produto", "Quantidade", "Valor total", "Cliente", "Observações"],
+      rows: sales.map((sale) => [
+        { value: sale.date, style: 5 },
+        { value: sale.productName, style: 5 },
+        { value: Number(sale.quantity || 0), style: 5 },
+        { value: Number(sale.total || 0), style: 7 },
+        { value: sale.clientName || "Venda avulsa", style: 5 },
+        { value: sale.notes || "", style: 5 }
+      ]),
+      emptyLabel: "Nenhuma venda no período.",
+      filenamePrefix: "agensync-vendas",
+      filenameSuffix: `${filters.startDate || "inicio"}-${filters.endDate || "fim"}`
+    });
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title={view.title} description={view.description} />
+      <PageHeader
+        title={view.title}
+        description={view.description}
+        action={
+          mode === "history" ? (
+            <Button variant="secondary" onClick={exportExcel} disabled={!sales.length}>
+              Exportar Excel
+            </Button>
+          ) : undefined
+        }
+      />
       <Message type="error">{error}</Message>
 
       <section className={`grid gap-5 ${view.showForm ? "xl:grid-cols-[390px_1fr]" : ""}`}>

@@ -1,4 +1,5 @@
 import { httpClient } from "../api/httpClient.js";
+import { getDefaultCareTemplate } from "../data/defaultCareTemplates.js";
 
 const CLIENT_CARE_KEY = "agensync_client_care_v1";
 const FORM_TEMPLATES_KEY = "agensync_form_templates_v1";
@@ -280,6 +281,12 @@ export async function loadClientCare(clientId) {
   return care;
 }
 
+export async function getFichaHistory(clientId) {
+  if (!clientId) return [];
+  const result = await httpClient.get(`/clients/${clientId}/ficha-history`);
+  return Array.isArray(result?.history) ? result.history : [];
+}
+
 export function saveClientAnamnesis(clientId, payload) {
   return persistAfterLocalChange(
     clientId,
@@ -434,9 +441,20 @@ export function signClientBudget(clientId, budgetId, signatureImage) {
   );
 }
 
-export function listFormTemplates() {
+function seedDefaultTemplate(businessType) {
+  const seed = getDefaultCareTemplate(businessType);
+  if (!seed) return [];
+
+  const template = normalizeTemplate({ ...seed, id: id("template"), createdAt: now(), updatedAt: now() });
+  writeTemplateStore([template]);
+  return [template];
+}
+
+export function listFormTemplates(businessType) {
   migrateLegacyTemplates();
-  return readTemplateStore();
+  const templates = readTemplateStore();
+  if (templates.length || !businessType) return templates;
+  return seedDefaultTemplate(businessType);
 }
 
 export function createFormTemplate(payload) {

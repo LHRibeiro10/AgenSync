@@ -14,6 +14,7 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { useSubmitLock } from "../hooks/useSubmitLock.js";
 import {
   durationLabel,
   durationToMinutes,
@@ -234,7 +235,9 @@ export default function Appointments() {
   });
   const [quickSaving, setQuickSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, guardSubmit] = useSubmitLock();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const { markStepComplete } = useOnboarding();
@@ -364,6 +367,23 @@ export default function Appointments() {
       }
       return next;
     });
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateRequiredFields() {
+    const errors = {};
+    if (!form.clientId) errors.clientId = "Selecione um cliente.";
+    if (!form.professionalId) errors.professionalId = "Selecione um profissional.";
+    if (!form.serviceId) errors.serviceId = "Selecione um serviço.";
+    if (!form.date) errors.date = "Informe a data.";
+    if (!form.startTime) errors.startTime = "Informe o horário.";
+    if (form.price === "" || form.price === null || form.price === undefined) errors.price = "Informe o valor.";
+    return errors;
   }
 
   function startEdit(appointment, intent = "edit") {
@@ -388,6 +408,7 @@ export default function Appointments() {
     setEditing(null);
     setEditIntent("");
     setForm(emptyForm);
+    setFieldErrors({});
   }
 
   function conflictDetailsFromError(error) {
@@ -430,8 +451,15 @@ export default function Appointments() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setSaving(true);
     setError("");
+
+    const errors = validateRequiredFields();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      setError("Preencha os campos obrigatórios destacados.");
+      showToast("Preencha os campos obrigatórios.", "error");
+      return;
+    }
 
     const payload = {
       ...form,
@@ -439,38 +467,37 @@ export default function Appointments() {
       durationMinutes: Number(form.durationMinutes || selectedService?.durationMinutes || 0)
     };
 
-    try {
-      await persistAppointment(payload);
-      resetForm();
-    } catch (err) {
-      if (isConflictError(err)) {
-        const details = conflictDetailsFromError(err);
-        setPendingConflict({ payload, conflict: details?.conflict || null });
-        setError("");
-        return;
+    await guardSubmit(async () => {
+      try {
+        await persistAppointment(payload);
+        resetForm();
+      } catch (err) {
+        if (isConflictError(err)) {
+          const details = conflictDetailsFromError(err);
+          setPendingConflict({ payload, conflict: details?.conflict || null });
+          setError("");
+          return;
+        }
+        setError(err.message);
+        showToast(err.message, "error");
       }
-      setError(err.message);
-      showToast(err.message, "error");
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   async function confirmConflictSave() {
     if (!pendingConflict) return;
-    setSaving(true);
     setError("");
 
-    try {
-      await persistAppointment({ ...pendingConflict.payload, confirmConflict: true });
-      setPendingConflict(null);
-      resetForm();
-    } catch (err) {
-      setError(err.message);
-      showToast(err.message, "error");
-    } finally {
-      setSaving(false);
-    }
+    await guardSubmit(async () => {
+      try {
+        await persistAppointment({ ...pendingConflict.payload, confirmConflict: true });
+        setPendingConflict(null);
+        resetForm();
+      } catch (err) {
+        setError(err.message);
+        showToast(err.message, "error");
+      }
+    });
   }
 
   async function confirmDelete() {
@@ -627,7 +654,7 @@ export default function Appointments() {
                   }
                   update("clientId", nextValue);
                 }}
-                className={`${inputClass} mt-1`}
+                className={`${inputClass} mt-1 ${fieldErrors.clientId ? "border-red-400 ring-4 ring-red-100" : ""}`}
               >
                 <option value="">Selecione</option>
                 <option value={QUICK_NEW_CLIENT_OPTION}>+ Cadastrar cliente rapido</option>
@@ -637,6 +664,7 @@ export default function Appointments() {
                   </option>
                 ))}
               </select>
+              {fieldErrors.clientId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.clientId}</p> : null}
             </div>
 
             <Field label="Profissional">
@@ -644,7 +672,7 @@ export default function Appointments() {
                 required
                 value={form.professionalId}
                 onChange={(event) => update("professionalId", event.target.value)}
-                className={inputClass}
+                className={`${inputClass} ${fieldErrors.professionalId ? "border-red-400 ring-4 ring-red-100" : ""}`}
               >
                 <option value="">Selecione</option>
                 {formProfessionals.map((professional) => (
@@ -655,6 +683,7 @@ export default function Appointments() {
                   </option>
                 ))}
               </select>
+              {fieldErrors.professionalId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.professionalId}</p> : null}
             </Field>
 
             <div>
@@ -668,7 +697,7 @@ export default function Appointments() {
                 required
                 value={form.serviceId}
                 onChange={(event) => update("serviceId", event.target.value)}
-                className={`${inputClass} mt-1`}
+                className={`${inputClass} mt-1 ${fieldErrors.serviceId ? "border-red-400 ring-4 ring-red-100" : ""}`}
               >
                 <option value="">Selecione</option>
                 {formServices.map((service) => (
@@ -677,6 +706,7 @@ export default function Appointments() {
                   </option>
                 ))}
               </select>
+              {fieldErrors.serviceId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.serviceId}</p> : null}
             </div>
 
             {selectedService ? (
@@ -699,8 +729,9 @@ export default function Appointments() {
                   type="date"
                   value={form.date}
                   onChange={(event) => update("date", event.target.value)}
-                  className={inputClass}
+                  className={`${inputClass} ${fieldErrors.date ? "border-red-400 ring-4 ring-red-100" : ""}`}
                 />
+                {fieldErrors.date ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.date}</p> : null}
               </Field>
               <Field label="Hora inicial">
                 <input
@@ -708,8 +739,9 @@ export default function Appointments() {
                   type="time"
                   value={form.startTime}
                   onChange={(event) => update("startTime", event.target.value)}
-                  className={inputClass}
+                  className={`${inputClass} ${fieldErrors.startTime ? "border-red-400 ring-4 ring-red-100" : ""}`}
                 />
+                {fieldErrors.startTime ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.startTime}</p> : null}
               </Field>
             </div>
 
@@ -735,8 +767,9 @@ export default function Appointments() {
                   type="number"
                   value={form.price}
                   onChange={(event) => update("price", event.target.value)}
-                  className={inputClass}
+                  className={`${inputClass} ${fieldErrors.price ? "border-red-400 ring-4 ring-red-100" : ""}`}
                 />
+                {fieldErrors.price ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.price}</p> : null}
               </Field>
               <Field label="Fim previsto">
                 <input readOnly value={endTime || "Escolha um serviço"} className={readOnlyInputClass} />
@@ -775,17 +808,33 @@ export default function Appointments() {
           </div>
         </Card>
 
-        <AppointmentPreview
-          client={selectedClient}
-          professional={selectedProfessional}
-          service={selectedService}
-          form={form}
-          endTime={endTime}
-          editing={Boolean(editing)}
-          managerOpen={managerOpen}
-          onGoAgenda={() => navigate("/agenda")}
-          onToggleManager={() => setManagerOpen((current) => !current)}
-        />
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen((current) => !current)}
+            className="flex w-full items-center justify-between rounded-2xl border border-line bg-white px-4 py-3 text-sm font-black text-ink shadow-soft xl:hidden"
+            aria-expanded={previewOpen}
+          >
+            Ver prévia do agendamento
+            <span className={`transition-transform ${previewOpen ? "rotate-180" : ""}`} aria-hidden="true">
+              ▾
+            </span>
+          </button>
+
+          <div className={`${previewOpen ? "block" : "hidden"} xl:!block`}>
+            <AppointmentPreview
+              client={selectedClient}
+              professional={selectedProfessional}
+              service={selectedService}
+              form={form}
+              endTime={endTime}
+              editing={Boolean(editing)}
+              managerOpen={managerOpen}
+              onGoAgenda={() => navigate("/agenda")}
+              onToggleManager={() => setManagerOpen((current) => !current)}
+            />
+          </div>
+        </div>
       </section>
 
       {managerOpen ? (

@@ -43,22 +43,30 @@ export default function StatCard({ label, value, detail, tone = "default", icon,
         </div>
       </div>
       {detail ? <span className="mt-3 block truncate rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-muted ring-1 ring-slate-200/70">{detail}</span> : null}
+      {to ? (
+        <span
+          aria-hidden="true"
+          className="absolute bottom-3 right-4 text-lg font-black text-muted opacity-0 transition duration-200 group-hover:translate-x-0.5 group-hover:text-brand group-hover:opacity-100"
+        >
+          →
+        </span>
+      ) : null}
     </>
   );
 
-  const className = `group block min-h-[132px] cursor-pointer rounded-2xl border border-[#E2E8F0] bg-white/90 p-4 shadow-soft transition duration-200 hover:-translate-y-1 hover:bg-white hover:shadow-panel focus:outline-none focus:ring-4 focus:ring-brand/10 active:scale-[0.99] ${theme.glow}`;
+  const baseClassName = `group relative block min-h-[132px] rounded-2xl border border-[#E2E8F0] bg-white/90 p-4 shadow-soft transition duration-200 ${theme.glow}`;
 
   if (to) {
     return (
-      <Link to={to} className={className} aria-label={`Abrir ${label}`}>
+      <Link
+        to={to}
+        className={`${baseClassName} cursor-pointer hover:-translate-y-1 hover:bg-white hover:shadow-panel focus:outline-none focus:ring-4 focus:ring-brand/10 active:scale-[0.99]`}
+        aria-label={`Abrir ${label}`}
+      >
         {content}
       </Link>
     );
   }
 
-  return (
-    <article className={className}>
-      {content}
-    </article>
-  );
+  return <article className={baseClassName}>{content}</article>;
 }

@@ -1,8 +1,13 @@
 import {
   createProductApi,
+  createProductStockMovementApi,
+  createProductVariantApi,
   createSaleApi,
   deleteProductApi,
+  deleteProductVariantApi,
   listProductsApi,
+  listProductStockMovementsApi,
+  listProductVariantsApi,
   listSalesApi,
   salesOverviewApi,
   updateProductApi
@@ -67,6 +72,43 @@ export async function deleteProduct(productId) {
   return executeDataSource({
     feature: "products.delete",
     remote: () => deleteProductApi(productId)
+  });
+}
+
+export async function listProductStockMovements(productId) {
+  return executeDataSource({
+    feature: "products.stockMovements.list",
+    remote: () => listProductStockMovementsApi(productId)
+  });
+}
+
+export async function addProductStockMovement(productId, payload) {
+  return executeDataSource({
+    feature: "products.stockMovements.create",
+    remote: () => createProductStockMovementApi(productId, payload)
+  });
+}
+
+export async function listProductVariants(productId) {
+  const response = await executeDataSource({
+    feature: "products.variants.list",
+    remote: () => listProductVariantsApi(productId)
+  });
+  return asList(response, "variants");
+}
+
+export async function createProductVariant(productId, payload) {
+  const response = await executeDataSource({
+    feature: "products.variants.create",
+    remote: () => createProductVariantApi(productId, payload)
+  });
+  return asItem(response, "variant");
+}
+
+export async function deleteProductVariant(productId, variantId) {
+  return executeDataSource({
+    feature: "products.variants.delete",
+    remote: () => deleteProductVariantApi(productId, variantId)
   });
 }
 

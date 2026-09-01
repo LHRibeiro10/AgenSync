@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSubmitLock } from "../hooks/useSubmitLock.js";
 import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
@@ -26,7 +27,7 @@ export default function Services() {
   const [editing, setEditing] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, guardSubmit] = useSubmitLock();
   const [error, setError] = useState("");
   const { showToast } = useToast();
   const { markStepComplete } = useOnboarding();
@@ -75,7 +76,6 @@ export default function Services() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setSaving(true);
     setError("");
 
     const payload = {
@@ -90,27 +90,26 @@ export default function Services() {
       const message = "Informe uma duracao valida.";
       setError(message);
       showToast(message, "error");
-      setSaving(false);
       return;
     }
 
-    try {
-      if (editing) {
-        await api.updateService(editing, payload);
-        showToast("Serviço atualizado.");
-      } else {
-        await api.createService(payload);
-        markStepComplete("service", { toast: false });
-        showToast("Serviço cadastrado.");
+    await guardSubmit(async () => {
+      try {
+        if (editing) {
+          await api.updateService(editing, payload);
+          showToast("Serviço atualizado.");
+        } else {
+          await api.createService(payload);
+          markStepComplete("service", { toast: false });
+          showToast("Serviço cadastrado.");
+        }
+        resetForm();
+        await load();
+      } catch (err) {
+        setError(err.message);
+        showToast(err.message, "error");
       }
-      resetForm();
-      await load();
-    } catch (err) {
-      setError(err.message);
-      showToast(err.message, "error");
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   async function confirmDelete() {

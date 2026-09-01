@@ -9,7 +9,7 @@ import {
   workspaceWhere
 } from "../utils/accessControl.js";
 import { parseDateOnly, startOfDay } from "../utils/dates.js";
-import { publicProduct, publicProductSale } from "../utils/formatters.js";
+import { publicProduct, publicProductSale, publicProductStockMovement, publicProductVariant } from "../utils/formatters.js";
 import { clearSalesOverviewCache } from "./sales.js";
 import {
   optionalString,
@@ -55,9 +55,39 @@ const productSelect = {
   minStock: true,
   description: true,
   isActive: true,
+  brand: true,
+  supplierName: true,
+  supplierContact: true,
+  sku: true,
+  unit: true,
+  expirationDate: true,
+  usageType: true,
   createdAt: true,
   updatedAt: true
 };
+
+const allowedUnits = ["unidade", "ml", "g", "kg"];
+const allowedUsageTypes = ["uso_interno", "revenda", "ambos"];
+
+function optionalProductDate(value) {
+  if (!value) return null;
+  return parseDateOnly(value, "validade");
+}
+
+function extendedProductFields(body) {
+  const unit = optionalString(body.unit);
+  const usageType = optionalString(body.usageType);
+
+  return {
+    brand: optionalString(body.brand),
+    supplierName: optionalString(body.supplierName),
+    supplierContact: optionalString(body.supplierContact),
+    sku: optionalString(body.sku),
+    unit: unit && allowedUnits.includes(unit) ? unit : "unidade",
+    expirationDate: optionalProductDate(body.expirationDate),
+    usageType: usageType && allowedUsageTypes.includes(usageType) ? usageType : "revenda"
+  };
+}
 
 function productListCacheKey(req) {
   return JSON.stringify({
@@ -149,19 +179,32 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     requireWorkspacePermission("canManageProducts")(req, res, () => {});
-    const product = await prisma.product.create({
-      data: {
-        workspaceId: req.workspaceId || null,
-        userId: req.user.id,
-        name: requiredString(req.body.name, "nome", 2),
-        category: requiredString(req.body.category, "categoria"),
-        costPrice: parsePositiveMoney(req.body.costPrice, "preço de custo"),
-        salePrice: parsePositiveMoney(req.body.salePrice, "preço de venda"),
-        stockQty: parseNonNegativeInteger(req.body.stockQty, "estoque"),
-        minStock: parseNonNegativeInteger(req.body.minStock, "estoque mínimo"),
-        description: optionalString(req.body.description),
-        isActive: req.body.isActive !== false
+    const stockQty = parseNonNegativeInteger(req.body.stockQty, "estoque");
+
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          workspaceId: req.workspaceId || null,
+          userId: req.user.id,
+          name: requiredString(req.body.name, "nome", 2),
+          category: requiredString(req.body.category, "categoria"),
+          costPrice: parsePositiveMoney(req.body.costPrice, "preço de custo"),
+          salePrice: parsePositiveMoney(req.body.salePrice, "preço de venda"),
+          stockQty,
+          minStock: parseNonNegativeInteger(req.body.minStock, "estoque mínimo"),
+          description: optionalString(req.body.description),
+          isActive: req.body.isActive !== false,
+          ...extendedProductFields(req.body)
+        }
+      });
+
+      if (stockQty > 0) {
+        await tx.productStockMovement.create({
+          data: { productId: created.id, type: "entrada", quantity: stockQty, note: "Estoque inicial" }
+        });
       }
+
+      return created;
     });
 
     clearProductListCache();
@@ -185,13 +228,144 @@ router.put(
         stockQty: parseNonNegativeInteger(req.body.stockQty, "estoque"),
         minStock: parseNonNegativeInteger(req.body.minStock, "estoque mínimo"),
         description: optionalString(req.body.description),
-        isActive: req.body.isActive !== false
+        isActive: req.body.isActive !== false,
+        ...extendedProductFields(req.body)
       }
     });
 
     clearProductListCache();
     clearSalesOverviewCache();
     res.json({ product: publicProduct(product) });
+  })
+);
+
+router.get(
+  "/:id/stock-movements",
+  asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    const product = await findProductOrFail(req, req.params.id);
+
+    const movements = await prisma.productStockMovement.findMany({
+      where: { productId: product.id },
+      orderBy: { createdAt: "desc" },
+      take: 200
+    });
+
+    res.json({ movements: movements.map(publicProductStockMovement), currentStock: product.stockQty });
+  })
+);
+
+router.post(
+  "/:id/stock-movements",
+  asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    await findProductOrFail(req, req.params.id);
+
+    const type = requiredString(req.body.type, "tipo");
+    if (!["entrada", "saida"].includes(type)) throw new ApiError(400, "Tipo de movimentação inválido.");
+    const quantity = parsePositiveInteger(req.body.quantity, "quantidade");
+    const supplierName = optionalString(req.body.supplierName);
+    const note = optionalString(req.body.note);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.findFirst({ where: workspaceWhere(req, { id: req.params.id }) });
+      if (!product) throw new ApiError(404, "Produto não encontrado.");
+
+      if (type === "saida") {
+        if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
+        await tx.product.update({ where: { id: product.id }, data: { stockQty: { decrement: quantity } } });
+      } else {
+        await tx.product.update({ where: { id: product.id }, data: { stockQty: { increment: quantity } } });
+      }
+
+      const movement = await tx.productStockMovement.create({
+        data: { productId: product.id, type, quantity, supplierName, note }
+      });
+
+      const updatedProduct = await tx.product.findUnique({ where: { id: product.id } });
+      return { movement, product: updatedProduct };
+    });
+
+    clearProductListCache();
+    res.status(201).json({
+      movement: publicProductStockMovement(result.movement),
+      product: publicProduct(result.product)
+    });
+  })
+);
+
+router.get(
+  "/:id/variants",
+  asyncHandler(async (req, res) => {
+    await findProductOrFail(req, req.params.id);
+    const variants = await prisma.productVariant.findMany({
+      where: { productId: req.params.id },
+      orderBy: { createdAt: "asc" }
+    });
+    res.json({ variants: variants.map(publicProductVariant) });
+  })
+);
+
+router.post(
+  "/:id/variants",
+  asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    await findProductOrFail(req, req.params.id);
+
+    const variant = await prisma.productVariant.create({
+      data: {
+        productId: req.params.id,
+        label: requiredString(req.body.label, "variação", 1),
+        sku: optionalString(req.body.sku),
+        costPrice: parsePositiveMoney(req.body.costPrice, "preço de custo"),
+        salePrice: parsePositiveMoney(req.body.salePrice, "preço de venda"),
+        stockQty: parseNonNegativeInteger(req.body.stockQty, "estoque"),
+        isActive: req.body.isActive !== false
+      }
+    });
+
+    res.status(201).json({ variant: publicProductVariant(variant) });
+  })
+);
+
+router.put(
+  "/:id/variants/:variantId",
+  asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    await findProductOrFail(req, req.params.id);
+    const existing = await prisma.productVariant.findFirst({
+      where: { id: req.params.variantId, productId: req.params.id }
+    });
+    if (!existing) throw new ApiError(404, "Variação não encontrada.");
+
+    const variant = await prisma.productVariant.update({
+      where: { id: req.params.variantId },
+      data: {
+        label: requiredString(req.body.label, "variação", 1),
+        sku: optionalString(req.body.sku),
+        costPrice: parsePositiveMoney(req.body.costPrice, "preço de custo"),
+        salePrice: parsePositiveMoney(req.body.salePrice, "preço de venda"),
+        stockQty: parseNonNegativeInteger(req.body.stockQty, "estoque"),
+        isActive: req.body.isActive !== false
+      }
+    });
+
+    res.json({ variant: publicProductVariant(variant) });
+  })
+);
+
+router.delete(
+  "/:id/variants/:variantId",
+  asyncHandler(async (req, res) => {
+    requireWorkspacePermission("canManageProducts")(req, res, () => {});
+    await findProductOrFail(req, req.params.id);
+    const existing = await prisma.productVariant.findFirst({
+      where: { id: req.params.variantId, productId: req.params.id }
+    });
+    if (!existing) throw new ApiError(404, "Variação não encontrada.");
+
+    await prisma.productVariant.delete({ where: { id: req.params.variantId } });
+    res.status(204).send();
   })
 );
 
@@ -271,6 +445,7 @@ router.post(
 
       if (!product) throw new ApiError(404, "Produto não encontrado.");
       if (!product.isActive) throw new ApiError(400, "Produto inativo não pode ser vendido.");
+      if (product.usageType === "uso_interno") throw new ApiError(400, "Produto de uso interno não pode ser vendido.");
       if (product.stockQty < quantity) throw new ApiError(400, "Quantidade maior que o estoque disponível.");
       if (clientId && !client) throw new ApiError(400, "Cliente inválido para esta venda.");
 
@@ -279,6 +454,10 @@ router.post(
         data: { stockQty: { decrement: quantity } }
       });
       if (stockUpdate.count !== 1) throw new ApiError(400, "Quantidade maior que o estoque disponivel.");
+
+      await tx.productStockMovement.create({
+        data: { productId: product.id, type: "saida", quantity, clientId }
+      });
 
       return tx.productSale.create({
         data: {

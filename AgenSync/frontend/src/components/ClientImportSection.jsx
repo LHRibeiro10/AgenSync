@@ -5,12 +5,40 @@ import Icon from "./Icon.jsx";
 import Loading from "./Loading.jsx";
 import Message from "./Message.jsx";
 import { useToast } from "./Toast.jsx";
-import { detectDuplicateClients, parseSimpleAgendaClientsFile } from "../services/clientImport.js";
+import {
+  detectDuplicateClients,
+  downloadClientImportTemplate,
+  parseGenericClientsFile,
+  parseSimpleAgendaClientsFile
+} from "../services/clientImport.js";
+import { parseVCardFile } from "../services/vcardImport.js";
+import { detectDevicePlatform } from "../utils/deviceDetect.js";
 
 const statusClasses = {
   pronto: "border-green-200 bg-green-50 text-success",
   duplicado: "border-amber-200 bg-amber-50 text-amber-800",
   erro: "border-red-200 bg-red-50 text-danger"
+};
+
+const sources = [
+  { value: "simples-agenda", label: "Simples Agenda (CSV/Excel)", accept: ".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+  { value: "generic", label: "Planilha (CSV/Excel)", accept: ".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+  { value: "vcard", label: "vCard (.vcf)", accept: ".vcf" }
+];
+
+const vCardTutorialBySource = {
+  android: {
+    steps: "Abra Contatos → Menu ⋮ → Gerenciar contatos → Exportar → salve o .vcf → faça upload aqui.",
+    asset: "TUTORIAL_ANDROID_ASSET"
+  },
+  iphone: {
+    steps: "Acesse icloud.com/contacts → selecione todos → engrenagem → Exportar vCard → faça upload aqui.",
+    asset: "TUTORIAL_IPHONE_ASSET"
+  },
+  desktop: {
+    steps: "Acesse contacts.google.com → Exportar → formato vCard → faça upload aqui.",
+    asset: "TUTORIAL_DESKTOP_ASSET"
+  }
 };
 
 function StatusPill({ status }) {
@@ -31,9 +59,26 @@ function SummaryItem({ label, value }) {
   );
 }
 
+function VCardTutorial() {
+  const platform = useMemo(() => detectDevicePlatform(), []);
+  const tutorial = vCardTutorialBySource[platform];
+
+  return (
+    <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+      <p className="text-sm font-black text-ink">Como exportar seus contatos</p>
+      <p className="mt-1 text-sm leading-6 text-muted">{tutorial.steps}</p>
+      {/* Placeholder for onboarding GIF/image asset, to be provided later. */}
+      <div className="mt-3 flex h-24 items-center justify-center rounded-lg border border-dashed border-blue-200 bg-white text-xs font-bold uppercase tracking-wide text-blue-300">
+        {tutorial.asset}
+      </div>
+    </div>
+  );
+}
+
 export default function ClientImportSection() {
   const fileInputRef = useRef(null);
   const { showToast } = useToast();
+  const [source, setSource] = useState("simples-agenda");
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState([]);
   const [recognizedColumns, setRecognizedColumns] = useState([]);
@@ -60,6 +105,11 @@ export default function ClientImportSection() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  function changeSource(nextSource) {
+    setSource(nextSource);
+    resetImport();
+  }
+
   async function handleFileChange(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -71,13 +121,17 @@ export default function ClientImportSection() {
 
     try {
       const [parsed, clientsData] = await Promise.all([
-        parseSimpleAgendaClientsFile(file),
+        source === "vcard"
+          ? parseVCardFile(file)
+          : source === "generic"
+            ? parseGenericClientsFile(file)
+            : parseSimpleAgendaClientsFile(file),
         api.listClients({ take: 300 })
       ]);
       const nextRows = detectDuplicateClients(parsed.rows, clientsData.clients || []);
       setRows(nextRows);
-      setRecognizedColumns(parsed.recognizedColumns);
-      showToast(`${parsed.totalRows} linha(s) lida(s) da planilha.`);
+      setRecognizedColumns(parsed.recognizedColumns || []);
+      showToast(`${parsed.totalRows} contato(s) lido(s).`);
     } catch (err) {
       setRows([]);
       setRecognizedColumns([]);
@@ -114,6 +168,8 @@ export default function ClientImportSection() {
     }
   }
 
+  const activeSource = sources.find((item) => item.value === source) || sources[0];
+
   return (
     <section className="overflow-hidden rounded-lg border border-[#DDE6F0] bg-white shadow-soft">
       <div className="flex flex-col gap-3 border-b border-[#E2E8F0] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
@@ -121,7 +177,7 @@ export default function ClientImportSection() {
           <p className="text-xs font-black uppercase tracking-[0.24em] text-brand">Importacao</p>
           <h2 className="mt-2 text-xl font-black tracking-tight text-ink">Importar clientes</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Importe clientes de outro sistema usando uma planilha CSV ou Excel exportada do Simples Agenda.
+            Importe clientes de outro sistema, de um cartão de contatos (vCard) ou de uma planilha própria.
           </p>
         </div>
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
@@ -132,18 +188,50 @@ export default function ClientImportSection() {
       <div className="space-y-5 p-4 sm:p-5">
         <Message type="error">{error}</Message>
 
+        <div className="flex flex-wrap gap-2">
+          {sources.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => changeSource(item.value)}
+              className={`rounded-lg border px-3 py-2 text-xs font-black transition ${
+                source === item.value
+                  ? "border-brand bg-brand text-white"
+                  : "border-[#E2E8F0] bg-white text-muted hover:border-brand/40 hover:text-brand"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {source === "vcard" ? <VCardTutorial /> : null}
+
+        {source === "generic" ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-bold text-muted">
+              Use o modelo com as colunas Nome, Telefone, Email, DataNascimento e Observações.
+            </p>
+            <Button variant="secondary" onClick={downloadClientImportTemplate}>
+              Baixar modelo
+            </Button>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
             <p className="text-sm font-black text-ink">{fileName || "Nenhum arquivo selecionado"}</p>
             <p className="mt-1 text-xs leading-5 text-muted">
-              Colunas reconhecidas: {recognizedColumns.length ? recognizedColumns.join(", ") : "aguardando arquivo"}
+              {source === "vcard"
+                ? "Aguardando arquivo .vcf"
+                : `Colunas reconhecidas: ${recognizedColumns.length ? recognizedColumns.join(", ") : "aguardando arquivo"}`}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept={activeSource.accept}
               className="sr-only"
               onChange={handleFileChange}
             />
@@ -158,7 +246,7 @@ export default function ClientImportSection() {
           </div>
         </div>
 
-        {loading ? <Loading label="Lendo planilha..." /> : null}
+        {loading ? <Loading label="Lendo arquivo..." /> : null}
 
         {rows.length ? (
           <>
@@ -179,7 +267,9 @@ export default function ClientImportSection() {
               <span>
                 <span className="block text-sm font-black text-ink">Ignorar possiveis duplicados</span>
                 <span className="mt-1 block text-xs leading-5 text-muted">
-                  Desmarque para importar todos os registros validos, inclusive os marcados como duplicados.
+                  Duplicados são detectados por telefone ou e-mail já cadastrados. Desmarque para importar todos os
+                  registros válidos, inclusive os marcados como duplicados (o cadastro existente será mantido, não
+                  sobrescrito).
                 </span>
               </span>
             </label>
@@ -192,8 +282,7 @@ export default function ClientImportSection() {
                       <th className="px-3 py-3">Status</th>
                       <th className="px-3 py-3">Nome</th>
                       <th className="px-3 py-3">Telefone</th>
-                      <th className="px-3 py-3">CPF</th>
-                      <th className="px-3 py-3">Cidade</th>
+                      <th className="px-3 py-3">Email</th>
                       <th className="px-3 py-3">Observacao</th>
                     </tr>
                   </thead>
@@ -203,8 +292,7 @@ export default function ClientImportSection() {
                         <td className="px-3 py-3"><StatusPill status={row.status} /></td>
                         <td className="px-3 py-3 font-black text-ink">{row.client.name || `Linha ${row.lineNumber}`}</td>
                         <td className="px-3 py-3 font-semibold text-muted">{row.client.phone || "Sem telefone"}</td>
-                        <td className="px-3 py-3 font-semibold text-muted">{row.client.cpf || "-"}</td>
-                        <td className="px-3 py-3 font-semibold text-muted">{row.client.city || "-"}</td>
+                        <td className="px-3 py-3 font-semibold text-muted">{row.client.email || "-"}</td>
                         <td className="max-w-[280px] px-3 py-3 text-muted">
                           {row.errors.length ? row.errors.join(" ") : row.client.notes || "-"}
                         </td>
@@ -220,13 +308,13 @@ export default function ClientImportSection() {
                 {stats.importable} cliente(s) serao enviados para importacao.
               </p>
               <Button onClick={importClients} loading={importing} disabled={!stats.importable}>
-                Importar clientes
+                Importar {stats.importable} contato{stats.importable === 1 ? "" : "s"} selecionado{stats.importable === 1 ? "" : "s"}
               </Button>
             </div>
           </>
         ) : !loading ? (
           <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-4 py-8 text-center">
-            <p className="text-sm font-black text-ink">Selecione um CSV ou Excel para ver a pre-visualizacao.</p>
+            <p className="text-sm font-black text-ink">Selecione um arquivo para ver a pre-visualizacao.</p>
             <p className="mt-2 text-xs leading-5 text-muted">
               Nenhum contato e acessado automaticamente. A leitura acontece somente depois do upload do arquivo.
             </p>

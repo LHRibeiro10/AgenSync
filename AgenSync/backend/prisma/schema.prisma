@@ -261,6 +261,8 @@ model Client {
   source       String?
   externalId   String?
   notes        String?
+  photoUrl     String?
+  internalPreferences String?
   isActive     Boolean           @default(true)
   appointments Appointment[]
   productSales ProductSale[]
@@ -307,22 +309,31 @@ model Expense {
 }
 
 model Product {
-  id          String        @id @default(cuid())
-  workspaceId String?
-  workspace   Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  category    String
-  costPrice   Decimal       @db.Decimal(10, 2)
-  salePrice   Decimal       @db.Decimal(10, 2)
-  stockQty    Int           @default(0)
-  minStock    Int           @default(0)
-  description String?
-  isActive    Boolean       @default(true)
-  sales       ProductSale[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String                 @id @default(cuid())
+  workspaceId     String?
+  workspace       Workspace?             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  category        String
+  costPrice       Decimal                @db.Decimal(10, 2)
+  salePrice       Decimal                @db.Decimal(10, 2)
+  stockQty        Int                    @default(0)
+  minStock        Int                    @default(0)
+  description     String?
+  isActive        Boolean                @default(true)
+  brand           String?
+  supplierName    String?
+  supplierContact String?
+  sku             String?
+  unit            String                 @default("unidade")
+  expirationDate  DateTime?
+  usageType       String                 @default("revenda")
+  sales           ProductSale[]
+  variants        ProductVariant[]
+  movements       ProductStockMovement[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -333,6 +344,38 @@ model Product {
   @@index([userId, category])
   @@index([userId, isActive, name])
   @@index([userId, createdAt])
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String
+  sku       String?
+  costPrice Decimal  @db.Decimal(10, 2)
+  salePrice Decimal  @db.Decimal(10, 2)
+  stockQty  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+model ProductStockMovement {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId      String?
+  type           String
+  quantity       Int
+  supplierName   String?
+  clientId       String?
+  professionalId String?
+  note           String?
+  createdAt      DateTime @default(now())
+
+  @@index([productId, createdAt])
 }
 
 model ProductSale {

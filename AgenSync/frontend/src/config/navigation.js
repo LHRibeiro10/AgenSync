@@ -27,26 +27,32 @@ export const workspaceNavigation = [
       { to: "/clientes/linha-do-tempo", label: "Linha do tempo", permission: "clients" }
     ]
   },
-  { to: "/profissionais", label: "Profissionais", icon: "professionals", permission: "professionals" },
-  { to: "/servicos", label: "Servicos", icon: "services", tourId: "services", permission: "services" },
-  { to: "/produtos", label: "Produtos", icon: "products", tourId: "products", permission: "products" },
   {
-    id: "vendas",
-    label: "Vendas",
-    icon: "sales",
-    tourId: "sales",
-    permission: "sales",
+    id: "catalogo",
+    label: "Catalogo",
+    icon: "services",
+    children: [
+      { to: "/servicos", label: "Servicos", tourId: "services", permission: "services" },
+      { to: "/produtos", label: "Produtos", tourId: "products", permission: "products" },
+      { to: "/profissionais", label: "Profissionais", permission: "professionals" }
+    ]
+  },
+  {
+    id: "financeiro",
+    label: "Financeiro",
+    icon: "finance",
+    tourId: "finance",
     children: [
       { to: "/vendas/nova", label: "Nova venda", permission: "sales" },
+      { to: "/mensalidades", label: "Mensalidades", permission: "subscriptions" },
+      { to: "/financeiro", label: "Financeiro", permission: "finance" },
+      { to: "/despesas", label: "Despesas", permission: "expenses" },
+      { to: "/historico", label: "Historico", permission: "clients" },
       { to: "/vendas/historico", label: "Historico de vendas", permission: "sales" },
       { to: "/vendas/comissoes", label: "Comissoes", permission: "sales" },
       { to: "/vendas/relatorios", label: "Relatorios", permission: "reports" }
     ]
   },
-  { to: "/mensalidades", label: "Mensalidades", icon: "finance", permission: "subscriptions" },
-  { to: "/historico", label: "Historico", icon: "history", permission: "clients" },
-  { to: "/financeiro", label: "Financeiro", icon: "finance", tourId: "finance", permission: "finance" },
-  { to: "/despesas", label: "Despesas", icon: "expenses", permission: "expenses" },
   { to: "/admin", label: "Admin", icon: "settings", adminOnly: true, permission: "admin" },
   {
     id: "configuracoes",

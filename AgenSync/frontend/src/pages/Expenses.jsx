@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSubmitLock } from "../hooks/useSubmitLock.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
@@ -18,6 +19,7 @@ import {
   sumExpenses,
   updateExpense
 } from "../services/expenses.js";
+import { exportSimpleTableExcel } from "../services/excelReport.js";
 import { money } from "../utils.js";
 
 const emptyForm = {
@@ -45,6 +47,7 @@ export default function Expenses() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState("");
+  const [saving, guardSubmit] = useSubmitLock();
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -120,20 +123,22 @@ export default function Expenses() {
     event.preventDefault();
     setError("");
 
-    try {
-      if (editing) {
-        await updateExpense(editing, form);
-        showToast("Despesa atualizada.");
-      } else {
-        await createExpense(form);
-        showToast("Despesa registrada.");
+    await guardSubmit(async () => {
+      try {
+        if (editing) {
+          await updateExpense(editing, form);
+          showToast("Despesa atualizada.");
+        } else {
+          await createExpense(form);
+          showToast("Despesa registrada.");
+        }
+        setRefreshKey((current) => current + 1);
+        resetForm();
+      } catch (err) {
+        setError(err.message);
+        showToast(err.message, "error");
       }
-      setRefreshKey((current) => current + 1);
-      resetForm();
-    } catch (err) {
-      setError(err.message);
-      showToast(err.message, "error");
-    }
+    });
   }
 
   async function confirmDelete() {
@@ -151,11 +156,34 @@ export default function Expenses() {
     }
   }
 
+  function exportExcel() {
+    exportSimpleTableExcel({
+      title: "Despesas",
+      subtitle: periodLabel(filters),
+      headers: ["Data", "Descrição", "Categoria", "Valor", "Observações"],
+      rows: expenses.map((expense) => [
+        { value: expense.date, style: 5 },
+        { value: expense.description, style: 5 },
+        { value: expenseCategoryLabel(expense.category), style: 5 },
+        { value: Number(expense.amount || 0), style: 8 },
+        { value: expense.notes || "", style: 5 }
+      ]),
+      emptyLabel: "Nenhuma despesa no período.",
+      filenamePrefix: "agensync-despesas",
+      filenameSuffix: `${filters.startDate || "inicio"}-${filters.endDate || "fim"}`
+    });
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Despesas"
         description="Registre custos, acompanhe saídas e entenda quanto realmente sobra no caixa."
+        action={
+          <Button variant="secondary" onClick={exportExcel} disabled={!expenses.length}>
+            Exportar Excel
+          </Button>
+        }
       />
       <Message type="error">{error}</Message>
 
@@ -253,11 +281,11 @@ export default function Expenses() {
 
           <div className="grid min-w-0 grid-cols-2 gap-2">
             {editing ? (
-              <Button variant="secondary" onClick={resetForm}>
+              <Button variant="secondary" onClick={resetForm} disabled={saving}>
                 Cancelar
               </Button>
             ) : null}
-            <Button type="submit" className={editing ? "" : "col-span-2"}>
+            <Button type="submit" loading={saving} className={editing ? "" : "col-span-2"}>
               {editing ? "Atualizar" : form.recurrence === "monthly" ? "Salvar despesa fixa" : "Salvar despesa"}
             </Button>
           </div>

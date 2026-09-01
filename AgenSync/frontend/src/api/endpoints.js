@@ -87,7 +87,10 @@ export const endpoints = Object.freeze({
   financeOverview: "/finance/overview",
   products: {
     list: "/products",
-    byId: (id) => `/products/${id}`
+    byId: (id) => `/products/${id}`,
+    stockMovements: (id) => `/products/${id}/stock-movements`,
+    variants: (id) => `/products/${id}/variants`,
+    variantById: (id, variantId) => `/products/${id}/variants/${variantId}`
   },
   sales: {
     list: "/sales",

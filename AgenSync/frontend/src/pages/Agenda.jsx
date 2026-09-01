@@ -13,7 +13,15 @@ import WorkingHoursDrawer from "../components/agenda/WorkingHoursDrawer.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
-import { addDays, buildWeekDays, formatDateKey, formatWeekLabel, parseDateKey, startOfWeek } from "../components/agenda/agendaDate.js";
+import {
+  addDays,
+  buildWeekDays,
+  formatDateKey,
+  formatMonthYearLabel,
+  formatWeekLabel,
+  parseDateKey,
+  startOfWeek
+} from "../components/agenda/agendaDate.js";
 import { appointmentsForDate, buildTimeRows, minutesToTime, timeToMinutes } from "../components/agenda/agendaTime.js";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
@@ -270,6 +278,12 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
     setSelectedAppointment(null);
   }
 
+  function jumpToDate(dateKey) {
+    setWeekStart(startOfWeek(parseDateKey(dateKey)));
+    setSelectedDate(dateKey);
+    setSelectedAppointment(null);
+  }
+
   function openAppointment(appointment) {
     setSelectedDate(appointment.date);
     setSelectedAppointment(appointment);
@@ -398,6 +412,12 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onOpenWorkingHours={() => setWorkingHoursOpen(true)}
+            monthYearLabel={formatMonthYearLabel(parseDateKey(selectedDate))}
+            appointmentsCount={selectedAppointments.length}
+            selectedDate={selectedDate}
+            onPreviousWeek={() => changeWeek(-1)}
+            onNextWeek={() => changeWeek(1)}
+            onJumpToDate={jumpToDate}
           />
 
           <Message type="error" actionLabel="Tentar novamente" onAction={() => setReloadKey((value) => value + 1)}>
@@ -450,7 +470,6 @@ export default function Agenda({ initialView = "auto", focus = "agenda" }) {
             <section className="space-y-3 sm:space-y-5">
               <DaySelector
                 days={weekDays}
-                appointments={appointments}
                 selectedDate={selectedDate}
                 onSelectDate={setSelectedDate}
               />
