@@ -1,8 +1,20 @@
 import { useEffect, useState } from "react";
 import BrandLogo from "./BrandLogo.jsx";
 
-export default function SplashScreen({ firstName, onDone, durationMs = 2500 }) {
+const copyByVariant = {
+  welcome: {
+    heading: (firstName) => `Seja bem-vindo${firstName ? `, ${firstName}` : ""}! 🎉`,
+    subtitle: "Estamos preparando tudo para você..."
+  },
+  goodbye: {
+    heading: (firstName) => `Até logo${firstName ? `, ${firstName}` : ""}! 👋`,
+    subtitle: "Você saiu com segurança. Volte sempre!"
+  }
+};
+
+export default function SplashScreen({ firstName, onDone, durationMs = 2500, variant = "welcome" }) {
   const [fading, setFading] = useState(false);
+  const copy = copyByVariant[variant] || copyByVariant.welcome;
 
   useEffect(() => {
     const fadeTimer = window.setTimeout(() => setFading(true), durationMs);
@@ -26,10 +38,8 @@ export default function SplashScreen({ firstName, onDone, durationMs = 2500 }) {
 
       <div className="relative z-10 flex flex-col items-center text-center">
         <BrandLogo src="/AgenSync_sidebar.png" className="h-16 w-[14rem] sm:h-20 sm:w-[17rem]" imageClassName="opacity-100" />
-        <p className="mt-8 text-xl font-black text-white sm:text-2xl">
-          Seja bem-vindo{firstName ? `, ${firstName}` : ""}! 🎉
-        </p>
-        <p className="mt-2 text-sm font-semibold text-blue-100/80">Estamos preparando tudo para você...</p>
+        <p className="mt-8 text-xl font-black text-white sm:text-2xl">{copy.heading(firstName)}</p>
+        <p className="mt-2 text-sm font-semibold text-blue-100/80">{copy.subtitle}</p>
 
         <div className="mt-8 h-1.5 w-56 overflow-hidden rounded-full bg-white/10">
           <div className="splash-progress-bar h-full w-1/3 rounded-full bg-brand" />

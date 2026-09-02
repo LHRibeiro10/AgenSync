@@ -9,6 +9,7 @@ import Icon from "./Icon.jsx";
 import NotificationCenter from "./NotificationCenter.jsx";
 import GuidedTourPopover from "./onboarding/GuidedTourPopover.jsx";
 import PageTransition from "./PageTransition.jsx";
+import SplashScreen from "./SplashScreen.jsx";
 import WelcomeOnboardingModal from "./onboarding/WelcomeOnboardingModal.jsx";
 
 const OPEN_MODULES_KEY = "agensync_sidebar_open_modules";
@@ -246,6 +247,7 @@ export default function Layout() {
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openModules, setOpenModules] = useState(readOpenModules);
+  const [loggingOut, setLoggingOut] = useState(false);
   const accountName = user?.businessName || user?.name || "Seu negócio";
   const mobileTitle = titleFromPath(location.pathname);
   const mobileAction = mobileActionFor(location.pathname, navigate);
@@ -272,8 +274,21 @@ export default function Layout() {
   }, [openModules]);
 
   function handleLogout() {
-    logout();
-    navigate("/login");
+    setLoggingOut(true);
+  }
+
+  if (loggingOut) {
+    return (
+      <SplashScreen
+        variant="goodbye"
+        firstName={user?.name?.trim().split(" ")[0] || ""}
+        durationMs={1600}
+        onDone={() => {
+          logout();
+          navigate("/login");
+        }}
+      />
+    );
   }
 
   function closeDrawer() {
