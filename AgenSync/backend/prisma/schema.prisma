@@ -148,6 +148,11 @@ enum ReminderStatus {
   FAILED
 }
 
+enum AppointmentKind {
+  APPOINTMENT
+  PERSONAL_BLOCK
+}
+
 model User {
   id            String         @id @default(cuid())
   name          String
@@ -745,10 +750,12 @@ model Appointment {
   workspace       Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId          String
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId        String
-  client          Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  serviceId       String
-  service         Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  kind            AppointmentKind   @default(APPOINTMENT)
+  title           String?
+  clientId        String?
+  client          Client?           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId       String?
+  service         Service?          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   professionalId  String?
   professional    Professional?     @relation(fields: [professionalId], references: [id], onDelete: Restrict)
   monthlyPlanId   String?
@@ -763,6 +770,7 @@ model Appointment {
   updatedAt       DateTime          @updatedAt
   reminders       AppointmentReminder[]
 
+  @@index([workspaceId, kind, startsAt])
   @@index([workspaceId, startsAt])
   @@index([workspaceId, status, startsAt])
   @@index([workspaceId, clientId])

@@ -71,7 +71,8 @@ async function professionalStatsById(req, professionalIds) {
   if (!professionalIds.length) return new Map();
 
   const baseWhere = workspaceWhere(req, {
-    professionalId: { in: professionalIds }
+    professionalId: { in: professionalIds },
+    kind: "APPOINTMENT"
   });
   const [totalRows, completedRows] = await Promise.all([
     prisma.appointment.groupBy({

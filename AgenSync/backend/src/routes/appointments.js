@@ -61,6 +61,8 @@ const appointmentSelect = {
   id: true,
   workspaceId: true,
   userId: true,
+  kind: true,
+  title: true,
   clientId: true,
   serviceId: true,
   professionalId: true,
@@ -189,6 +191,8 @@ async function assertNoConflict({ user, startsAt, endsAt, appointmentId = null, 
     },
     select: {
       id: true,
+      kind: true,
+      title: true,
       clientId: true,
       serviceId: true,
       professionalId: true,
@@ -212,9 +216,10 @@ async function assertNoConflict({ user, startsAt, endsAt, appointmentId = null, 
 
     const publicConflict = publicAppointment(conflict);
     const professionalText = conflict.professional ? ` com ${conflict.professional.name}` : "";
+    const conflictLabel = conflict.client?.name || conflict.title || "um compromisso pessoal";
     throw new ApiError(
       409,
-      `Conflito de horário${professionalText}: ${conflict.client.name} às ${publicConflict.startTime}.`,
+      `Conflito de horário${professionalText}: ${conflictLabel} às ${publicConflict.startTime}.`,
       {
         code: "APPOINTMENT_CONFLICT",
         conflict: {
@@ -222,8 +227,10 @@ async function assertNoConflict({ user, startsAt, endsAt, appointmentId = null, 
           date: publicConflict.date,
           startTime: publicConflict.startTime,
           endTime: publicConflict.endTime,
+          kind: publicConflict.kind,
           clientName: conflict.client?.name || "",
           serviceName: conflict.service?.name || "",
+          title: conflict.title || "",
           professionalName: conflict.professional?.name || ""
         }
       }
@@ -349,9 +356,68 @@ router.get(
   })
 );
 
+function normalizeAppointmentKind(value) {
+  return String(value || "APPOINTMENT").toUpperCase() === "PERSONAL_BLOCK" ? "PERSONAL_BLOCK" : "APPOINTMENT";
+}
+
+async function createPersonalBlock(req, res) {
+  const title = requiredString(req.body.title, "título");
+  const requestedProfessionalId = isWorkspaceProfessional(req.user)
+    ? req.user.professionalId
+    : requiredString(req.body.professionalId, "profissional");
+  const professionalScope = await resolveProfessionalScope(prisma, req.user, requestedProfessionalId);
+  const professionalId = professionalScope.professionalId;
+  const date = requiredString(req.body.date, "data");
+  const startTime = requiredString(req.body.startTime, "hora inicial");
+  const notes = optionalString(req.body.notes);
+  const durationMinutes = parsePositiveInteger(req.body.durationMinutes, "duração");
+  const confirmConflict = parseBoolean(req.body.confirmConflict, false);
+  const status = normalizeStatus(req.body.status, "SCHEDULED");
+
+  if (!["SCHEDULED", "CANCELED"].includes(status)) {
+    throw new ApiError(400, "Compromissos pessoais só podem ficar agendados ou cancelados.");
+  }
+
+  const professional = await findProfessionalOrFail(req.user, professionalId);
+  if (professional && !professional.isActive) {
+    throw new ApiError(400, "Profissionais inativos não podem ser usados em novos agendamentos.");
+  }
+
+  const startsAt = combineDateAndTime(date, startTime);
+  const endsAt = addMinutes(startsAt, durationMinutes);
+
+  if (status !== "CANCELED") {
+    await assertNoConflict({ user: req.user, startsAt, endsAt, professionalId, confirmConflict });
+  }
+
+  const appointment = await prisma.appointment.create({
+    data: {
+      workspaceId: req.workspaceId || null,
+      userId: req.user.id,
+      kind: "PERSONAL_BLOCK",
+      title,
+      professionalId,
+      startsAt,
+      endsAt,
+      price: 0,
+      notes,
+      status
+    },
+    select: appointmentSelect
+  });
+
+  clearAppointmentReadCaches();
+  res.status(201).json({ appointment: publicAppointment(appointment) });
+}
+
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    if (normalizeAppointmentKind(req.body.kind) === "PERSONAL_BLOCK") {
+      await createPersonalBlock(req, res);
+      return;
+    }
+
     const clientId = requiredString(req.body.clientId, "cliente");
     const serviceId = requiredString(req.body.serviceId, "serviço");
     const requestedProfessionalId = isWorkspaceProfessional(req.user)
@@ -431,6 +497,74 @@ router.put(
   asyncHandler(async (req, res) => {
     const current = await findAppointmentOrFail(req.user, req.params.id);
     const currentPublic = publicAppointment(current);
+
+    if (current.kind === "PERSONAL_BLOCK") {
+      const title = req.body.title === undefined ? current.title || "" : requiredString(req.body.title, "título");
+      const requestedProfessionalId =
+        req.body.professionalId === undefined
+          ? current.professionalId
+          : req.body.professionalId
+          ? requiredString(req.body.professionalId, "profissional")
+          : null;
+      const professionalId = isWorkspaceProfessional(req.user) ? req.user.professionalId : requestedProfessionalId;
+
+      if (!professionalId) {
+        throw new ApiError(400, "Profissional obrigatorio para este agendamento.");
+      }
+
+      await assertProfessionalBelongsToUser(prisma, req.user, professionalId);
+      const date = req.body.date === undefined ? currentPublic.date : requiredString(req.body.date, "data");
+      const startTime =
+        req.body.startTime === undefined
+          ? currentPublic.startTime
+          : requiredString(req.body.startTime, "hora inicial");
+      const status = normalizeStatus(req.body.status, current.status);
+      if (!["SCHEDULED", "CANCELED"].includes(status)) {
+        throw new ApiError(400, "Compromissos pessoais só podem ficar agendados ou cancelados.");
+      }
+      const notes = req.body.notes === undefined ? current.notes || "" : optionalString(req.body.notes);
+      const durationMinutes =
+        req.body.durationMinutes === undefined || req.body.durationMinutes === null || req.body.durationMinutes === ""
+          ? currentPublic.durationMinutes || null
+          : parsePositiveInteger(req.body.durationMinutes, "duração");
+      const confirmConflict = parseBoolean(req.body.confirmConflict, false);
+      const timeChanged =
+        req.body.date !== undefined || req.body.startTime !== undefined || req.body.durationMinutes !== undefined;
+
+      const professional = await findProfessionalOrFail(req.user, professionalId);
+      if (professionalId !== current.professionalId && professional && !professional.isActive) {
+        throw new ApiError(400, "Profissionais inativos não podem ser usados em novos agendamentos.");
+      }
+
+      const startsAt = timeChanged ? combineDateAndTime(date, startTime) : current.startsAt;
+      const effectiveDurationMinutes = durationMinutes || Math.round((current.endsAt - current.startsAt) / 60000);
+      const endsAt = timeChanged ? addMinutes(startsAt, effectiveDurationMinutes) : current.endsAt;
+
+      const shouldCheckConflict =
+        status !== "CANCELED" &&
+        (timeChanged || professionalId !== current.professionalId || current.status === "CANCELED");
+
+      if (shouldCheckConflict) {
+        await assertNoConflict({
+          user: req.user,
+          startsAt,
+          endsAt,
+          appointmentId: req.params.id,
+          professionalId,
+          confirmConflict
+        });
+      }
+
+      const appointment = await prisma.appointment.update({
+        where: { id: req.params.id },
+        data: { title, professionalId, startsAt, endsAt, notes, status },
+        select: appointmentSelect
+      });
+
+      clearAppointmentReadCaches();
+      res.json({ appointment: publicAppointment(appointment) });
+      return;
+    }
 
     const clientId =
       req.body.clientId === undefined ? current.clientId : requiredString(req.body.clientId, "cliente");

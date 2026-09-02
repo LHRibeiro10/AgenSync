@@ -1,6 +1,4 @@
 ﻿export {
-  productCategories,
-  productCategoryLabel,
   stockStatus,
   listProducts,
   createProduct,

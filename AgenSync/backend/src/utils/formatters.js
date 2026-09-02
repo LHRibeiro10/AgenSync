@@ -190,6 +190,8 @@ export function publicAppointment(appointment) {
 
   return {
     id: appointment.id,
+    kind: String(appointment.kind || "APPOINTMENT").toLowerCase(),
+    title: appointment.title || "",
     clientId: appointment.clientId,
     serviceId: appointment.serviceId,
     professionalId: appointment.professionalId || "",

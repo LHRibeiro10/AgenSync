@@ -20,6 +20,8 @@ import { durationLabel } from "../services/durationService.js";
 import { addMinutesToTime, money, statusOptions, todayInputValue } from "../utils.js";
 
 const emptyForm = {
+  kind: "appointment",
+  title: "",
   clientId: "",
   professionalId: "",
   serviceId: "",
@@ -33,6 +35,7 @@ const emptyForm = {
 const QUICK_NEW_CLIENT_OPTION = "__new-client__";
 
 function AppointmentPreview({ client, professional, service, form, endTime, editing, onGoAgenda, onToggleManager, managerOpen }) {
+  const isPersonalBlock = form.kind === "personal_block";
   const clientName = client?.name || "Cliente ainda não escolhido";
   const professionalName = professional?.name || "Profissional ainda não escolhido";
   const serviceName = service?.name || "Serviço ainda não escolhido";
@@ -46,7 +49,9 @@ function AppointmentPreview({ client, professional, service, form, endTime, edit
   return (
     <aside className="space-y-4">
       <section className="rounded-2xl border border-line bg-white p-5 shadow-soft">
-        <p className="text-xs font-black uppercase text-brand">Prévia do agendamento</p>
+        <p className="text-xs font-black uppercase text-brand">
+          {isPersonalBlock ? "Prévia do compromisso pessoal" : "Prévia do agendamento"}
+        </p>
         <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -59,33 +64,46 @@ function AppointmentPreview({ client, professional, service, form, endTime, edit
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-          <div>
-            <p className="text-xs font-black uppercase text-slate-500">Cliente</p>
-            <p className="mt-1 text-base font-black text-ink">{clientName}</p>
-          </div>
+          {isPersonalBlock ? (
+            <div>
+              <p className="text-xs font-black uppercase text-slate-500">Título</p>
+              <p className="mt-1 text-base font-black text-ink">{form.title || "Compromisso ainda sem título"}</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs font-black uppercase text-slate-500">Cliente</p>
+              <p className="mt-1 text-base font-black text-ink">{clientName}</p>
+            </div>
+          )}
           <div>
             <p className="text-xs font-black uppercase text-slate-500">Profissional</p>
             <p className="mt-1 text-base font-black text-ink">{professionalName}</p>
           </div>
-          <div>
-            <p className="text-xs font-black uppercase text-slate-500">Serviço</p>
-            <p className="mt-1 text-base font-black text-ink">{serviceName}</p>
-          </div>
+          {isPersonalBlock ? null : (
+            <div>
+              <p className="text-xs font-black uppercase text-slate-500">Serviço</p>
+              <p className="mt-1 text-base font-black text-ink">{serviceName}</p>
+            </div>
+          )}
           <div>
             <p className="text-xs font-black uppercase text-slate-500">Duração</p>
             <p className="mt-1 text-base font-black text-ink">{duration}</p>
           </div>
-          <div>
-            <p className="text-xs font-black uppercase text-slate-500">Valor</p>
-            <p className="mt-1 text-base font-black text-success">{price}</p>
-          </div>
+          {isPersonalBlock ? null : (
+            <div>
+              <p className="text-xs font-black uppercase text-slate-500">Valor</p>
+              <p className="mt-1 text-base font-black text-success">{price}</p>
+            </div>
+          )}
         </div>
 
         <div className="mt-5 rounded-2xl border border-line bg-slate-50 p-4">
           <p className="text-sm font-bold leading-6 text-muted">
-            {editing
-              ? "Você está editando um agendamento existente. Salve para aplicar as alterações."
-              : "Complete cliente, profissional, serviço e horário. A prévia acompanha os dados antes de salvar."}
+            {isPersonalBlock
+              ? "Esse horário fica bloqueado para novos atendimentos com clientes."
+              : editing
+                ? "Você está editando um agendamento existente. Salve para aplicar as alterações."
+                : "Complete cliente, profissional, serviço e horário. A prévia acompanha os dados antes de salvar."}
           </p>
         </div>
       </section>
@@ -132,43 +150,62 @@ function AppointmentManager({
       ) : (
         <div className="compact-scroll-list divide-y divide-line">
           {appointments.length ? (
-            appointments.map((appointment) => (
-              <article key={appointment.id} className="bg-white p-4 transition duration-200 hover:bg-slate-50">
-                <div className="grid gap-3 lg:grid-cols-[116px_1fr_auto] lg:items-center">
-                  <div className="rounded-2xl border border-brand/10 bg-blue-50 px-3 py-3 text-brand shadow-sm">
-                    <p className="text-xs font-black text-brand/70">{appointment.date}</p>
-                    <p className="text-2xl font-black">{appointment.startTime}</p>
-                    <p className="text-xs font-black text-brand/70">até {appointment.endTime}</p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-base font-black text-ink">{appointment.client.name}</p>
-                      <StatusBadge status={appointment.status} />
+            appointments.map((appointment) => {
+              const isPersonalBlock = appointment.kind === "personal_block";
+              return (
+                <article key={appointment.id} className="bg-white p-4 transition duration-200 hover:bg-slate-50">
+                  <div className="grid gap-3 lg:grid-cols-[116px_1fr_auto] lg:items-center">
+                    <div
+                      className={`rounded-2xl border px-3 py-3 shadow-sm ${
+                        isPersonalBlock ? "border-slate-200 bg-slate-100 text-slate-600" : "border-brand/10 bg-blue-50 text-brand"
+                      }`}
+                    >
+                      <p className="text-xs font-black opacity-70">{appointment.date}</p>
+                      <p className="text-2xl font-black">{appointment.startTime}</p>
+                      <p className="text-xs font-black opacity-70">até {appointment.endTime}</p>
                     </div>
-                    <p className="mt-1 text-sm font-bold text-muted">
-                      {appointment.service.name} · <span className="font-black text-success">{money(appointment.price)}</span>
-                    </p>
-                    <p className="mt-1 text-sm font-bold text-muted">
-                      Profissional: {appointment.professional?.name || "Não informado"}
-                    </p>
-                    {appointment.notes ? <p className="mt-2 text-sm text-muted">{appointment.notes}</p> : null}
-                  </div>
 
-                  <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <Button variant="success" onClick={() => onComplete(appointment)}>
-                      Concluir
-                    </Button>
-                    <Button variant="secondary" onClick={() => onEdit(appointment)}>
-                      Editar
-                    </Button>
-                    <Button variant="danger" onClick={() => onDelete(appointment)}>
-                      Excluir
-                    </Button>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-base font-black text-ink">
+                          {isPersonalBlock ? appointment.title || "Compromisso pessoal" : appointment.client?.name}
+                        </p>
+                        {isPersonalBlock ? (
+                          <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-black text-slate-700">
+                            Compromisso pessoal
+                          </span>
+                        ) : (
+                          <StatusBadge status={appointment.status} />
+                        )}
+                      </div>
+                      {isPersonalBlock ? null : (
+                        <p className="mt-1 text-sm font-bold text-muted">
+                          {appointment.service?.name} · <span className="font-black text-success">{money(appointment.price)}</span>
+                        </p>
+                      )}
+                      <p className="mt-1 text-sm font-bold text-muted">
+                        Profissional: {appointment.professional?.name || "Não informado"}
+                      </p>
+                      {appointment.notes ? <p className="mt-2 text-sm text-muted">{appointment.notes}</p> : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      {isPersonalBlock ? null : (
+                        <Button variant="success" onClick={() => onComplete(appointment)}>
+                          Concluir
+                        </Button>
+                      )}
+                      <Button variant="secondary" onClick={() => onEdit(appointment)}>
+                        Editar
+                      </Button>
+                      <Button variant="danger" onClick={() => onDelete(appointment)}>
+                        Excluir
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))
+                </article>
+              );
+            })
           ) : (
             <EmptyState title="Nenhum agendamento cadastrado" description="Crie seu primeiro horário no formulário acima." />
           )}
@@ -361,6 +398,16 @@ export default function Appointments() {
           next.durationMinutes = "";
         }
       }
+      if (field === "kind") {
+        next.durationMinutes = "";
+        if (value === "personal_block") {
+          next.clientId = "";
+          next.serviceId = "";
+          next.price = "";
+        } else {
+          next.title = "";
+        }
+      }
       return next;
     });
     setFieldErrors((current) => {
@@ -373,6 +420,14 @@ export default function Appointments() {
 
   function validateRequiredFields() {
     const errors = {};
+    if (form.kind === "personal_block") {
+      if (!form.title.trim()) errors.title = "Informe um título.";
+      if (!form.professionalId) errors.professionalId = "Selecione um profissional.";
+      if (!form.date) errors.date = "Informe a data.";
+      if (!form.startTime) errors.startTime = "Informe o horário.";
+      if (!form.durationMinutes) errors.durationMinutes = "Informe a duração.";
+      return errors;
+    }
     if (!form.clientId) errors.clientId = "Selecione um cliente.";
     if (!form.professionalId) errors.professionalId = "Selecione um profissional.";
     if (!form.serviceId) errors.serviceId = "Selecione um serviço.";
@@ -386,9 +441,11 @@ export default function Appointments() {
     setEditing(appointment.id);
     setEditIntent(intent);
     setForm({
-      clientId: appointment.clientId,
+      kind: appointment.kind || "appointment",
+      title: appointment.title || "",
+      clientId: appointment.clientId || "",
       professionalId: appointment.professionalId || "",
-      serviceId: appointment.serviceId,
+      serviceId: appointment.serviceId || "",
       date: appointment.date,
       startTime: appointment.startTime,
       durationMinutes: appointment.durationMinutes || appointment.service?.durationMinutes || "",
@@ -420,14 +477,19 @@ export default function Appointments() {
   }
 
   function conflictDescription(conflict) {
-    if (!conflict) return "Existe um agendamento em andamento nesse horário. Deseja continuar mesmo assim?";
+    if (!conflict) return "Existe um compromisso em andamento nesse horário. Deseja continuar mesmo assim?";
 
-    const clientText = conflict.clientName ? ` para ${conflict.clientName}` : "";
     const serviceText = conflict.serviceName ? ` (${conflict.serviceName})` : "";
-    return `Existe outro atendimento${clientText}${serviceText} das ${conflict.startTime} às ${conflict.endTime}. Deseja continuar mesmo assim?`;
+    if (conflict.clientName) {
+      return `Existe outro atendimento para ${conflict.clientName}${serviceText} das ${conflict.startTime} às ${conflict.endTime}. Deseja continuar mesmo assim?`;
+    }
+    const label = conflict.title || "um compromisso pessoal";
+    return `Já existe ${label} das ${conflict.startTime} às ${conflict.endTime}. Deseja continuar mesmo assim?`;
   }
 
   async function persistAppointment(payload) {
+    const isPersonalBlock = payload.kind === "personal_block";
+
     if (editing) {
       const result = await api.updateAppointment(editing, payload);
       setAppointments((current) =>
@@ -435,14 +497,16 @@ export default function Appointments() {
           current.map((appointment) => (appointment.id === result.appointment.id ? result.appointment : appointment))
         )
       );
-      showToast(editIntent === "reschedule" ? "Agendamento reagendado." : "Agendamento atualizado.");
+      showToast(
+        isPersonalBlock ? "Compromisso pessoal atualizado." : editIntent === "reschedule" ? "Agendamento reagendado." : "Agendamento atualizado."
+      );
       return;
     }
 
     const result = await api.createAppointment(payload);
     setAppointments((current) => sortAppointmentsByStartTime([...current, result.appointment]));
-    markStepComplete("appointment", { toast: false });
-    showToast("Agendamento criado.");
+    if (!isPersonalBlock) markStepComplete("appointment", { toast: false });
+    showToast(isPersonalBlock ? "Compromisso pessoal criado." : "Agendamento criado.");
   }
 
   async function handleSubmit(event) {
@@ -457,11 +521,23 @@ export default function Appointments() {
       return;
     }
 
-    const payload = {
-      ...form,
-      price: Number(form.price),
-      durationMinutes: Number(form.durationMinutes || selectedService?.durationMinutes || 0)
-    };
+    const isPersonalBlock = form.kind === "personal_block";
+    const payload = isPersonalBlock
+      ? {
+          kind: "personal_block",
+          title: form.title.trim(),
+          professionalId: form.professionalId,
+          date: form.date,
+          startTime: form.startTime,
+          durationMinutes: Number(form.durationMinutes || 0),
+          notes: form.notes,
+          status: form.status
+        }
+      : {
+          ...form,
+          price: Number(form.price),
+          durationMinutes: Number(form.durationMinutes || selectedService?.durationMinutes || 0)
+        };
 
     await guardSubmit(async () => {
       try {
@@ -622,44 +698,90 @@ export default function Appointments() {
               {isRescheduling ? "Reagendamento" : editing ? "Edição" : "Agendamento"}
             </span>
             <h2 className="mt-3 text-2xl font-black text-ink">
-              {isRescheduling ? "Reagendar atendimento" : editing ? "Editar atendimento" : "Novo agendamento"}
+              {isRescheduling
+                ? "Reagendar atendimento"
+                : editing
+                  ? form.kind === "personal_block"
+                    ? "Editar compromisso pessoal"
+                    : "Editar atendimento"
+                  : form.kind === "personal_block"
+                    ? "Novo compromisso pessoal"
+                    : "Novo agendamento"}
             </h2>
             <p className="mt-2 text-sm font-semibold leading-6 text-muted">
-              Escolha cliente, profissional, serviço e horário. O sistema mantém a validação de conflitos por agenda.
+              {form.kind === "personal_block"
+                ? "Bloqueie um horário na sua agenda para um compromisso pessoal. Ninguém consegue agendar um cliente nesse horário."
+                : "Escolha cliente, profissional, serviço e horário. O sistema mantém a validação de conflitos por agenda."}
             </p>
           </div>
 
           <div className="space-y-4 p-5">
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-black text-ink sm:text-sm">Cliente</span>
-                <Button variant="ghost" size="sm" onClick={() => setQuickClientOpen(true)}>
-                  + Novo cliente
-                </Button>
+            {!editing ? (
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-slate-50 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => update("kind", "appointment")}
+                  className={`rounded-xl px-3 py-2 text-sm font-black transition ${
+                    form.kind === "appointment" ? "bg-white text-brand shadow-sm" : "text-muted"
+                  }`}
+                >
+                  Atendimento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update("kind", "personal_block")}
+                  className={`rounded-xl px-3 py-2 text-sm font-black transition ${
+                    form.kind === "personal_block" ? "bg-white text-brand shadow-sm" : "text-muted"
+                  }`}
+                >
+                  Compromisso pessoal
+                </button>
               </div>
-              <select
-                required
-                value={form.clientId}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (nextValue === QUICK_NEW_CLIENT_OPTION) {
-                    setQuickClientOpen(true);
-                    return;
-                  }
-                  update("clientId", nextValue);
-                }}
-                className={`${inputClass} mt-1 ${fieldErrors.clientId ? "border-red-400 ring-4 ring-red-100" : ""}`}
-              >
-                <option value="">Selecione</option>
-                <option value={QUICK_NEW_CLIENT_OPTION}>+ Cadastrar cliente rapido</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.clientId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.clientId}</p> : null}
-            </div>
+            ) : null}
+
+            {form.kind === "personal_block" ? (
+              <Field label="Título">
+                <input
+                  required
+                  value={form.title}
+                  onChange={(event) => update("title", event.target.value)}
+                  className={`${inputClass} ${fieldErrors.title ? "border-red-400 ring-4 ring-red-100" : ""}`}
+                  placeholder="Consulta médica, resolver algo pessoal, etc."
+                />
+                {fieldErrors.title ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.title}</p> : null}
+              </Field>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black text-ink sm:text-sm">Cliente</span>
+                  <Button variant="ghost" size="sm" onClick={() => setQuickClientOpen(true)}>
+                    + Novo cliente
+                  </Button>
+                </div>
+                <select
+                  required
+                  value={form.clientId}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (nextValue === QUICK_NEW_CLIENT_OPTION) {
+                      setQuickClientOpen(true);
+                      return;
+                    }
+                    update("clientId", nextValue);
+                  }}
+                  className={`${inputClass} mt-1 ${fieldErrors.clientId ? "border-red-400 ring-4 ring-red-100" : ""}`}
+                >
+                  <option value="">Selecione</option>
+                  <option value={QUICK_NEW_CLIENT_OPTION}>+ Cadastrar cliente rapido</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.clientId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.clientId}</p> : null}
+              </div>
+            )}
 
             <Field label="Profissional">
               <select
@@ -680,30 +802,32 @@ export default function Appointments() {
               {fieldErrors.professionalId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.professionalId}</p> : null}
             </Field>
 
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-black text-ink sm:text-sm">Serviço</span>
-                <Button variant="ghost" size="sm" onClick={() => setQuickServiceOpen(true)}>
-                  + Novo serviço
-                </Button>
+            {form.kind === "personal_block" ? null : (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black text-ink sm:text-sm">Serviço</span>
+                  <Button variant="ghost" size="sm" onClick={() => setQuickServiceOpen(true)}>
+                    + Novo serviço
+                  </Button>
+                </div>
+                <select
+                  required
+                  value={form.serviceId}
+                  onChange={(event) => update("serviceId", event.target.value)}
+                  className={`${inputClass} mt-1 ${fieldErrors.serviceId ? "border-red-400 ring-4 ring-red-100" : ""}`}
+                >
+                  <option value="">Selecione</option>
+                  {formServices.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name} - {durationLabel(service.durationMinutes)} {service.isActive ? "" : "- inativo"}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.serviceId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.serviceId}</p> : null}
               </div>
-              <select
-                required
-                value={form.serviceId}
-                onChange={(event) => update("serviceId", event.target.value)}
-                className={`${inputClass} mt-1 ${fieldErrors.serviceId ? "border-red-400 ring-4 ring-red-100" : ""}`}
-              >
-                <option value="">Selecione</option>
-                {formServices.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name} - {durationLabel(service.durationMinutes)} {service.isActive ? "" : "- inativo"}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.serviceId ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.serviceId}</p> : null}
-            </div>
+            )}
 
-            {selectedService ? (
+            {form.kind !== "personal_block" && selectedService ? (
               <div className="grid grid-cols-2 gap-3 rounded-2xl border border-brand/20 bg-blue-50 p-4 shadow-sm">
                 <div>
                   <p className="text-xs font-black uppercase text-brand/70">Duração</p>
@@ -739,29 +863,37 @@ export default function Appointments() {
               </Field>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Duracao deste atendimento">
+            <div className={`grid gap-3 ${form.kind === "personal_block" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+              <Field label={form.kind === "personal_block" ? "Duração" : "Duracao deste atendimento"}>
                 <DurationPicker
                   key={`${editing || "new"}-${form.serviceId || "none"}`}
                   value={form.durationMinutes}
                   onChange={(minutes) => update("durationMinutes", minutes)}
                 />
-                <p className="mt-1 text-xs font-semibold text-muted">
-                  Esse valor sobrescreve a duracao padrao do servico somente neste horario.
-                </p>
+                {form.kind === "personal_block" ? (
+                  fieldErrors.durationMinutes ? (
+                    <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.durationMinutes}</p>
+                  ) : null
+                ) : (
+                  <p className="mt-1 text-xs font-semibold text-muted">
+                    Esse valor sobrescreve a duracao padrao do servico somente neste horario.
+                  </p>
+                )}
               </Field>
-              <Field label="Valor">
-                <input
-                  required
-                  min="0"
-                  step="0.01"
-                  type="number"
-                  value={form.price}
-                  onChange={(event) => update("price", event.target.value)}
-                  className={`${inputClass} ${fieldErrors.price ? "border-red-400 ring-4 ring-red-100" : ""}`}
-                />
-                {fieldErrors.price ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.price}</p> : null}
-              </Field>
+              {form.kind === "personal_block" ? null : (
+                <Field label="Valor">
+                  <input
+                    required
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={form.price}
+                    onChange={(event) => update("price", event.target.value)}
+                    className={`${inputClass} ${fieldErrors.price ? "border-red-400 ring-4 ring-red-100" : ""}`}
+                  />
+                  {fieldErrors.price ? <p className="mt-1 text-xs font-bold text-danger">{fieldErrors.price}</p> : null}
+                </Field>
+              )}
               <Field label="Fim previsto">
                 <input readOnly value={endTime || "Escolha um serviço"} className={readOnlyInputClass} />
               </Field>
@@ -769,7 +901,10 @@ export default function Appointments() {
 
             <Field label="Status">
               <select value={form.status} onChange={(event) => update("status", event.target.value)} className={inputClass}>
-                {statusOptions.map((status) => (
+                {(form.kind === "personal_block"
+                  ? statusOptions.filter((status) => ["agendado", "cancelado"].includes(status.value))
+                  : statusOptions
+                ).map((status) => (
                   <option key={status.value} value={status.value}>
                     {status.label}
                   </option>
@@ -793,7 +928,15 @@ export default function Appointments() {
                 </Button>
               ) : null}
               <Button type="submit" size="lg" loading={saving} className={editing ? "" : "col-span-2"}>
-                {isRescheduling ? "Salvar reagendamento" : editing ? "Atualizar agendamento" : "Salvar agendamento"}
+                {isRescheduling
+                  ? "Salvar reagendamento"
+                  : editing
+                    ? form.kind === "personal_block"
+                      ? "Atualizar compromisso"
+                      : "Atualizar agendamento"
+                    : form.kind === "personal_block"
+                      ? "Salvar compromisso"
+                      : "Salvar agendamento"}
               </Button>
             </div>
           </div>
@@ -854,7 +997,7 @@ export default function Appointments() {
         title="Excluir agendamento?"
         description={
           pendingDelete
-            ? `O horário de ${pendingDelete.client.name} às ${pendingDelete.startTime} será removido.`
+            ? `O horário de ${pendingDelete.kind === "personal_block" ? pendingDelete.title || "compromisso pessoal" : pendingDelete.client?.name} às ${pendingDelete.startTime} será removido.`
             : ""
         }
         confirmLabel="Excluir"

@@ -3,6 +3,7 @@ import StatusBadge from "../StatusBadge.jsx";
 import { money } from "../../utils.js";
 
 function appointmentClient(appointment) {
+  if (appointment.kind === "personal_block") return appointment.title || "Compromisso pessoal";
   return appointment.client?.name || appointment.client || "Cliente";
 }
 
@@ -15,6 +16,7 @@ function appointmentProfessional(appointment) {
 }
 
 export default function DayCard({ appointment, onOpen, onReschedule }) {
+  const isPersonalBlock = appointment.kind === "personal_block";
   const clientName = appointmentClient(appointment);
   const professionalName = appointmentProfessional(appointment);
   const serviceName = appointmentService(appointment);
@@ -45,12 +47,14 @@ export default function DayCard({ appointment, onOpen, onReschedule }) {
             {appointment.startTime} - {appointment.endTime}
           </p>
           <h3 className="mt-2 text-base font-black text-ink sm:text-lg">{clientName}</h3>
-          <p className="mt-1 text-sm font-semibold text-muted">{serviceName}</p>
+          {isPersonalBlock ? null : <p className="mt-1 text-sm font-semibold text-muted">{serviceName}</p>}
           <p className="mt-1 text-sm font-semibold text-muted">Profissional: {professionalName}</p>
-          <div className="mt-3 sm:mt-5">
-            <p className="text-[11px] font-black uppercase text-slate-500">Valor</p>
-            <p className="mt-1 text-sm font-black text-ink">{money(appointment.price)}</p>
-          </div>
+          {isPersonalBlock ? null : (
+            <div className="mt-3 sm:mt-5">
+              <p className="text-[11px] font-black uppercase text-slate-500">Valor</p>
+              <p className="mt-1 text-sm font-black text-ink">{money(appointment.price)}</p>
+            </div>
+          )}
         </div>
 
         <div className="self-end lg:self-auto">

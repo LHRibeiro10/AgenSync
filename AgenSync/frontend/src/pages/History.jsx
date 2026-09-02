@@ -36,7 +36,7 @@ export default function History() {
         clientId: nextFilters.clientId,
         status: nextFilters.status
       });
-      setAppointments(appointmentsData.appointments);
+      setAppointments(appointmentsData.appointments.filter((appointment) => appointment.kind !== "personal_block"));
       if (appointmentsData.bootstrap?.clients) {
         setClients(appointmentsData.bootstrap.clients);
       }
@@ -151,8 +151,8 @@ export default function History() {
                     <p className="text-xl font-black text-ink">{appointment.startTime}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-base font-black tracking-tight text-ink">{appointment.client.name}</p>
-                    <p className="text-sm font-bold text-muted">{appointment.service.name}</p>
+                    <p className="text-base font-black tracking-tight text-ink">{appointment.client?.name}</p>
+                    <p className="text-sm font-bold text-muted">{appointment.service?.name}</p>
                   </div>
                   <div className="flex items-center justify-between gap-3 lg:justify-end">
                     <StatusBadge status={appointment.status} />

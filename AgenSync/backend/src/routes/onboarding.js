@@ -44,7 +44,7 @@ async function onboardingCounts(req) {
     prisma.service.count({ where: workspaceWhere(req) }),
     prisma.professional.count({ where: workspaceWhere(req) }),
     prisma.client.count({ where: workspaceWhere(req) }),
-    prisma.appointment.count({ where: workspaceWhere(req) })
+    prisma.appointment.count({ where: { ...workspaceWhere(req), kind: "APPOINTMENT" } })
   ]);
 
   return { services, professionals, clients, appointments };

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Bash(node --check src/routes/appointments.js)",
+      "Bash(node --check src/utils/formatters.js)",
+      "Bash(node --check src/routes/onboarding.js)"
     ]
   }
 }

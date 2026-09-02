@@ -21,8 +21,6 @@ import {
   listProducts,
   listProductStockMovements,
   listProductVariants,
-  productCategories,
-  productCategoryLabel,
   stockStatus,
   toggleProduct,
   updateProduct
@@ -31,7 +29,7 @@ import { money } from "../utils.js";
 
 const emptyForm = {
   name: "",
-  category: "cosmeticos",
+  category: "",
   costPrice: "",
   salePrice: "",
   stockQty: 0,
@@ -358,12 +356,14 @@ export default function Products({ mode = "catalog" }) {
   const lowStock = allProducts.filter((product) => stockStatus(product) === "low").length;
   const outStock = allProducts.filter((product) => stockStatus(product) === "out").length;
   const attentionProducts = allProducts.filter((product) => ["low", "out"].includes(stockStatus(product)));
-  const categoryCounts = productCategories
-    .map((category) => ({
-      ...category,
-      count: allProducts.filter((product) => product.category === category.value).length
-    }))
-    .filter((category) => category.count > 0);
+  const existingCategories = [...new Set(allProducts.map((product) => product.category).filter(Boolean))].sort((first, second) =>
+    first.localeCompare(second, "pt-BR", { sensitivity: "base" })
+  );
+  const categoryCounts = existingCategories.map((category) => ({
+    value: category,
+    label: category,
+    count: allProducts.filter((product) => product.category === category).length
+  }));
 
   useEffect(() => {
     setFilters((current) => ({ ...current, stock: mode === "stock" ? "attention" : "" }));
@@ -684,13 +684,19 @@ export default function Products({ mode = "catalog" }) {
                   />
                 </Field>
                 <Field label="Categoria">
-                  <select value={form.category} onChange={(event) => updateForm("category", event.target.value)} className={inputClass}>
-                    {productCategories.map((category) => (
-                      <option key={category.value} value={category.value}>
-                        {category.label}
-                      </option>
+                  <input
+                    required
+                    list="product-category-suggestions"
+                    value={form.category}
+                    onChange={(event) => updateForm("category", event.target.value)}
+                    className={inputClass}
+                    placeholder="Ex: Cremes, Esmaltes, Acessórios..."
+                  />
+                  <datalist id="product-category-suggestions">
+                    {existingCategories.map((category) => (
+                      <option key={category} value={category} />
                     ))}
-                  </select>
+                  </datalist>
                 </Field>
               </FormSection>
 
@@ -865,9 +871,9 @@ export default function Products({ mode = "catalog" }) {
               <Field label="Categoria">
                 <select value={filters.category} onChange={(event) => updateFilter("category", event.target.value)} className={inputClass}>
                   <option value="">Todas</option>
-                  {productCategories.map((category) => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
+                  {existingCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
                     </option>
                   ))}
                 </select>
@@ -909,7 +915,7 @@ export default function Products({ mode = "catalog" }) {
                             </span>
                           ) : null}
                         </div>
-                        <p className="mt-1 text-sm font-bold text-muted">{productCategoryLabel(product.category)}</p>
+                        <p className="mt-1 text-sm font-bold text-muted">{product.category}</p>
                         <div className="mt-3 grid gap-2 sm:grid-cols-3">
                           <div className="rounded-2xl bg-slate-50 px-3 py-2">
                             <p className="text-[11px] font-black uppercase text-muted">Custo</p>

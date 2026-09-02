@@ -14,15 +14,6 @@ import {
 } from "../api/modules/productsApi.js";
 import { executeDataSource } from "./helpers/serviceMode.js";
 
-export const productCategories = [
-  { value: "cosmeticos", label: "Cosmeticos" },
-  { value: "cuidados", label: "Cuidados" },
-  { value: "acessorios", label: "Acessorios" },
-  { value: "finalizadores", label: "Finalizadores" },
-  { value: "kits", label: "Kits" },
-  { value: "outros", label: "Outros" }
-];
-
 function asList(value, key) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.[key])) return value[key];
@@ -32,10 +23,6 @@ function asList(value, key) {
 function asItem(value, key) {
   if (value?.[key]) return value[key];
   return value;
-}
-
-export function productCategoryLabel(value) {
-  return productCategories.find((category) => category.value === value)?.label || value;
 }
 
 export function stockStatus(product) {

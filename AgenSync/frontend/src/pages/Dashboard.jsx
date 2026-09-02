@@ -1142,8 +1142,12 @@ export default function Dashboard() {
                         <p className="text-xs font-bold">até {appointment.endTime}</p>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-base font-black text-ink">{appointment.client.name}</p>
-                        <p className="text-sm font-bold text-muted">{appointment.service.name}</p>
+                        <p className="text-base font-black text-ink">
+                          {appointment.kind === "personal_block" ? appointment.title || "Compromisso pessoal" : appointment.client?.name}
+                        </p>
+                        {appointment.kind === "personal_block" ? null : (
+                          <p className="text-sm font-bold text-muted">{appointment.service?.name}</p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-3 md:justify-end">
                         <StatusBadge status={appointment.status} />
@@ -1172,8 +1176,14 @@ export default function Dashboard() {
                 <div className="mt-5 space-y-3">
                   <p className="text-5xl font-black text-brand">{dashboard.nextAppointment.startTime}</p>
                   <div>
-                    <p className="text-lg font-black text-ink">{dashboard.nextAppointment.client.name}</p>
-                    <p className="text-sm text-muted">{dashboard.nextAppointment.service.name}</p>
+                    <p className="text-lg font-black text-ink">
+                      {dashboard.nextAppointment.kind === "personal_block"
+                        ? dashboard.nextAppointment.title || "Compromisso pessoal"
+                        : dashboard.nextAppointment.client?.name}
+                    </p>
+                    {dashboard.nextAppointment.kind === "personal_block" ? null : (
+                      <p className="text-sm text-muted">{dashboard.nextAppointment.service?.name}</p>
+                    )}
                   </div>
                   <p className="rounded-xl bg-[#F8FAFC] px-3 py-2 text-sm font-bold text-muted">
                     {dashboard.nextAppointment.date} · {money(dashboard.nextAppointment.price)}

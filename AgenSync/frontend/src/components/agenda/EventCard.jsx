@@ -7,7 +7,15 @@ const statusStyles = {
   nao_compareceu: "border-amber-200 bg-amber-50/95 text-amber-950"
 };
 
-function appointmentClient(appointment) {
+const PERSONAL_BLOCK_STYLE =
+  "border-slate-300 bg-[repeating-linear-gradient(135deg,rgba(148,163,184,0.18)_0px,rgba(148,163,184,0.18)_8px,rgba(241,245,249,0.95)_8px,rgba(241,245,249,0.95)_16px)] text-slate-700";
+
+function isPersonalBlock(appointment) {
+  return appointment.kind === "personal_block";
+}
+
+function appointmentTitle(appointment) {
+  if (isPersonalBlock(appointment)) return appointment.title || "Compromisso pessoal";
   return appointment.client?.name || appointment.client || "Cliente";
 }
 
@@ -20,9 +28,11 @@ function appointmentProfessional(appointment) {
 }
 
 export default function EventCard({ appointment, style, compact = false, onClick }) {
-  const clientName = appointmentClient(appointment);
+  const personalBlock = isPersonalBlock(appointment);
+  const titleText = appointmentTitle(appointment);
   const professionalName = appointmentProfessional(appointment);
   const serviceName = appointmentService(appointment);
+  const cardStyle = personalBlock ? PERSONAL_BLOCK_STYLE : statusStyles[appointment.status] || statusStyles.agendado;
 
   if (compact) {
     return (
@@ -31,13 +41,13 @@ export default function EventCard({ appointment, style, compact = false, onClick
         onClick={() => onClick(appointment)}
         className={[
           "absolute z-20 flex items-center overflow-hidden rounded-xl border px-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-soft focus-visible:z-30",
-          statusStyles[appointment.status] || statusStyles.agendado
+          cardStyle
         ].join(" ")}
         style={style}
-        title={`${clientName} - ${appointment.startTime}`}
-        aria-label={`Editar atendimento de ${clientName} às ${appointment.startTime}`}
+        title={`${titleText} - ${appointment.startTime}`}
+        aria-label={`Editar ${personalBlock ? "compromisso" : "atendimento"} de ${titleText} às ${appointment.startTime}`}
       >
-        <span className="min-w-0 truncate text-xs font-black leading-none">{clientName}</span>
+        <span className="min-w-0 truncate text-xs font-black leading-none">{titleText}</span>
       </button>
     );
   }
@@ -48,17 +58,27 @@ export default function EventCard({ appointment, style, compact = false, onClick
       onClick={() => onClick(appointment)}
       className={[
         "absolute left-3 right-3 z-20 overflow-hidden rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-soft focus-visible:z-30",
-        statusStyles[appointment.status] || statusStyles.agendado
+        cardStyle
       ].join(" ")}
       style={style}
-      aria-label={`Editar atendimento de ${clientName} às ${appointment.startTime}`}
+      aria-label={`Editar ${personalBlock ? "compromisso" : "atendimento"} de ${titleText} às ${appointment.startTime}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-sm font-black">{clientName}</p>
-        <StatusBadge status={appointment.status} />
+        <p className="min-w-0 truncate text-sm font-black">{titleText}</p>
+        {personalBlock ? (
+          <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600">
+            Pessoal
+          </span>
+        ) : (
+          <StatusBadge status={appointment.status} />
+        )}
       </div>
-      <p className="mt-1 truncate text-xs font-bold text-slate-600">{serviceName}</p>
-      <p className="mt-1 truncate text-xs font-bold text-slate-500">{professionalName}</p>
+      {personalBlock ? null : (
+        <>
+          <p className="mt-1 truncate text-xs font-bold text-slate-600">{serviceName}</p>
+          <p className="mt-1 truncate text-xs font-bold text-slate-500">{professionalName}</p>
+        </>
+      )}
       <p className="mt-2 text-sm font-black text-slate-700">
         {appointment.startTime} - {appointment.endTime}
       </p>

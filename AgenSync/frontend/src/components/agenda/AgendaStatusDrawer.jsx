@@ -5,6 +5,7 @@ import StatusBadge from "../StatusBadge.jsx";
 import { money, statusOptions } from "../../utils.js";
 
 function appointmentClient(appointment) {
+  if (appointment.kind === "personal_block") return appointment.title || "Compromisso pessoal";
   return appointment.client?.name || appointment.client || "Cliente";
 }
 
@@ -52,10 +53,14 @@ export default function AgendaStatusDrawer({
   if (!open || !appointment) return null;
 
   const canUsePortal = typeof document !== "undefined";
+  const isPersonalBlock = appointment.kind === "personal_block";
   const clientName = appointmentClient(appointment);
   const professionalName = appointmentProfessional(appointment);
   const serviceName = appointmentService(appointment);
   const hasStatusChange = draftStatus !== appointment.status;
+  const visibleStatusOptions = isPersonalBlock
+    ? statusOptions.filter((status) => ["agendado", "cancelado"].includes(status.value))
+    : statusOptions;
 
   const drawer = (
     <div
@@ -77,9 +82,9 @@ export default function AgendaStatusDrawer({
       >
         <header className="shrink-0 flex items-start justify-between gap-4 border-b border-line p-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:p-5">
           <div>
-            <p className="text-xs font-black uppercase text-brand">Atendimento</p>
+            <p className="text-xs font-black uppercase text-brand">{isPersonalBlock ? "Compromisso pessoal" : "Atendimento"}</p>
             <h2 className="mt-2 text-2xl font-black text-ink">{clientName}</h2>
-            <p className="mt-1 text-sm font-semibold text-muted">{serviceName}</p>
+            {isPersonalBlock ? null : <p className="mt-1 text-sm font-semibold text-muted">{serviceName}</p>}
             <p className="mt-1 text-sm font-semibold text-muted">Profissional: {professionalName}</p>
           </div>
           <button
@@ -106,10 +111,12 @@ export default function AgendaStatusDrawer({
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-black uppercase text-slate-500">Valor</p>
-                <p className="mt-1 text-sm font-black text-success">{money(appointment.price)}</p>
-              </div>
+              {isPersonalBlock ? null : (
+                <div>
+                  <p className="text-xs font-black uppercase text-slate-500">Valor</p>
+                  <p className="mt-1 text-sm font-black text-success">{money(appointment.price)}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-black uppercase text-slate-500">Profissional</p>
                 <p className="mt-1 text-sm font-black text-ink">{professionalName}</p>
@@ -123,21 +130,23 @@ export default function AgendaStatusDrawer({
             </div>
           </section>
 
-          <section className="mt-4 rounded-2xl border border-line bg-white p-4">
-            <p className="text-xs font-black uppercase text-slate-500">Comunicação</p>
-            <p className="mt-1 text-xs font-bold text-muted">Mensagens manuais com preview antes de abrir o WhatsApp.</p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <Button variant="secondary" onClick={() => onSendReminder?.(appointment)} disabled={saving}>
-                Enviar lembrete
-              </Button>
-              <Button onClick={() => onConfirmAttendance?.(appointment)} disabled={saving}>
-                Confirmar comparecimento
-              </Button>
-              <Button variant="danger" className="sm:col-span-2" onClick={() => onSendCancellation?.(appointment)} disabled={saving}>
-                Enviar cancelamento
-              </Button>
-            </div>
-          </section>
+          {isPersonalBlock ? null : (
+            <section className="mt-4 rounded-2xl border border-line bg-white p-4">
+              <p className="text-xs font-black uppercase text-slate-500">Comunicação</p>
+              <p className="mt-1 text-xs font-bold text-muted">Mensagens manuais com preview antes de abrir o WhatsApp.</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <Button variant="secondary" onClick={() => onSendReminder?.(appointment)} disabled={saving}>
+                  Enviar lembrete
+                </Button>
+                <Button onClick={() => onConfirmAttendance?.(appointment)} disabled={saving}>
+                  Confirmar comparecimento
+                </Button>
+                <Button variant="danger" className="sm:col-span-2" onClick={() => onSendCancellation?.(appointment)} disabled={saving}>
+                  Enviar cancelamento
+                </Button>
+              </div>
+            </section>
+          )}
 
           {appointment.monthlyPlan ? (
             <section className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4">
@@ -177,7 +186,7 @@ export default function AgendaStatusDrawer({
             </div>
 
             <div className="mt-4 grid gap-2">
-              {statusOptions.map((status) => {
+              {visibleStatusOptions.map((status) => {
                 const selected = status.value === draftStatus;
                 const current = status.value === appointment.status;
 
@@ -225,7 +234,7 @@ export default function AgendaStatusDrawer({
             </Button>
           </div>
           <Button variant="danger" onClick={() => onDelete(appointment)} disabled={saving}>
-            Excluir agendamento
+            {isPersonalBlock ? "Excluir compromisso" : "Excluir agendamento"}
           </Button>
         </footer>
       </aside>
