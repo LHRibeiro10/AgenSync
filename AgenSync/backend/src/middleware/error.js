@@ -34,7 +34,8 @@ export function errorHandler(error, req, res, next) {
   }
 
   const statusCode = error.statusCode || 500;
-  const message = statusCode === 500 ? "Erro interno do servidor." : error.message;
+  const isTrustedAdminRoute = /^\/api\/(admin|platform)(\/|$)/.test(req.originalUrl || "");
+  const message = statusCode === 500 && !isTrustedAdminRoute ? "Erro interno do servidor." : error.message;
   const response = { message };
 
   if (error.details) {
