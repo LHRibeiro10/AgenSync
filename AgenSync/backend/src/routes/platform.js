@@ -3,7 +3,7 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { invalidateAuthUserCache } from "../middleware/auth.js";
 import { PLAN_SLUGS, normalizePlanSlug } from "../config/plans.js";
-import { recordAuditEvent } from "../utils/audit.js";
+import { publicAuditLog, recordAuditEvent } from "../utils/audit.js";
 import { endOfDay, endOfMonth, formatDate, parseDateOnly, startOfDay, startOfMonth, todayString } from "../utils/dates.js";
 import { deleteSupabaseAuthUser } from "../utils/supabaseAuthAdmin.js";
 
@@ -426,6 +426,21 @@ function groupRows(rows, getter, valueGetter = () => 1) {
   return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
+async function loadLastCronRun() {
+  const log = await prisma.auditLog.findFirst({
+    where: { eventType: "cron.reminders_processed" },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true, metadata: true }
+  });
+  if (!log) return null;
+  return {
+    lastRunAt: log.createdAt,
+    processed: log.metadata?.processed ?? 0,
+    sent: log.metadata?.sent ?? 0,
+    failed: log.metadata?.failed ?? 0
+  };
+}
+
 router.use(
   asyncHandler(async (req, res, next) => {
     await recordAuditEvent({
@@ -444,7 +459,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const period = resolvePeriod(req.query);
     const rows = await loadWorkspaceRows(period);
-    const [totalUsers, totalProfessionals, totalAdmins, subscriptionsByStatus, subscribersCreated] = await Promise.all([
+    const [totalUsers, totalProfessionals, totalAdmins, subscriptionsByStatus, subscribersCreated, lastCronRun] = await Promise.all([
       prisma.user.count({ where: platformUserWhere() }),
       prisma.professional.count(),
       prisma.user.count({ where: { ...platformUserWhere(), workspaceRole: "ADMIN" } }),
@@ -453,7 +468,8 @@ router.get(
         by: ["createdAt"],
         where: { ...platformUserWhere(), createdAt: { gte: period.start, lt: period.end } },
         _count: { id: true }
-      })
+      }),
+      loadLastCronRun()
     ]);
 
     const statusCount = Object.fromEntries(subscriptionsByStatus.map((item) => [String(item.subscriptionStatus).toLowerCase(), item._count.id]));
@@ -484,6 +500,7 @@ router.get(
     res.json({
       period: { key: period.key, startDate: formatDate(period.start), endDate: formatDate(new Date(period.end.getTime() - 1)) },
       summary,
+      lastCronRun,
       charts: {
         subscribersByPlan: groupRows(rows, (row) => row.plan),
         estimatedRevenueByPlan: groupRows(rows, (row) => row.plan, (row) => row.financial.estimatedMrr),
@@ -699,6 +716,34 @@ router.delete(
         workspaceIds: context.workspaceIds
       }
     });
+  })
+);
+
+const platformEventTypes = new Set([
+  "platform.access",
+  "platform.workspace_status_changed",
+  "platform.workspace_plan_changed",
+  "platform.workspace_deleted",
+  "platform.user_status_changed",
+  "cron.reminders_processed"
+]);
+
+router.get(
+  "/audit-logs",
+  asyncHandler(async (req, res) => {
+    const requestedEventType = String(req.query.eventType || "").trim();
+    const where = requestedEventType
+      ? { eventType: requestedEventType }
+      : { eventType: { in: [...platformEventTypes].filter((type) => type !== "platform.access") } };
+
+    const logs = await prisma.auditLog.findMany({
+      where,
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: [{ createdAt: "desc" }],
+      take: 150
+    });
+
+    res.json({ logs: logs.map(publicAuditLog) });
   })
 );
 

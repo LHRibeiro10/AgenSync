@@ -4,9 +4,20 @@ import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
+import Icon from "../components/Icon.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+
+function timeAgoLabel(dateValue) {
+  if (!dateValue) return null;
+  const minutes = Math.floor((Date.now() - new Date(dateValue).getTime()) / 60000);
+  if (minutes < 1) return "agora mesmo";
+  if (minutes < 60) return `${minutes} min atras`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h atras`;
+  return `${Math.floor(hours / 24)}d atras`;
+}
 
 const eventLabels = {
   "auth.register": "Cadastro",
@@ -66,10 +77,24 @@ function activityStatus(user) {
   return { key: "inactive", label: "Inativo", className: "bg-amber-50 text-amber-700 ring-amber-200" };
 }
 
-function StatTile({ label, value, detail }) {
+function StatTile({ label, value, detail, icon, tone = "blue" }) {
+  const tones = {
+    blue: "bg-blue-50 text-blue-700",
+    green: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+    slate: "bg-slate-100 text-slate-700"
+  };
+
   return (
     <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">{label}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">{label}</p>
+        {icon ? (
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${tones[tone] || tones.blue}`}>
+            <Icon name={icon} className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
       <p className="mt-2 truncate text-3xl font-black text-ink">{value}</p>
       {detail ? <p className="mt-1 text-sm font-semibold text-muted">{detail}</p> : null}
     </article>
@@ -78,9 +103,21 @@ function StatTile({ label, value, detail }) {
 
 function SystemStatus({ summary }) {
   const failures = Number(summary?.loginFailures7Days || 0);
+  const lastCronRun = summary?.lastCronRun || null;
+  const minutesAgo = lastCronRun?.lastRunAt
+    ? Math.floor((Date.now() - new Date(lastCronRun.lastRunAt).getTime()) / 60000)
+    : null;
+  const cronLate = !lastCronRun || minutesAgo > 20;
+
   const status =
-    failures >= 10
-      ? { label: "Atenção", className: "bg-amber-50 text-amber-700 ring-amber-200", detail: "Falhas de login elevadas nos últimos 7 dias." }
+    failures >= 10 || cronLate
+      ? {
+          label: "Atenção",
+          className: "bg-amber-50 text-amber-700 ring-amber-200",
+          detail: cronLate
+            ? "O cron de lembretes de agendamento nao roda no prazo esperado (a cada 5 minutos)."
+            : "Falhas de login elevadas nos últimos 7 dias."
+        }
       : { label: "Operacional", className: "bg-green-50 text-success ring-green-200", detail: "Sem sinais críticos nas métricas administrativas." };
 
   return (
@@ -90,6 +127,11 @@ function SystemStatus({ summary }) {
           <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Status geral</p>
           <h2 className="mt-1 text-lg font-black text-ink">Sistema {status.label.toLowerCase()}</h2>
           <p className="mt-1 text-sm font-semibold text-muted">{status.detail}</p>
+          <p className="mt-1 text-xs font-bold text-muted">
+            {lastCronRun
+              ? `Cron de lembretes: ultima execucao ha ${timeAgoLabel(lastCronRun.lastRunAt)} (${lastCronRun.sent} enviado(s), ${lastCronRun.failed} falha(s))`
+              : "Cron de lembretes: nunca executado"}
+          </p>
         </div>
         <span className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-black ring-1 ${status.className}`}>
           {status.label}
@@ -274,19 +316,19 @@ export default function Admin() {
           <SystemStatus summary={summary} />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatTile label="Usuários totais" value={summary.totalUsers || 0} detail={`${summary.newUsers30Days || 0} novos no mês`} />
-            <StatTile label="Usuários ativos" value={summary.activeUsers30Days || 0} detail="Com atividade nos últimos 30 dias" />
-            <StatTile label="Negócios" value={summary.businesses || 0} detail="Negócios cadastrados" />
-            <StatTile label="Admins" value={summary.admins || 0} detail="Perfis administrativos" />
+            <StatTile label="Usuários totais" value={summary.totalUsers || 0} detail={`${summary.newUsers30Days || 0} novos no mês`} icon="clients" />
+            <StatTile label="Usuários ativos" value={summary.activeUsers30Days || 0} detail="Com atividade nos últimos 30 dias" icon="check" tone="green" />
+            <StatTile label="Negócios" value={summary.businesses || 0} detail="Negócios cadastrados" icon="building" />
+            <StatTile label="Admins" value={summary.admins || 0} detail="Perfis administrativos" icon="settings" tone="amber" />
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <StatTile label="Clientes" value={recordSummary.clients || 0} />
-            <StatTile label="Agendamentos" value={recordSummary.appointments || 0} />
-            <StatTile label="Serviços" value={recordSummary.services || 0} />
-            <StatTile label="Vendas" value={recordSummary.productSales || 0} />
-            <StatTile label="Mensalidades" value={recordSummary.monthlyPlans || 0} />
-            <StatTile label="Produtos" value={recordSummary.products || 0} />
+            <StatTile label="Clientes" value={recordSummary.clients || 0} icon="clients" />
+            <StatTile label="Agendamentos" value={recordSummary.appointments || 0} icon="appointments" />
+            <StatTile label="Serviços" value={recordSummary.services || 0} icon="services" />
+            <StatTile label="Vendas" value={recordSummary.productSales || 0} icon="sales" />
+            <StatTile label="Mensalidades" value={recordSummary.monthlyPlans || 0} icon="finance" />
+            <StatTile label="Produtos" value={recordSummary.products || 0} icon="products" />
           </section>
         </>
       ) : null}

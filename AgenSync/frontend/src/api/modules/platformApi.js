@@ -32,3 +32,7 @@ export function deletePlatformWorkspaceApi(id, payload) {
 export function updatePlatformUserStatusApi(id, payload) {
   return httpClient.patch(endpoints.platform.userStatus(id), { body: payload });
 }
+
+export function platformAuditLogsApi(params) {
+  return httpClient.get(endpoints.platform.auditLogs, { params, cacheTtlMs: 15000 });
+}

@@ -6,12 +6,80 @@ import Card, { CardHeader } from "../components/Card.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
+import Icon from "../components/Icon.jsx";
 import Loading from "../components/Loading.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { PLAN_SLUGS, PLANS_CONFIG } from "../config/plans.js";
+
+const platformEventLabels = {
+  "platform.access": "Acesso ao painel",
+  "platform.workspace_status_changed": "Status da conta alterado",
+  "platform.workspace_plan_changed": "Plano alterado",
+  "platform.workspace_deleted": "Conta excluida",
+  "platform.user_status_changed": "Status do usuario alterado",
+  "cron.reminders_processed": "Lembretes processados"
+};
+
+function auditEventLabel(type) {
+  return platformEventLabels[type] || type;
+}
+
+const metricIcons = {
+  "Total de assinantes": "clients",
+  "Assinaturas ativas": "check",
+  "Vencidas/inadimplentes": "bell",
+  "Contas em teste": "history",
+  "MRR estimado": "finance",
+  "Workspaces/contas": "building",
+  Usuarios: "user",
+  Profissionais: "professionals",
+  Admins: "settings",
+  "Agendamentos no periodo": "appointments",
+  "Movimentado por assinantes": "sales",
+  "Faturamento bruto": "finance",
+  "Despesas registradas": "expenses",
+  "Liquido estimado": "finance"
+};
+
+function timeAgoLabel(dateValue) {
+  if (!dateValue) return null;
+  const minutes = Math.floor((Date.now() - new Date(dateValue).getTime()) / 60000);
+  if (minutes < 1) return "agora mesmo";
+  if (minutes < 60) return `${minutes} min atras`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h atras`;
+  return `${Math.floor(hours / 24)}d atras`;
+}
+
+function daysUntil(dateValue) {
+  if (!dateValue) return null;
+  return Math.ceil((new Date(dateValue).getTime() - Date.now()) / 86400000);
+}
+
+function attentionReason(row) {
+  if (row.subscriptionStatus === "blocked") return { label: "Bloqueada", tone: "bg-red-50 text-red-700 ring-red-200" };
+  if (row.subscriptionStatus === "past_due") return { label: "Pagamento atrasado", tone: "bg-amber-50 text-amber-700 ring-amber-200" };
+  if (row.subscriptionStatus === "canceled") return { label: "Cancelada", tone: "bg-slate-100 text-slate-700 ring-slate-200" };
+  if (row.status && row.status !== "active") return { label: "Conta inativa", tone: "bg-red-50 text-red-700 ring-red-200" };
+  const days = daysUntil(row.subscriptionPaidUntil);
+  if (days !== null && days <= 3) {
+    return { label: days <= 0 ? "Vencendo hoje" : `Vence em ${days} dia(s)`, tone: "bg-amber-50 text-amber-700 ring-amber-200" };
+  }
+  return { label: "Atencao", tone: "bg-amber-50 text-amber-700 ring-amber-200" };
+}
+
+function isAttentionRow(row) {
+  if (["blocked", "past_due", "canceled"].includes(row.subscriptionStatus)) return true;
+  if (row.status && row.status !== "active") return true;
+  if (["trialing", "trial"].includes(row.subscriptionStatus)) {
+    const days = daysUntil(row.subscriptionPaidUntil);
+    return days !== null && days <= 3;
+  }
+  return false;
+}
 
 const periodOptions = [
   { value: "today", label: "Hoje" },
@@ -60,18 +128,100 @@ function normalizeSection(section) {
 
 function MetricCard({ label, value, type = "number", tone = "blue" }) {
   const tones = {
-    blue: "from-blue-600 to-sky-500",
-    green: "from-emerald-600 to-teal-500",
-    amber: "from-amber-500 to-orange-500",
-    slate: "from-slate-800 to-slate-600"
+    blue: { grad: "from-blue-600 to-sky-500", chip: "bg-blue-50 text-blue-700" },
+    green: { grad: "from-emerald-600 to-teal-500", chip: "bg-emerald-50 text-emerald-700" },
+    amber: { grad: "from-amber-500 to-orange-500", chip: "bg-amber-50 text-amber-700" },
+    slate: { grad: "from-slate-800 to-slate-600", chip: "bg-slate-100 text-slate-700" }
   };
+  const palette = tones[tone] || tones.blue;
+  const icon = metricIcons[label];
 
   return (
     <article className="min-w-0 rounded-2xl border border-white/70 bg-white p-4 shadow-[0_20px_55px_rgba(15,23,42,0.08)] sm:p-5">
-      <div className={`h-1.5 w-16 rounded-full bg-gradient-to-r ${tones[tone] || tones.blue}`} />
+      <div className="flex items-center justify-between gap-2">
+        <div className={`h-1.5 w-16 rounded-full bg-gradient-to-r ${palette.grad}`} />
+        {icon ? (
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${palette.chip}`}>
+            <Icon name={icon} className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
       <p className="mt-4 text-xs font-black uppercase text-slate-500">{label}</p>
       <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{formatValue(value, type)}</p>
     </article>
+  );
+}
+
+function SystemHealthCard({ lastCronRun }) {
+  const minutesAgo = lastCronRun?.lastRunAt
+    ? Math.floor((Date.now() - new Date(lastCronRun.lastRunAt).getTime()) / 60000)
+    : null;
+  const state = !lastCronRun
+    ? {
+        label: "Nunca rodou",
+        className: "bg-red-50 text-red-700 ring-red-200",
+        detail: "O job de lembretes de agendamento ainda nao foi executado nenhuma vez."
+      }
+    : minutesAgo > 20
+    ? {
+        label: "Atrasado",
+        className: "bg-amber-50 text-amber-700 ring-amber-200",
+        detail: `Ultima execucao ha ${timeAgoLabel(lastCronRun.lastRunAt)} - o esperado e a cada 5 minutos.`
+      }
+    : {
+        label: "Em dia",
+        className: "bg-green-50 text-success ring-green-200",
+        detail: `Ultima execucao ha ${timeAgoLabel(lastCronRun.lastRunAt)}.`
+      };
+
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Lembretes de agendamento (cron)</p>
+          <h2 className="mt-1 text-lg font-black text-slate-950">{state.label}</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-600">{state.detail}</p>
+          {lastCronRun ? (
+            <p className="mt-1 text-xs font-bold text-slate-500">
+              {lastCronRun.sent} enviado(s) - {lastCronRun.failed} falha(s) na ultima execucao
+            </p>
+          ) : null}
+        </div>
+        <span className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-black ring-1 ${state.className}`}>
+          {state.label}
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+function AttentionAccounts({ rows, onSelect }) {
+  if (!rows.length) return null;
+
+  return (
+    <Card>
+      <CardHeader
+        title="Contas que precisam de atencao"
+        description="Pagamento atrasado, bloqueadas, inativas ou com teste acabando nos proximos dias."
+      />
+      <div className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row) => {
+          const reason = attentionReason(row);
+          return (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onSelect(row)}
+              className="flex flex-col items-start gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50"
+            >
+              <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${reason.tone}`}>{reason.label}</span>
+              <span className="mt-1 w-full truncate text-sm font-black text-slate-950">{row.name}</span>
+              <span className="w-full truncate text-xs font-semibold text-slate-500">{row.ownerEmail}</span>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
@@ -475,8 +625,17 @@ export default function PlatformDashboard() {
   const [selectedWorkspace, setSelectedWorkspace] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditEventType, setAuditEventType] = useState("");
 
   const query = useMemo(() => ({ ...periodParams(filters), ...tableFilters }), [filters, tableFilters]);
+  const attentionRows = useMemo(() => workspaces.filter(isAttentionRow), [workspaces]);
+
+  function selectWorkspaceAndScroll(row) {
+    setSelectedWorkspace(row);
+    document.getElementById("platform-action-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function loadData() {
     setLoading(true);
@@ -500,6 +659,26 @@ export default function PlatformDashboard() {
     loadData();
   }, [query.period, query.startDate, query.endDate, query.search, query.plan, query.status, query.sort, query.direction]);
 
+  useEffect(() => {
+    if (activeSection !== "auditoria") return undefined;
+    let cancelled = false;
+    setAuditLoading(true);
+    api
+      .listPlatformAuditLogs({ eventType: auditEventType })
+      .then((logs) => {
+        if (!cancelled) setAuditLogs(logs);
+      })
+      .catch(() => {
+        if (!cancelled) setAuditLogs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection, auditEventType]);
+
   const summary = overview?.summary || {};
   const charts = overview?.charts || {};
 
@@ -513,6 +692,12 @@ export default function PlatformDashboard() {
       />
 
       {error ? <Message type="error" title="Erro ao carregar" description={error} /> : null}
+
+      <SystemHealthCard lastCronRun={overview?.lastCronRun} />
+
+      {(activeSection === "dashboard" || activeSection === "contas") && attentionRows.length ? (
+        <AttentionAccounts rows={attentionRows} onSelect={selectWorkspaceAndScroll} />
+      ) : null}
 
       <PeriodFilters filters={filters} onChange={setFilters} />
 
@@ -556,18 +741,81 @@ export default function PlatformDashboard() {
         rows={workspaces}
         filters={tableFilters}
         onFiltersChange={setTableFilters}
-        onSelect={setSelectedWorkspace}
+        onSelect={selectWorkspaceAndScroll}
         selectedId={selectedWorkspace?.id}
       />
 
       {(activeSection === "dashboard" || activeSection === "suporte" || activeSection === "contas") ? (
-        <ActionPanel workspace={selectedWorkspace} onRefresh={loadData} />
+        <div id="platform-action-panel">
+          <ActionPanel workspace={selectedWorkspace} onRefresh={loadData} />
+        </div>
       ) : null}
 
       {activeSection === "auditoria" ? (
-        <Card>
-          <CardHeader title="Auditoria" description="As acoes sensiveis do painel da plataforma registram motivo, operador, alvo e rota." />
-          <EmptyState title="Auditoria operacional" description="Use as acoes administrativas para acompanhar os registros de suporte e operacao." />
+        <Card className="overflow-hidden">
+          <CardHeader
+            title="Auditoria de acoes sensiveis"
+            description="Registro de tudo que foi alterado por aqui: status de conta, plano, exclusoes e a saude do cron de lembretes."
+          />
+          <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
+            <Field label="Evento">
+              <select className={inputClass} value={auditEventType} onChange={(event) => setAuditEventType(event.target.value)}>
+                <option value="">Acoes administrativas (padrao)</option>
+                <option value="platform.access">Acessos ao painel</option>
+                {Object.entries(platformEventLabels)
+                  .filter(([key]) => key !== "platform.access")
+                  .map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
+
+          {auditLoading ? (
+            <div className="p-6">
+              <Loading label="Carregando auditoria..." />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[860px] w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Quando</th>
+                    <th className="px-4 py-3">Evento</th>
+                    <th className="px-4 py-3">Operador</th>
+                    <th className="px-4 py-3">Detalhes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {auditLogs.map((log) => (
+                    <tr key={log.id} className="bg-white align-top">
+                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">{formatDateTime(log.createdAt)}</td>
+                      <td className="px-4 py-3 font-black text-slate-950">{auditEventLabel(log.eventType)}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-slate-800">{log.userName || "Sistema"}</p>
+                        <p className="text-xs text-slate-500">{log.email || "-"}</p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {log.message || "-"}
+                        {log.metadata?.targetEmail ? (
+                          <p className="mt-1 text-xs font-semibold text-slate-500">Conta: {log.metadata.targetEmail}</p>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!auditLoading && !auditLogs.length ? (
+            <EmptyState
+              title="Nenhum evento encontrado"
+              description="As acoes sensiveis e a saude do cron aparecerao aqui conforme forem acontecendo."
+            />
+          ) : null}
         </Card>
       ) : null}
     </div>

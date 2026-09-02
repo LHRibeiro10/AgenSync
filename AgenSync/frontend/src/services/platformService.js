@@ -1,4 +1,5 @@
 import {
+  platformAuditLogsApi,
   platformOverviewApi,
   platformWorkspaceApi,
   platformWorkspacesApi,
@@ -60,4 +61,12 @@ export async function updatePlatformUserStatus(id, payload) {
     remote: () => updatePlatformUserStatusApi(id, payload)
   });
   return response?.user || response;
+}
+
+export async function listPlatformAuditLogs(params = {}) {
+  const response = await executeDataSource({
+    feature: "platform.auditLogs",
+    remote: () => platformAuditLogsApi(params)
+  });
+  return response?.logs || [];
 }

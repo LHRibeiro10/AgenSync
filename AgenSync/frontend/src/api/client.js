@@ -70,6 +70,7 @@ export const api = {
   updatePlatformWorkspacePlan: (id, payload) => platformService.updatePlatformWorkspacePlan(id, payload),
   deletePlatformWorkspace: (id, payload) => platformService.deletePlatformWorkspace(id, payload),
   updatePlatformUserStatus: (id, payload) => platformService.updatePlatformUserStatus(id, payload),
+  listPlatformAuditLogs: (params) => platformService.listPlatformAuditLogs(params),
 
   getBillingStatus: () => billingService.getBillingStatus(),
   createBillingCheckoutSession: (payload) => billingService.createBillingCheckoutSession(payload),

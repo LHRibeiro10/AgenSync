@@ -63,6 +63,21 @@ function daysAgo(days) {
   return date;
 }
 
+async function loadLastCronRun() {
+  const log = await prisma.auditLog.findFirst({
+    where: { eventType: "cron.reminders_processed" },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true, metadata: true }
+  });
+  if (!log) return null;
+  return {
+    lastRunAt: log.createdAt,
+    processed: log.metadata?.processed ?? 0,
+    sent: log.metadata?.sent ?? 0,
+    failed: log.metadata?.failed ?? 0
+  };
+}
+
 function publicAdminUser(user) {
   return {
     id: user.id,
@@ -141,7 +156,8 @@ router.get(
       productSales,
       monthlyPlans,
       expenses,
-      products
+      products,
+      lastCronRun
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: "USER" } }),
@@ -178,7 +194,8 @@ router.get(
       prisma.productSale.count(),
       prisma.monthlyPlan.count(),
       prisma.expense.count(),
-      prisma.product.count()
+      prisma.product.count(),
+      loadLastCronRun()
     ]);
 
     res.json({
@@ -193,6 +210,7 @@ router.get(
         logins7Days,
         loginFailures7Days,
         adminAccess7Days,
+        lastCronRun,
         records: {
           clients,
           appointments,

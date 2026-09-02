@@ -74,6 +74,12 @@ router.post(
     const result = await processDueAppointmentReminders({
       limit: req.body?.limit || req.query?.limit || 100
     });
+    await recordAuditEvent({
+      req,
+      eventType: "cron.reminders_processed",
+      message: `${result.sent} enviado(s), ${result.failed} falha(s) de ${result.processed} processado(s).`,
+      metadata: { processed: result.processed, sent: result.sent, failed: result.failed }
+    });
     res.json(result);
   })
 );
