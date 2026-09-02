@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import DurationPicker from "../components/DurationPicker.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass, readOnlyInputClass } from "../components/Field.jsx";
 import Icon from "../components/Icon.jsx";
@@ -15,11 +16,7 @@ import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import { useWorkspaceView } from "../contexts/WorkspaceViewContext.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useSubmitLock } from "../hooks/useSubmitLock.js";
-import {
-  durationLabel,
-  durationToMinutes,
-  durationUnits
-} from "../services/durationService.js";
+import { durationLabel } from "../services/durationService.js";
 import { addMinutesToTime, money, statusOptions, todayInputValue } from "../utils.js";
 
 const emptyForm = {
@@ -229,8 +226,7 @@ export default function Appointments() {
   const [quickServiceForm, setQuickServiceForm] = useState({
     name: "",
     priceDefault: "",
-    durationValue: 60,
-    durationUnit: "minutes",
+    durationMinutes: 60,
     isActive: true
   });
   const [quickSaving, setQuickSaving] = useState(false);
@@ -564,11 +560,9 @@ export default function Appointments() {
     const payload = {
       ...quickServiceForm,
       priceDefault: Number(quickServiceForm.priceDefault),
-      durationMinutes: durationToMinutes(quickServiceForm.durationValue, quickServiceForm.durationUnit),
+      durationMinutes: Number(quickServiceForm.durationMinutes),
       isActive: true
     };
-    delete payload.durationValue;
-    delete payload.durationUnit;
 
     if (!payload.durationMinutes) {
       showToast("Informe uma duracao valida.", "error");
@@ -585,7 +579,7 @@ export default function Appointments() {
         price: result.service.priceDefault,
         durationMinutes: result.service.durationMinutes
       }));
-      setQuickServiceForm({ name: "", priceDefault: "", durationValue: 60, durationUnit: "minutes", isActive: true });
+      setQuickServiceForm({ name: "", priceDefault: "", durationMinutes: 60, isActive: true });
       setQuickServiceOpen(false);
       markStepComplete("service", { toast: false });
       showToast("Serviço cadastrado e selecionado.");
@@ -747,13 +741,10 @@ export default function Appointments() {
 
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Duracao deste atendimento">
-                <input
-                  required
-                  min="1"
-                  type="number"
+                <DurationPicker
+                  key={`${editing || "new"}-${form.serviceId || "none"}`}
                   value={form.durationMinutes}
-                  onChange={(event) => update("durationMinutes", event.target.value)}
-                  className={inputClass}
+                  onChange={(minutes) => update("durationMinutes", minutes)}
                 />
                 <p className="mt-1 text-xs font-semibold text-muted">
                   Esse valor sobrescreve a duracao padrao do servico somente neste horario.
@@ -941,47 +932,12 @@ export default function Appointments() {
             />
           </Field>
           <Field label="Tempo estimado">
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px]">
-              {quickServiceForm.durationUnit === "day" ? (
-                <select
-                  value={quickServiceForm.durationValue}
-                  onChange={(event) => setQuickServiceForm((current) => ({ ...current, durationValue: event.target.value }))}
-                  className={inputClass}
-                >
-                  <option value={1}>Dia todo</option>
-                </select>
-              ) : (
-                <input
-                  required
-                  min="1"
-                  step={quickServiceForm.durationUnit === "hours" ? "0.25" : "1"}
-                  type="number"
-                  value={quickServiceForm.durationValue}
-                  onChange={(event) => setQuickServiceForm((current) => ({ ...current, durationValue: event.target.value }))}
-                  className={inputClass}
-                />
-              )}
-              <select
-                value={quickServiceForm.durationUnit}
-                onChange={(event) => {
-                  const nextUnit = event.target.value;
-                  setQuickServiceForm((current) => ({
-                    ...current,
-                    durationUnit: nextUnit,
-                    durationValue: nextUnit === "day" ? 1 : current.durationValue
-                  }));
-                }}
-                className={inputClass}
-              >
-                {durationUnits.map((unit) => (
-                  <option key={unit.value} value={unit.value}>
-                    {unit.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <DurationPicker
+              value={quickServiceForm.durationMinutes}
+              onChange={(minutes) => setQuickServiceForm((current) => ({ ...current, durationMinutes: minutes }))}
+            />
             <p className="mt-1 text-xs font-semibold text-muted">
-              Salvo como {durationLabel(durationToMinutes(quickServiceForm.durationValue, quickServiceForm.durationUnit))}.
+              Salvo como {durationLabel(quickServiceForm.durationMinutes)}.
             </p>
           </Field>
         </div>

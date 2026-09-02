@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import Button from "../components/Button.jsx";
 import Card, { CardHeader } from "../components/Card.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import DurationPicker from "../components/DurationPicker.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Field, { inputClass } from "../components/Field.jsx";
 import Loading from "../components/Loading.jsx";
@@ -11,15 +12,10 @@ import Message from "../components/Message.jsx";
 import { useOnboarding } from "../contexts/OnboardingContext.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { useToast } from "../components/Toast.jsx";
-import {
-  durationLabel,
-  durationToMinutes,
-  durationUnits,
-  minutesToDurationInput
-} from "../services/durationService.js";
+import { durationLabel } from "../services/durationService.js";
 import { money } from "../utils.js";
 
-const emptyForm = { name: "", priceDefault: "", durationValue: 60, durationUnit: "minutes", isActive: true };
+const emptyForm = { name: "", priceDefault: "", durationMinutes: 60, isActive: true };
 
 export default function Services() {
   const [services, setServices] = useState([]);
@@ -56,13 +52,11 @@ export default function Services() {
   }
 
   function startEdit(service) {
-    const duration = minutesToDurationInput(service.durationMinutes);
     setEditing(service.id);
     setForm({
       name: service.name,
       priceDefault: service.priceDefault,
-      durationValue: duration.durationValue,
-      durationUnit: duration.durationUnit,
+      durationMinutes: service.durationMinutes,
       isActive: service.isActive
     });
     setError("");
@@ -81,10 +75,8 @@ export default function Services() {
     const payload = {
       ...form,
       priceDefault: Number(form.priceDefault),
-      durationMinutes: durationToMinutes(form.durationValue, form.durationUnit)
+      durationMinutes: Number(form.durationMinutes)
     };
-    delete payload.durationValue;
-    delete payload.durationUnit;
 
     if (!payload.durationMinutes) {
       const message = "Informe uma duracao valida.";
@@ -186,44 +178,13 @@ export default function Services() {
               />
             </Field>
             <Field label="Tempo estimado">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px] lg:grid-cols-[minmax(0,1fr)_132px]">
-                {form.durationUnit === "day" ? (
-                  <select
-                    value={form.durationValue}
-                    onChange={(event) => update("durationValue", event.target.value)}
-                    className={inputClass}
-                  >
-                    <option value={1}>Dia todo</option>
-                  </select>
-                ) : (
-                  <input
-                    required
-                    min="1"
-                    step={form.durationUnit === "hours" ? "0.25" : "1"}
-                    type="number"
-                    value={form.durationValue}
-                    onChange={(event) => update("durationValue", event.target.value)}
-                    className={inputClass}
-                  />
-                )}
-                <select
-                  value={form.durationUnit}
-                  onChange={(event) => {
-                    const nextUnit = event.target.value;
-                    update("durationUnit", nextUnit);
-                    if (nextUnit === "day") update("durationValue", 1);
-                  }}
-                  className={inputClass}
-                >
-                  {durationUnits.map((unit) => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <DurationPicker
+                key={editing || "new"}
+                value={form.durationMinutes}
+                onChange={(minutes) => update("durationMinutes", minutes)}
+              />
               <p className="mt-1 text-xs font-semibold text-muted">
-                Salvo como {durationLabel(durationToMinutes(form.durationValue, form.durationUnit))}.
+                Salvo como {durationLabel(form.durationMinutes)}.
               </p>
             </Field>
           </div>
