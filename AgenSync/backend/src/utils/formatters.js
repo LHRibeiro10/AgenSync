@@ -1,4 +1,4 @@
-import { formatDate, formatTime } from "./dates.js";
+import { calcularIdade, formatDate, formatTime } from "./dates.js";
 import { normalizePlanSlug, publicPlan } from "../config/plans.js";
 
 function minutesBetween(start, end) {
@@ -94,15 +94,38 @@ export function publicUser(user) {
 }
 
 export function publicClient(client) {
+  const responsavel = client.responsavel
+    ? { id: client.responsavel.id, name: client.responsavel.name, phone: client.responsavel.phone || "" }
+    : null;
+  const dependentes = Array.isArray(client.dependentes)
+    ? client.dependentes.map((dependente) => ({
+        id: dependente.id,
+        name: dependente.name,
+        birthDate: dependente.birthDate ? formatDate(dependente.birthDate) : "",
+        idade: dependente.birthDate ? calcularIdade(dependente.birthDate) : null
+      }))
+    : undefined;
+
   return {
     id: client.id,
     name: client.name,
-    phone: client.phone,
+    phone: client.phone || "",
     email: client.email || "",
     cpf: client.cpf || "",
     cnpj: client.cnpj || "",
     rg: client.rg || "",
     birthDate: client.birthDate ? formatDate(client.birthDate) : "",
+    idade: client.birthDate ? calcularIdade(client.birthDate) : null,
+    sexo: client.sexo || "",
+    contatoEmergenciaNome: client.contatoEmergenciaNome || "",
+    contatoEmergenciaTelefone: client.contatoEmergenciaTelefone || "",
+    contatoEmergenciaParentesco: client.contatoEmergenciaParentesco || "",
+    responsavelId: client.responsavelId || "",
+    responsavel,
+    responsavelParentesco: client.responsavelParentesco || "",
+    responsavelNome: responsavel ? responsavel.name : client.responsavelNome || "",
+    responsavelTelefone: responsavel ? responsavel.phone || "" : client.responsavelTelefone || "",
+    dependentes,
     zipCode: client.zipCode || "",
     address: client.address || "",
     addressNumber: client.addressNumber || "",

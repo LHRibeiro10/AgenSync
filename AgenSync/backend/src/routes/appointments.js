@@ -33,6 +33,8 @@ const clientSelect = {
   name: true,
   phone: true,
   notes: true,
+  responsavelTelefone: true,
+  responsavel: { select: { id: true, name: true, phone: true } },
   createdAt: true,
   updatedAt: true
 };

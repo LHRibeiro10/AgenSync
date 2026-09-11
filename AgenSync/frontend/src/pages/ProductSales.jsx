@@ -572,7 +572,7 @@ export default function ProductSales({ mode = "new" }) {
             placeholder="Nome do cliente"
           />
         </Field>
-        <Field label="Telefone">
+        <Field label="Telefone (opcional)">
           <input
             value={quickClientForm.phone}
             onChange={(event) => setQuickClientForm((current) => ({ ...current, phone: event.target.value }))}

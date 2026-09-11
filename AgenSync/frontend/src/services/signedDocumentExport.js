@@ -198,7 +198,7 @@ export function buildSignedDocumentHtml({ client, document }) {
         </div>
         <div class="box">
           <div class="label">Telefone</div>
-          <div class="value">${escapeHtml(client.phone)}</div>
+          <div class="value">${escapeHtml(client.phone || "-")}</div>
         </div>
         <div class="box">
           <div class="label">Criado em</div>

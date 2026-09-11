@@ -91,7 +91,7 @@ export default function InitialOnboarding() {
   const activeStep = steps[stepIndex];
   const selectedType = findBusinessType(businessType);
   const selectedServices = services.filter((service) => service.selected !== false && service.name.trim());
-  const validClients = clients.filter((client) => client.name.trim() && client.phone.trim());
+  const validClients = clients.filter((client) => client.name.trim());
   const currentPlan = getCurrentPlan(user);
   const reachedProfessionalLimit = professionals.length >= currentPlan.maxProfessionals;
   const summary = useMemo(
@@ -542,7 +542,7 @@ export default function InitialOnboarding() {
                           className={inputClass}
                         />
                       </Field>
-                      <Field label="Telefone">
+                      <Field label="Telefone (opcional)">
                         <input
                           value={client.phone}
                           onChange={(event) => updateClient(client.id, { phone: event.target.value })}

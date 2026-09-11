@@ -1,4 +1,9 @@
 import { ApiError } from "../middleware/error.js";
+import { calcularIdade, todayInTimeZone } from "./dates.js";
+
+const BIRTH_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+export const SEXO_OPTIONS = ["Feminino", "Masculino", "Outro", "Prefiro não informar"];
+const MAX_AGE_YEARS = 120;
 
 export function requiredString(value, fieldName, minLength = 1) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -10,6 +15,53 @@ export function requiredString(value, fieldName, minLength = 1) {
 
 export function optionalString(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+export function optionalPhone(value, fieldName = "telefone", minLength = 8) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (text.length < minLength) {
+    throw new ApiError(400, `${fieldName} inválido.`);
+  }
+  return text;
+}
+
+export function optionalBirthDate(value, fieldName = "data de nascimento") {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (!BIRTH_DATE_PATTERN.test(text)) {
+    throw new ApiError(400, `${fieldName} deve estar no formato AAAA-MM-DD.`);
+  }
+
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new ApiError(400, `${fieldName} inválida.`);
+  }
+
+  const today = todayInTimeZone();
+  if (date.getTime() > today.getTime()) {
+    throw new ApiError(400, `${fieldName} não pode ser uma data futura.`);
+  }
+
+  const idade = calcularIdade(date, today);
+  if (idade > MAX_AGE_YEARS) {
+    throw new ApiError(400, `${fieldName} inválida (idade acima de ${MAX_AGE_YEARS} anos).`);
+  }
+
+  return date;
+}
+
+export function optionalSexo(value, fieldName = "sexo") {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (!SEXO_OPTIONS.includes(text)) {
+    throw new ApiError(400, `${fieldName} inválido.`);
+  }
+  return text;
 }
 
 export function parsePositiveMoney(value, fieldName = "valor") {

@@ -10,6 +10,7 @@ import {
   DEFAULT_REMINDER_MESSAGE,
   normalizeWhatsAppPhone,
   renderAppointmentMessage,
+  resolveClientWhatsAppPhone,
   WHATSAPP_VARIABLES
 } from "../../services/appointmentWhatsApp.js";
 
@@ -46,7 +47,9 @@ export default function AppointmentWhatsAppModal({
   const activeMode = modeConfig[mode] || modeConfig.confirmation;
   const title = activeMode.title;
   const fallbackTemplate = template || activeMode.fallbackTemplate;
-  const phoneStatus = useMemo(() => normalizeWhatsAppPhone(appointment?.client?.phone), [appointment]);
+  const resolvedPhone = resolveClientWhatsAppPhone(appointment?.client);
+  const usingGuardianPhone = Boolean(!appointment?.client?.phone && resolvedPhone);
+  const phoneStatus = useMemo(() => normalizeWhatsAppPhone(resolvedPhone), [resolvedPhone]);
   const hasValidPhone = phoneStatus.valid;
 
   useEffect(() => {
@@ -73,7 +76,7 @@ export default function AppointmentWhatsAppModal({
       return;
     }
 
-    window.open(buildAppointmentWhatsAppUrl(appointment.client?.phone, message), "_blank", "noopener,noreferrer");
+    window.open(buildAppointmentWhatsAppUrl(resolvedPhone, message), "_blank", "noopener,noreferrer");
   }
 
   const modal = (
@@ -113,9 +116,11 @@ export default function AppointmentWhatsAppModal({
                 <Icon name="message" className="h-5 w-5" />
               </span>
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Telefone do cliente</p>
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">
+                  {usingGuardianPhone ? "Telefone do responsável" : "Telefone do cliente"}
+                </p>
                 <p className={`mt-1 break-words text-base font-black ${hasValidPhone ? "text-success" : "text-danger"}`}>
-                  {appointment.client?.phone || "Telefone não cadastrado"}
+                  {resolvedPhone || "Telefone não cadastrado"}
                 </p>
                 {!hasValidPhone ? <p className="mt-1 text-sm font-medium text-danger">{phoneStatus.error}</p> : null}
               </div>

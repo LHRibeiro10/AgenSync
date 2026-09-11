@@ -3,7 +3,15 @@ import { prisma } from "../prisma.js";
 import { ApiError, asyncHandler } from "../middleware/error.js";
 import { clientAccessWhere, requireWorkspacePermission, workspaceWhere } from "../utils/accessControl.js";
 import { publicClient, publicClientCareRecord, publicProduct, publicService } from "../utils/formatters.js";
-import { optionalEmail, optionalString, parsePagination, requiredString } from "../utils/validation.js";
+import {
+  optionalBirthDate,
+  optionalEmail,
+  optionalPhone,
+  optionalSexo,
+  optionalString,
+  parsePagination,
+  requiredString
+} from "../utils/validation.js";
 import { recordAuditEvent } from "../utils/audit.js";
 
 const CLIENT_FICHA_UPDATED_EVENT = "CLIENT_FICHA_UPDATED";
@@ -48,8 +56,8 @@ function clearClientListCache() {
   clientListCache.clear();
 }
 
-async function findClientOrFail(req, id) {
-  const client = await prisma.client.findFirst({ where: clientAccessWhere(req, { id }) });
+async function findClientOrFail(req, id, { include } = {}) {
+  const client = await prisma.client.findFirst({ where: clientAccessWhere(req, { id }), ...(include ? { include } : {}) });
   if (!client) {
     throw new ApiError(404, "Cliente não encontrado.");
   }
@@ -133,7 +141,52 @@ function extendedClientFields(body) {
     tags: cleanString(body.tags, 500),
     source: cleanString(body.source, 120),
     photoUrl: cleanString(body.photoUrl, 2_000_000),
-    internalPreferences: cleanString(body.internalPreferences, 3000)
+    internalPreferences: cleanString(body.internalPreferences, 3000),
+    birthDate: optionalBirthDate(body.birthDate),
+    sexo: optionalSexo(body.sexo),
+    contatoEmergenciaNome: cleanString(body.contatoEmergenciaNome, 160),
+    contatoEmergenciaTelefone: optionalPhone(body.contatoEmergenciaTelefone, "telefone do contato de emergência"),
+    contatoEmergenciaParentesco: cleanString(body.contatoEmergenciaParentesco, 60)
+  };
+}
+
+const CLIENT_RELATIONS_INCLUDE = {
+  responsavel: { select: { id: true, name: true, phone: true } },
+  dependentes: { select: { id: true, name: true, birthDate: true } }
+};
+
+async function buildResponsavelUpdate(req, body, currentClientId) {
+  const responsavelIdInput = cleanString(body.responsavelId, 40);
+  const responsavelParentesco = cleanString(body.responsavelParentesco, 60);
+
+  if (!responsavelIdInput) {
+    return {
+      responsavelId: null,
+      responsavelParentesco,
+      responsavelNome: cleanString(body.responsavelNome, 160),
+      responsavelTelefone: optionalPhone(body.responsavelTelefone, "telefone do responsável")
+    };
+  }
+
+  if (responsavelIdInput === currentClientId) {
+    throw new ApiError(400, "Um cliente não pode ser responsável por ele mesmo.");
+  }
+
+  const responsavel = await prisma.client.findFirst({
+    where: clientAccessWhere(req, { id: responsavelIdInput })
+  });
+  if (!responsavel) {
+    throw new ApiError(400, "Cliente responsável não encontrado.");
+  }
+  if (currentClientId && responsavel.responsavelId === currentClientId) {
+    throw new ApiError(400, "Não é possível vincular: isso criaria um vínculo circular entre os clientes.");
+  }
+
+  return {
+    responsavelId: responsavel.id,
+    responsavelParentesco,
+    responsavelNome: null,
+    responsavelTelefone: null
   };
 }
 
@@ -156,7 +209,8 @@ router.get(
         ...(includeInactive ? {} : { isActive: true })
       },
       ...(pagination.enabled ? { skip: pagination.skip, take: pagination.take } : {}),
-      orderBy: [{ isActive: "desc" }, { name: "asc" }]
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      include: CLIENT_RELATIONS_INCLUDE
     });
 
     const payload = { clients: clients.map(publicClient) };
@@ -180,7 +234,8 @@ router.get(
           ...(includeInactive ? {} : { isActive: true })
         },
         orderBy: [{ isActive: "desc" }, { name: "asc" }],
-        take: 500
+        take: 500,
+        include: CLIENT_RELATIONS_INCLUDE
       }),
       prisma.service.findMany({
         where: { ...workspaceWhere(req), isActive: true },
@@ -211,9 +266,10 @@ router.post(
   asyncHandler(async (req, res) => {
     requireWorkspacePermission("canManageClients")(req, res, () => {});
     const name = requiredString(req.body.name, "nome", 2);
-    const phone = requiredString(req.body.phone, "telefone", 8);
+    const phone = optionalPhone(req.body.phone, "telefone", 8);
     const email = optionalEmail(req.body.email);
     const notes = optionalString(req.body.notes);
+    const responsavelUpdate = await buildResponsavelUpdate(req, req.body, null);
 
     const client = await prisma.client.create({
       data: {
@@ -223,8 +279,10 @@ router.post(
         phone,
         email,
         notes,
-        ...extendedClientFields(req.body)
-      }
+        ...extendedClientFields(req.body),
+        ...responsavelUpdate
+      },
+      include: CLIENT_RELATIONS_INCLUDE
     });
 
     clearClientListCache();
@@ -398,7 +456,7 @@ router.get(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const client = await findClientOrFail(req, req.params.id);
+    const client = await findClientOrFail(req, req.params.id, { include: CLIENT_RELATIONS_INCLUDE });
     res.json({ client: publicClient(client) });
   })
 );
@@ -410,9 +468,10 @@ router.put(
     requireWorkspacePermission("canManageClients")(req, res, () => {});
 
     const name = requiredString(req.body.name, "nome", 2);
-    const phone = requiredString(req.body.phone, "telefone", 8);
+    const phone = optionalPhone(req.body.phone, "telefone", 8);
     const email = optionalEmail(req.body.email);
     const notes = optionalString(req.body.notes);
+    const responsavelUpdate = await buildResponsavelUpdate(req, req.body, req.params.id);
 
     const client = await prisma.client.update({
       where: { id: req.params.id },
@@ -422,8 +481,10 @@ router.put(
         email,
         notes,
         ...extendedClientFields(req.body),
+        ...responsavelUpdate,
         ...(req.body.isActive === undefined ? {} : { isActive: parseBoolean(req.body.isActive, true) })
-      }
+      },
+      include: CLIENT_RELATIONS_INCLUDE
     });
 
     clearClientListCache();

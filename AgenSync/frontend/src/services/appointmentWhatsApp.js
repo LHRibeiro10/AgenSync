@@ -11,6 +11,11 @@ export const DEFAULT_CANCELLATION_MESSAGE =
 
 export const WHATSAPP_VARIABLES = ["{cliente}", "{servico}", "{data}", "{hora}", "{negocio}", "{profissional}", "{valor}"];
 
+export function resolveClientWhatsAppPhone(client) {
+  if (!client || typeof client !== "object") return "";
+  return client.phone || client.responsavel?.phone || client.responsavelTelefone || "";
+}
+
 export function normalizeWhatsAppPhone(phone) {
   const raw = String(phone || "").trim();
   const digits = raw.replace(/\D/g, "").replace(/^0+/, "");

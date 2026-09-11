@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import Button from "../Button.jsx";
-import { buildBudgetWhatsAppMessage, buildWhatsAppUrl, whatsappPhone } from "../../services/budgetWhatsApp.js";
+import {
+  buildBudgetWhatsAppMessage,
+  buildWhatsAppUrl,
+  resolveClientWhatsAppPhone,
+  whatsappPhone
+} from "../../services/budgetWhatsApp.js";
 
 function copyWithFallback(text) {
   if (navigator.clipboard?.writeText) {
@@ -35,7 +40,9 @@ export default function BudgetWhatsAppModal({ open, client, budget, onClose, sho
 
   if (!open || !budget) return null;
 
-  const phoneDigits = whatsappPhone(client.phone);
+  const resolvedPhone = resolveClientWhatsAppPhone(client);
+  const usingGuardianPhone = Boolean(!client.phone && resolvedPhone);
+  const phoneDigits = whatsappPhone(resolvedPhone);
   const hasPhone = Boolean(phoneDigits);
 
   async function copyMessage() {
@@ -53,7 +60,7 @@ export default function BudgetWhatsAppModal({ open, client, budget, onClose, sho
       return;
     }
 
-    window.open(buildWhatsAppUrl(client.phone, message), "_blank", "noopener,noreferrer");
+    window.open(buildWhatsAppUrl(resolvedPhone, message), "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -68,12 +75,16 @@ export default function BudgetWhatsAppModal({ open, client, budget, onClose, sho
 
         <div className="space-y-4 p-4">
           <div className={`rounded-xl border px-4 py-3 ${hasPhone ? "border-green-100 bg-green-50" : "border-red-100 bg-red-50"}`}>
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">Telefone do cliente</p>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">
+              {usingGuardianPhone ? "Telefone do responsável" : "Telefone do cliente"}
+            </p>
             <p className={`mt-1 text-base font-black ${hasPhone ? "text-success" : "text-danger"}`}>
-              {client.phone || "Telefone não cadastrado"}
+              {resolvedPhone || "Telefone não cadastrado"}
             </p>
             {!hasPhone ? (
-              <p className="mt-1 text-sm font-medium text-danger">Adicione um telefone ao cliente para abrir o WhatsApp.</p>
+              <p className="mt-1 text-sm font-medium text-danger">
+                Adicione um telefone ao cliente (ou ao responsável) para abrir o WhatsApp.
+              </p>
             ) : null}
           </div>
 

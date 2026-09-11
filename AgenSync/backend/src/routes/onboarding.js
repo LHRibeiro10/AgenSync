@@ -8,6 +8,7 @@ import { publicUser } from "../utils/formatters.js";
 import { workspaceWhere } from "../utils/accessControl.js";
 import {
   optionalEmail,
+  optionalPhone,
   optionalString,
   parseBoolean,
   parsePositiveInteger,
@@ -103,7 +104,7 @@ function normalizeClientList(rawClients) {
   const clients = Array.isArray(rawClients) ? rawClients : [];
   return clients.map((client) => ({
     name: requiredString(client.name, "nome do cliente", 2),
-    phone: requiredString(client.phone, "telefone do cliente", 8),
+    phone: optionalPhone(client.phone, "telefone do cliente", 8) || "",
     email: optionalEmail(client.email, "email do cliente"),
     notes: text(client.notes, 1000),
     isActive: true

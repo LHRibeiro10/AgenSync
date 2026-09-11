@@ -82,7 +82,7 @@ function documentTemplate(client, care, type) {
       title: "Ficha preenchida",
       content: [
         `Cliente: ${client.name}`,
-        `Telefone: ${client.phone}`,
+        `Telefone: ${client.phone || "-"}`,
         "",
         `Observações gerais: ${care.anamnesis.generalNotes || "-"}`,
         `Alergias: ${care.anamnesis.allergies || "-"}`,
@@ -128,7 +128,7 @@ function savedFormDocumentTemplate(client, record) {
     title,
     content: [
       `Cliente: ${client.name}`,
-      `Telefone: ${client.phone}`,
+      `Telefone: ${client.phone || "-"}`,
       `Ficha: ${record.title || record.templateName || "-"}`,
       record.templateName ? `Modelo: ${record.templateName}` : "",
       record.createdAt ? `Criada em: ${formatDateTime(record.createdAt)}` : "",

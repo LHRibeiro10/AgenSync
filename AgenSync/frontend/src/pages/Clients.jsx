@@ -20,11 +20,21 @@ import {
   supportsContactPicker
 } from "../services/contactImportService.js";
 import { imageAccept, imageFileToDataUrl } from "../components/client-care/photoUtils.js";
+import { calcularIdade } from "../utils/idade.js";
 
 const emptyForm = {
   name: "",
   phone: "",
   email: "",
+  birthDate: "",
+  sexo: "",
+  contatoEmergenciaNome: "",
+  contatoEmergenciaTelefone: "",
+  contatoEmergenciaParentesco: "",
+  responsavelId: "",
+  responsavelParentesco: "",
+  responsavelNome: "",
+  responsavelTelefone: "",
   zipCode: "",
   address: "",
   addressNumber: "",
@@ -40,6 +50,8 @@ const emptyForm = {
 };
 
 const originChannels = ["Instagram", "Indicação", "Google", "Passagem na rua", "Outro"];
+const sexoOptions = ["Feminino", "Masculino", "Outro", "Prefiro não informar"];
+const parentescoOptions = ["Mãe", "Pai", "Avó/Avô", "Tio/Tia", "Responsável legal", "Outro"];
 
 const clientSections = {
   clients: ["Clientes", "Cadastro, status e dados principais dos clientes.", "data", "Cadastro", "Atendimento", "Cadastre, edite e inative clientes sem misturar prontuario e documentos."],
@@ -71,12 +83,31 @@ export default function Clients({ section = "clients" }) {
   const [tagInput, setTagInput] = useState("");
   const [photoError, setPhotoError] = useState("");
   const [error, setError] = useState("");
+  const [guardianChoice, setGuardianChoice] = useState("");
+  const [guardianSearch, setGuardianSearch] = useState("");
   const { showToast } = useToast();
   const { markStepComplete } = useOnboarding();
   const selectedClient = clients.find((client) => client.id === selectedClientId);
   const isDocumentsLayout = Boolean(selectedClient && activeTab === "documents");
   const activeClientsCount = clients.filter((client) => client.isActive !== false).length;
   const inactiveClientsCount = clients.length - activeClientsCount;
+  const formAge = form.birthDate ? calcularIdade(form.birthDate) : null;
+  const isMinor = formAge !== null && formAge < 18;
+  const guardianCandidates =
+    guardianChoice === "link" && guardianSearch.trim().length >= 2
+      ? (() => {
+          const term = guardianSearch.trim().toLowerCase();
+          const digits = term.replace(/\D/g, "");
+          return clients
+            .filter((client) => client.id !== editing)
+            .filter(
+              (client) =>
+                client.name.toLowerCase().includes(term) ||
+                (digits && (client.phone || "").replace(/\D/g, "").includes(digits))
+            )
+            .slice(0, 8);
+        })()
+      : [];
 
   async function loadClients() {
     const clientsData = await api.listClients({ includeInactive: true });
@@ -183,6 +214,8 @@ export default function Clients({ section = "clients" }) {
     setEditing(null);
     setForm(emptyForm);
     setError("");
+    setGuardianChoice("");
+    setGuardianSearch("");
     setModalMode("quick");
   }
 
@@ -190,6 +223,8 @@ export default function Clients({ section = "clients" }) {
     setEditing(null);
     setForm(emptyForm);
     setError("");
+    setGuardianChoice("");
+    setGuardianSearch("");
     setModalMode("complete");
   }
 
@@ -199,12 +234,30 @@ export default function Clients({ section = "clients" }) {
     setClientCare(getClientCare(client.id));
   }
 
+  function openClientById(clientId) {
+    const client = clients.find((item) => item.id === clientId);
+    if (!client) {
+      showToast("Cliente não encontrado.", "error");
+      return;
+    }
+    openClient(client, "data");
+  }
+
   function startEdit(client) {
     setEditing(client.id);
     setForm({
       name: client.name,
-      phone: client.phone,
+      phone: client.phone || "",
       email: client.email || "",
+      birthDate: client.birthDate || "",
+      sexo: client.sexo || "",
+      contatoEmergenciaNome: client.contatoEmergenciaNome || "",
+      contatoEmergenciaTelefone: client.contatoEmergenciaTelefone || "",
+      contatoEmergenciaParentesco: client.contatoEmergenciaParentesco || "",
+      responsavelId: client.responsavelId || "",
+      responsavelParentesco: client.responsavelParentesco || "",
+      responsavelNome: client.responsavelNome || "",
+      responsavelTelefone: client.responsavelTelefone || "",
       zipCode: client.zipCode || "",
       address: client.address || "",
       addressNumber: client.addressNumber || "",
@@ -219,13 +272,48 @@ export default function Clients({ section = "clients" }) {
       notes: client.notes || ""
     });
     setError("");
+    setGuardianChoice(client.responsavelId ? "link" : client.responsavelNome || client.responsavelTelefone ? "manual" : "");
+    setGuardianSearch(client.responsavelId ? client.responsavelNome || "" : "");
     setModalMode("complete");
   }
 
   function resetForm() {
     setEditing(null);
     setForm(emptyForm);
+    setGuardianChoice("");
+    setGuardianSearch("");
     setModalMode(null);
+  }
+
+  function selectGuardian(candidate) {
+    setForm((current) => ({
+      ...current,
+      responsavelId: candidate.id,
+      responsavelNome: candidate.name,
+      responsavelTelefone: candidate.phone || ""
+    }));
+    setGuardianSearch(candidate.name);
+  }
+
+  function clearGuardian() {
+    setGuardianChoice("skip");
+    setGuardianSearch("");
+    setForm((current) => ({
+      ...current,
+      responsavelId: "",
+      responsavelNome: "",
+      responsavelTelefone: "",
+      responsavelParentesco: ""
+    }));
+  }
+
+  function useGuardianAsEmergencyContact() {
+    setForm((current) => ({
+      ...current,
+      contatoEmergenciaNome: current.responsavelNome,
+      contatoEmergenciaTelefone: current.responsavelTelefone,
+      contatoEmergenciaParentesco: current.responsavelParentesco
+    }));
   }
 
   async function importContact() {
@@ -299,17 +387,21 @@ export default function Clients({ section = "clients" }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
-    const payload = {
-      ...form,
-      phone: normalizeContactPhone(form.phone)
-    };
 
-    if (payload.phone.length < 8) {
-      const message = "Informe um telefone valido.";
+    const phone = normalizeContactPhone(form.phone);
+    if (phone && phone.length < 8) {
+      const message = "Informe um telefone válido ou deixe o campo em branco.";
       setError(message);
       showToast(message, "error");
       return;
     }
+
+    const payload = {
+      ...form,
+      phone,
+      contatoEmergenciaTelefone: normalizeContactPhone(form.contatoEmergenciaTelefone),
+      responsavelTelefone: normalizeContactPhone(form.responsavelTelefone)
+    };
 
     await guardSubmit(async () => {
       try {
@@ -359,7 +451,28 @@ export default function Clients({ section = "clients" }) {
     try {
       await api.updateClient(client.id, {
         name: client.name,
-        phone: client.phone,
+        phone: client.phone || "",
+        email: client.email || "",
+        birthDate: client.birthDate || "",
+        sexo: client.sexo || "",
+        contatoEmergenciaNome: client.contatoEmergenciaNome || "",
+        contatoEmergenciaTelefone: client.contatoEmergenciaTelefone || "",
+        contatoEmergenciaParentesco: client.contatoEmergenciaParentesco || "",
+        responsavelId: client.responsavelId || "",
+        responsavelParentesco: client.responsavelParentesco || "",
+        responsavelNome: client.responsavelNome || "",
+        responsavelTelefone: client.responsavelTelefone || "",
+        zipCode: client.zipCode || "",
+        address: client.address || "",
+        addressNumber: client.addressNumber || "",
+        addressComplement: client.addressComplement || "",
+        district: client.district || "",
+        city: client.city || "",
+        state: client.state || "",
+        source: client.source || "",
+        tags: client.tags || "",
+        internalPreferences: client.internalPreferences || "",
+        photoUrl: client.photoUrl || "",
         notes: client.notes || "",
         isActive: nextIsActive
       });
@@ -416,8 +529,13 @@ export default function Clients({ section = "clients" }) {
                               Inativo
                             </span>
                           ) : null}
+                          {typeof client.idade === "number" && client.idade < 18 ? (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-amber-600 ring-1 ring-amber-200">
+                              {client.idade} anos
+                            </span>
+                          ) : null}
                         </div>
-                        <p className="text-sm font-medium text-muted">{client.phone}</p>
+                        <p className="text-sm font-medium text-muted">{client.phone || "Sem telefone"}</p>
                         {client.notes ? <p className="mt-2 text-sm text-muted">{client.notes}</p> : null}
                       </div>
                       <div className="grid grid-cols-2 gap-2 md:min-w-[360px]">
@@ -470,6 +588,7 @@ export default function Clients({ section = "clients" }) {
               products={products}
               onEdit={() => startEdit(selectedClient)}
               onClose={() => setSelectedClientId("")}
+              onOpenClient={openClientById}
               showToast={showToast}
             />
           </div>
@@ -558,9 +677,8 @@ export default function Clients({ section = "clients" }) {
                     placeholder="Nome do cliente"
                   />
                 </Field>
-                <Field label="Telefone">
+                <Field label="Telefone (opcional)">
                   <input
-                    required
                     minLength={8}
                     value={form.phone}
                     onChange={(event) => update("phone", event.target.value)}
@@ -570,17 +688,225 @@ export default function Clients({ section = "clients" }) {
                 </Field>
               </div>
 
-              {modalMode === "complete" ? (
-                <Field label="E-mail">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Data de nascimento">
                   <input
-                    type="email"
-                    value={form.email}
-                    onChange={(event) => update("email", event.target.value)}
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={form.birthDate}
+                    onChange={(event) => update("birthDate", event.target.value)}
                     className={inputClass}
-                    placeholder="cliente@email.com"
                   />
                 </Field>
+                <Field label="Idade">
+                  <div className={`${inputClass} flex items-center bg-slate-50 text-muted`}>
+                    {formAge !== null ? `${formAge} ano(s)` : "—"}
+                  </div>
+                </Field>
+              </div>
+
+              {modalMode === "complete" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="E-mail">
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(event) => update("email", event.target.value)}
+                      className={inputClass}
+                      placeholder="cliente@email.com"
+                    />
+                  </Field>
+                  <Field label="Sexo">
+                    <select value={form.sexo} onChange={(event) => update("sexo", event.target.value)} className={inputClass}>
+                      <option value="">Não informado</option>
+                      {sexoOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
               ) : null}
+            </FormSection>
+
+            {isMinor ? (
+              <FormSection title="Responsável (menor de idade)">
+                <p className="text-sm font-bold text-muted">
+                  {(form.name || "Este cliente").trim()} tem {formAge} ano(s). Gostaria de afiliar esse cliente com algum
+                  cliente que seja Pai/Mãe ou responsável?
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button
+                    type="button"
+                    variant={guardianChoice === "link" ? "primary" : "secondary"}
+                    onClick={() => setGuardianChoice("link")}
+                  >
+                    Buscar cliente responsável
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={guardianChoice === "manual" ? "primary" : "secondary"}
+                    onClick={() => setGuardianChoice("manual")}
+                  >
+                    Sem cadastro
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={guardianChoice === "skip" ? "primary" : "secondary"}
+                    onClick={clearGuardian}
+                  >
+                    Pular
+                  </Button>
+                </div>
+
+                {guardianChoice === "link" ? (
+                  <div className="space-y-2">
+                    <Field label="Buscar por nome ou telefone">
+                      <input
+                        value={guardianSearch}
+                        onChange={(event) => {
+                          setGuardianSearch(event.target.value);
+                          if (form.responsavelId) {
+                            update("responsavelId", "");
+                            update("responsavelNome", "");
+                            update("responsavelTelefone", "");
+                          }
+                        }}
+                        className={inputClass}
+                        placeholder="Digite o nome ou telefone do responsável"
+                      />
+                    </Field>
+
+                    {guardianSearch.trim().length >= 2 && !form.responsavelId ? (
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-line">
+                        {guardianCandidates.length ? (
+                          guardianCandidates.map((candidate) => (
+                            <button
+                              type="button"
+                              key={candidate.id}
+                              onClick={() => selectGuardian(candidate)}
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-bold hover:bg-slate-50"
+                            >
+                              <span>{candidate.name}</span>
+                              <span className="text-xs text-muted">{candidate.phone || "Sem telefone"}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <p className="px-3 py-2 text-xs text-muted">Nenhum cliente encontrado.</p>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {form.responsavelId ? (
+                      <div className="flex items-center justify-between rounded-xl border border-line bg-slate-50 p-3">
+                        <div>
+                          <p className="text-sm font-black text-ink">{form.responsavelNome}</p>
+                          <p className="text-xs text-muted">{form.responsavelTelefone || "Sem telefone"}</p>
+                        </div>
+                        <Button type="button" variant="ghost" onClick={clearGuardian}>
+                          Remover
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <Field label="Parentesco">
+                      <select
+                        value={form.responsavelParentesco}
+                        onChange={(event) => update("responsavelParentesco", event.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">Selecione</option>
+                        {parentescoOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    {form.responsavelId ? (
+                      <Button type="button" variant="ghost" onClick={useGuardianAsEmergencyContact}>
+                        Usar também como contato de emergência
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {guardianChoice === "manual" ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Nome do responsável">
+                      <input
+                        value={form.responsavelNome}
+                        onChange={(event) => update("responsavelNome", event.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Telefone do responsável">
+                      <input
+                        value={form.responsavelTelefone}
+                        onChange={(event) => update("responsavelTelefone", event.target.value)}
+                        className={inputClass}
+                        placeholder="(00) 00000-0000"
+                      />
+                    </Field>
+                    <Field label="Parentesco">
+                      <select
+                        value={form.responsavelParentesco}
+                        onChange={(event) => update("responsavelParentesco", event.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">Selecione</option>
+                        {parentescoOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <div className="flex items-end">
+                      <Button type="button" variant="ghost" onClick={useGuardianAsEmergencyContact}>
+                        Usar também como contato de emergência
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </FormSection>
+            ) : null}
+
+            <FormSection title="Contato de emergência (opcional)">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Nome">
+                  <input
+                    value={form.contatoEmergenciaNome}
+                    onChange={(event) => update("contatoEmergenciaNome", event.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Telefone">
+                  <input
+                    value={form.contatoEmergenciaTelefone}
+                    onChange={(event) => update("contatoEmergenciaTelefone", event.target.value)}
+                    className={inputClass}
+                    placeholder="(00) 00000-0000"
+                  />
+                </Field>
+                <Field label="Parentesco">
+                  <select
+                    value={form.contatoEmergenciaParentesco}
+                    onChange={(event) => update("contatoEmergenciaParentesco", event.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Selecione</option>
+                    {parentescoOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                    <option value="Amigo(a)">Amigo(a)</option>
+                  </select>
+                </Field>
+              </div>
             </FormSection>
 
             {modalMode === "complete" ? (

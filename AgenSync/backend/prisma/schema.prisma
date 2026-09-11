@@ -249,12 +249,22 @@ model Client {
   userId       String
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
-  phone        String
+  phone        String?
   email        String?
   cpf          String?
   cnpj         String?
   rg           String?
   birthDate    DateTime?
+  sexo         String?
+  contatoEmergenciaNome       String?
+  contatoEmergenciaTelefone   String?
+  contatoEmergenciaParentesco String?
+  responsavelId          String?
+  responsavel            Client?  @relation("ClientGuardian", fields: [responsavelId], references: [id], onDelete: SetNull)
+  dependentes            Client[] @relation("ClientGuardian")
+  responsavelParentesco  String?
+  responsavelNome        String?
+  responsavelTelefone    String?
   zipCode      String?
   address      String?
   addressNumber String?
@@ -289,6 +299,7 @@ model Client {
   @@index([userId, cpf])
   @@index([userId, externalId])
   @@index([userId, createdAt])
+  @@index([responsavelId])
 }
 
 model Expense {

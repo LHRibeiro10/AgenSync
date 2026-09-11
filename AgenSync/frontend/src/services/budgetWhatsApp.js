@@ -1,5 +1,10 @@
 import { money } from "../utils.js";
 
+export function resolveClientWhatsAppPhone(client) {
+  if (!client || typeof client !== "object") return "";
+  return client.phone || client.responsavel?.phone || client.responsavelTelefone || "";
+}
+
 export function whatsappPhone(phone) {
   const digits = String(phone || "").replace(/\D/g, "").replace(/^0+/, "");
   if (!digits) return "";
